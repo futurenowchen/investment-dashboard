@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-import gspread # 使用 gspread 直接連線 Google Sheets
+import gspread 
 
 # 設置頁面配置
 st.set_page_config(layout="wide")
@@ -13,53 +13,40 @@ SHEET_URL = "https://docs.google.com/spreadsheets/d/1_JBI1pKWv9aw8dGCj89y9yNgoWG
 # ==============================================================================
 
 
-# 使用 gspread 進行連線和數據讀取，並加入數據快取
+# 使用 gspread 進行連線和數據讀取，並加入數據快取 (已修正所有錯誤)
 @st.cache_data(ttl="10m") 
 def load_data(sheet_name): 
-
-    # 🎯 核心修正：使用 st.spinner 自動管理載入狀態
+    # 🎯 使用 st.spinner 自動管理載入狀態，乾淨美觀
     with st.spinner(f"正在載入工作表: '{sheet_name}'..."):
 
         try:
             # --- 1. 從 Streamlit Secrets 中讀取金鑰並進行格式處理 ---
-            
-            # 檢查 Secrets 區塊是否存在
             if "gsheets" not in st.secrets.get("connections", {}):
-                # 錯誤發生時，spinner 會自動停止，但我們手動顯示錯誤
-                st.error("Secrets 錯誤：找不到 [connections.gsheets] 區塊。請檢查您的 Streamlit Cloud Secrets 配置。")
+                st.error("Secrets 錯誤：找不到 [connections.gsheets] 區塊。")
                 return pd.DataFrame()
             
             secrets_config = st.secrets["connections"]["gsheets"]
-            
-            # 檢查 SHEET_URL 是否已替換
             if SHEET_URL == "YOUR_SPREADSHEET_URL_HERE":
                 st.error("❌ 程式碼錯誤：請先將 SHEET_URL 替換為您的 Google Sheets 完整網址！")
                 return pd.DataFrame()
 
-            # 複製配置並修正 private_key
             credentials_info = dict(secrets_config) 
             credentials_info["private_key"] = credentials_info["private_key"].replace('\\n', '\n')
             
-            # --- 2. 使用 gspread 認證 ---
+            # --- 2. 使用 gspread 認證與連線 ---
             gc = gspread.service_account_from_dict(credentials_info)
-            
-            # --- 3. 打開試算表和工作表 ---
             spreadsheet = gc.open_by_url(SHEET_URL)
             worksheet = spreadsheet.worksheet(sheet_name) 
             
-            # 取得所有數據
             data = worksheet.get_all_values() 
-            
-            # 轉換為 DataFrame
             df = pd.DataFrame(data[1:], columns=data[0])
             
-            # 🎯 修正重複欄位名稱
+            # 🎯 修正重複欄位名稱 (針對表G等複雜表頭導致的 PyArrow 錯誤)
             if len(df.columns) != len(set(df.columns)):
                 new_cols = []
                 seen = {}
                 for col in df.columns:
                     clean_col = "Unnamed" if col == "" else col
-                    
                     if clean_col in seen:
                         seen[clean_col] += 1
                         new_cols.append(f"{clean_col}_{seen[clean_col]}")
@@ -68,29 +55,26 @@ def load_data(sheet_name):
                         new_cols.append(clean_col)
                 df.columns = new_cols
 
-            # 執行資料清理
             df = df.fillna(0)
-            
-            # 當程式碼退出 with st.spinner 區塊時，載入訊息會自動消失
             return df
         
         # --- 錯誤處理 ---
         except gspread.exceptions.SpreadsheetNotFound:
-            st.error(f"GSheets 連線失敗！找不到試算表。請檢查 SHEET_URL 是否正確，並確保金鑰已授予權限。")
+            st.error(f"GSheets 連線失敗！找不到試算表。")
             return pd.DataFrame()
         except gspread.exceptions.WorksheetNotFound:
-            st.error(f"GSheets 連線失敗！找不到工作表 '{sheet_name}'。請檢查名稱是否完全正確。")
+            st.error(f"GSheets 連線失敗！找不到工作表 '{sheet_name}'。")
             return pd.DataFrame()
         except Exception as e:
-            st.error(f"⚠️ 讀取工作表 '{sheet_name}' 發生未知錯誤。請檢查 Secrets 配置細節或網路連線。")
+            st.error(f"⚠️ 讀取工作表 '{sheet_name}' 發生未知錯誤。")
             st.exception(e) 
-            return pd.DataFrame()
+            return pd.DataFrame() 
 
 # --- 應用程式主體開始 ---
 
 st.title("💰 投資組合儀表板")
 
-# 🎯 步驟 2：載入所有需要的數據 (請確保這些名稱與您的 Google Sheets 分頁名稱完全一致)
+# 🎯 載入所有需要的數據
 df_A = load_data("表A_持股總表")
 df_B = load_data("表B_持股比例")
 df_C = load_data("表C_總覽")
@@ -99,22 +83,22 @@ df_E = load_data("表E_已實現損益")
 df_F = load_data("表F_每日淨值")
 df_G = load_data("表G_財富藍圖")
 
-
-# --- 1. 投資總覽 (使用 df_C) ---
+# ----------------------------------------------------------------------
+# 1. 投資總覽 (放大字體顯示，指標在旁邊)
+# ----------------------------------------------------------------------
 st.header("1. 投資總覽") 
 if not df_C.empty:
     
-    # 將 DataFrame 轉為 Series (方便用項目名稱存取數值)
-    # 我們先複製一份，避免修改原始 DataFrame
     df_C_display = df_C.copy()
-    df_C_display.index = df_C_display.iloc[:, 0] # 將第一欄設為索引 (項目)
-    series_C = df_C_display.iloc[:, 1]  # 取得第二欄數值
-
+    # 處理數據格式
+    df_C_display.index = df_C_display.iloc[:, 0]
+    series_C = df_C_display.iloc[:, 1]
+    
     # 提取關鍵值
     risk_level = series_C.get('β風險燈號', 'N/A')
     leverage = series_C.get('槓桿倍數β', 'N/A')
 
-    # 根據風險等級，定義顏色和 Emoji
+    # 風險等級顏色判斷
     if risk_level == "安全":
         color = "green"
         emoji = "✅"
@@ -128,42 +112,32 @@ if not df_C.empty:
         color = "gray"
         emoji = "❓"
 
-    # 使用欄位來佈局：左邊放完整數據，右邊放指標
     col_summary, col_indicators = st.columns([2, 1])
     
-    # ----------------------------------------------------
     # 左側：顯示總覽數據 (放大字體)
-    # ----------------------------------------------------
     with col_summary:
         st.subheader("核心資產數據")
         
-        # 為了放大字體，我們將 DataFrame 轉為 Markdown 表格顯示
-        # 我們將 DataFrame 轉置 (Optional: 讓項目成為欄位標題，但目前保留原始格式)
-        
-        # 由於 st.dataframe 難以放大字體，我們改用 Markdown 顯示
-        markdown_table = "##### 核心總覽\n\n"
+        # 使用 Markdown H4 來間接放大字體
+        markdown_table = "#### 核心總覽\n\n"
         markdown_table += "| 項目 | 數值 |\n| :--- | :--- |\n"
-        
-        # 排除風險燈號和槓桿倍數，因為它們將單獨顯示
         items_to_exclude = ['β風險燈號', '槓桿倍數β']
         
         for index, row in df_C_display.iterrows():
             if index not in items_to_exclude:
-                # 這裡使用 Markdown H4 來間接放大字體
+                # 使用粗體和 H4 達到放大效果
                 markdown_table += f"| **{index}** | **{row.iloc[0]}** |\n"
         
         st.markdown(markdown_table)
     
-    # ----------------------------------------------------
     # 右側：風險燈號和槓桿倍數 (放大字體)
-    # ----------------------------------------------------
     with col_indicators:
         st.subheader("風險指標")
         
-        # 風險燈號 (使用 st.markdown 和 CSS 技巧放大字體)
+        # 風險燈號 (使用 HTML 嵌入方式放大字體和顏色)
         st.markdown(
             f"""
-            <h4 style='text-align: center; color: {color}; border: 2px solid {color}; padding: 10px; border-radius: 5px;'>
+            <h4 style='text-align: center; color: white; background-color: {color}; border: 2px solid {color}; padding: 10px; border-radius: 5px;'>
                 {emoji} {risk_level}
             </h4>
             """,
@@ -173,14 +147,17 @@ if not df_C.empty:
         # 槓桿倍數 (使用 st.metric 並搭配放大數值)
         st.metric(
             label="槓桿倍數 β", 
-            value=f"{float(leverage):.4f}", # 格式化為小數點後四位
+            value=f"{float(leverage):.4f}" if isinstance(leverage, (int, float, str)) and str(leverage).replace('.', '', 1).isdigit() else str(leverage), # 安全轉換
             delta_color="off"
         )
         
 else:
-    st.warning("總
+    # 🎯 修正字串終止錯誤
+    st.warning("總覽數據載入失敗，請檢查 '表C_總覽'。")
 
-# --- 2. 持股分析與比例圖 (使用 df_A 和 df_B) ---
+# ----------------------------------------------------------------------
+# 2. 持股分析與比例圖
+# ----------------------------------------------------------------------
 st.header("2. 持股分析")
 col_data, col_chart = st.columns([1, 1])
 
@@ -192,7 +169,6 @@ with col_data:
 with col_chart:
     if not df_B.empty and '市值（元）' in df_B.columns and '股票' in df_B.columns:
         try:
-            # 繪製圓餅圖 (使用表B的數據)
             df_B['市值（元）'] = pd.to_numeric(df_B['市值（元）'], errors='coerce')
             df_chart = df_B[df_B['市值（元）'] > 0]
             
@@ -212,7 +188,9 @@ with col_chart:
         st.warning("持股比例數據載入失敗，無法繪圖。")
 
 
-# --- 3. 交易紀錄與淨值追蹤 (使用 df_D, df_E, df_F) ---
+# ----------------------------------------------------------------------
+# 3. 交易紀錄與淨值追蹤
+# ----------------------------------------------------------------------
 st.header("3. 交易紀錄與淨值追蹤")
 
 tab1, tab2, tab3 = st.tabs(["現金流", "已實現損益", "每日淨值"])
@@ -235,7 +213,6 @@ with tab3:
     if not df_F.empty and '日期' in df_F.columns and '實質NAV' in df_F.columns:
         st.subheader("每日淨值 (表F_每日淨值)")
         try:
-            # 確保數據類型正確以便繪圖
             df_F['日期'] = pd.to_datetime(df_F['日期'], errors='coerce')
             df_F['實質NAV'] = pd.to_numeric(df_F['實質NAV'], errors='coerce')
             
@@ -253,10 +230,9 @@ with tab3:
 
 
 st.markdown("---")
+# ----------------------------------------------------------------------
+# 4. 財富藍圖
+# ----------------------------------------------------------------------
 if not df_G.empty:
     with st.expander("4. 財富藍圖 (表G_財富藍圖)", expanded=False):
         st.dataframe(df_G, use_container_width=True)
-
-
-
-
