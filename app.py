@@ -90,10 +90,17 @@ st.header("1. 投資總覽")
 if not df_C.empty:
     
     df_C_display = df_C.copy()
-    # 處理數據格式
-    df_C_display.index = df_C_display.iloc[:, 0]
-    series_C = df_C_display.iloc[:, 1]
     
+    # 🎯 關鍵修正：使用 set_index 確保欄位和索引分離，並明確命名
+    # 1. 使用 df.columns[0] (即 '項目') 作為新索引，並將其從欄位中移除。
+    df_C_display.set_index(df_C_display.columns[0], inplace=True)
+    
+    # 2. 將剩下的唯一一欄（數值）重新命名為 '數值'，以確保其名稱不是空字串或重複
+    df_C_display.rename(columns={df_C_display.columns[0]: "數值"}, inplace=True)
+    
+    # 3. 提取 series
+    series_C = df_C_display["數值"]
+
     # 提取關鍵值
     risk_level = series_C.get('β風險燈號', 'N/A')
     leverage = series_C.get('槓桿倍數β', 'N/A')
@@ -114,15 +121,16 @@ if not df_C.empty:
 
     col_summary, col_indicators = st.columns([2, 1])
     
-    # 左側：顯示總覽數據 (直接使用 st.dataframe，確保顯示效果)
+    # 左側：顯示總覽數據 (確保表格樣式)
     with col_summary:
         st.subheader("核心資產數據")
         
-        # 🎯 修正：重新使用 st.dataframe 確保表格樣式和互動性
-        # 我們排除掉單獨作為指標顯示的行，讓表格更精簡
+        # 排除掉單獨作為指標顯示的行，讓表格更精簡
         df_display = df_C_display[~df_C_display.index.isin(['β風險燈號', '槓桿倍數β'])].reset_index()
-        df_display.columns = ["項目", "數值"]
         
+        # 確保最終欄位名稱是 ['項目', '數值']，這是 reset_index 之後的標準名稱
+        df_display.columns = ["項目", "數值"]
+
         st.dataframe(
             df_display, 
             use_container_width=True, 
@@ -133,7 +141,7 @@ if not df_C.empty:
     with col_indicators:
         st.subheader("風險指標")
         
-        # 風險燈號 (維持放大和顏色效果)
+        # 風險燈號 (使用 HTML 嵌入方式放大字體和顏色)
         st.markdown(
             f"""
             <h4 style='text-align: center; color: white; background-color: {color}; border: 2px solid {color}; padding: 10px; border-radius: 5px;'>
@@ -143,10 +151,16 @@ if not df_C.empty:
             unsafe_allow_html=True
         )
 
-        # 槓桿倍數 (使用 st.metric)
+        # 槓桿倍數 (使用 st.metric 並搭配放大數值)
+        # 安全轉換：確保 leverage 是數字才能格式化
+        try:
+            leverage_value = f"{float(leverage):.4f}"
+        except ValueError:
+            leverage_value = str(leverage)
+            
         st.metric(
             label="槓桿倍數 β", 
-            value=f"{float(leverage):.4f}" if isinstance(leverage, (int, float, str)) and str(leverage).replace('.', '', 1).isdigit() else str(leverage), # 安全轉換
+            value=leverage_value, 
             delta_color="off"
         )
         
@@ -216,4 +230,5 @@ with tab3:
 if not df_G.empty:
     with st.expander("4. 財富藍圖 (表G_財富藍圖)", expanded=False):
         st.dataframe(df_G, use_container_width=True)
+
 
