@@ -6,6 +6,33 @@ import gspread
 # 設置頁面配置，使用寬佈局以容納更多數據
 st.set_page_config(layout="wide")
 
+# 🎯 修正：注入自訂 CSS 來增大整體文字和標題大小，提升可讀性。
+st.markdown("""
+<style>
+/* 增加應用程式的基礎字體大小 */
+html, body, [class*="stApp"] {
+    font-size: 16px; 
+}
+/* 增加標題 (Header) 的字體大小 */
+h1 { font-size: 2.5em; } 
+h2 { font-size: 1.8em; } /* 針對 st.header() */
+h3 { font-size: 1.5em; } /* 針對 st.subheader() */
+
+/* 增加 Streamlit 內建數據表格的文字大小 */
+.stDataFrame {
+    font-size: 1.0em; 
+}
+
+/* 針對 st.metric 的標籤和數值進行放大 */
+.stMetric > div:first-child {
+    font-size: 1.25em !important; /* Metric label 標籤 */
+}
+.stMetric > div:nth-child(2) > div:first-child {
+    font-size: 2.5em !important; /* Metric value 數值 */
+}
+</style>
+""", unsafe_allow_html=True)
+
 # ==============================================================================
 # 🎯 步驟 1：請務必替換成您 Google Sheets 的【完整網址】
 # ==============================================================================
@@ -147,11 +174,11 @@ if not df_C.empty:
         st.subheader('風險指標')
         
         # 風險燈號 (使用 HTML 嵌入方式放大字體和顏色)
-        # 💡 修正編輯器高亮問題：改用單引號和字串串接，避免多行字串語法衝突。
+        # 💡 調整字體大小：將 h4 改為 h3，並增加 padding，使其更顯眼。
         html_content = (
-            f"<h4 style='text-align: center; color: white; background-color: {color}; border: 2px solid {color}; padding: 10px; border-radius: 5px; font-weight: bold;'>"
+            f"<h3 style='text-align: center; color: white; background-color: {color}; border: 2px solid {color}; padding: 15px; border-radius: 8px; font-weight: bold;'>"
             f"{emoji} {risk_level}"
-            "</h4>"
+            "</h3>"
         )
         st.markdown(html_content, unsafe_allow_html=True)
 
