@@ -103,10 +103,44 @@ df_G = load_data("表G_財富藍圖")
 # --- 1. 投資總覽 (使用 df_C) ---
 st.header("1. 投資總覽") 
 if not df_C.empty:
-    st.dataframe(df_C, use_container_width=True, hide_index=True)
+    
+    # 🎯 關鍵修正：提取數據並美化風險燈號
+    
+    # 將 DataFrame 轉為 Series (方便用項目名稱存取數值)
+    df_C.index = df_C.iloc[:, 0] # 將第一欄設為索引 (項目)
+    series_C = df_C.iloc[:, 1]  # 取得第二欄數值
+    
+    # 提取關鍵值
+    risk_level = series_C.get('β風險燈號', 'N/A')
+    leverage = series_C.get('槓桿倍數β', 'N/A')
+
+    # 根據風險等級，定義顏色和 Emoji
+    if risk_level == "安全":
+        color = "green"
+        emoji = "✅"
+    elif risk_level == "警戒":
+        color = "orange"
+        emoji = "⚠️"
+    elif risk_level == "危險":
+        color = "red"
+        emoji = "🚨"
+    else:
+        color = "gray"
+        emoji = "❓"
+    
+    
+    # 顯示美化後的風險燈號
+    st.subheader(f"風險評級：{emoji} :{color}[{risk_level}]")
+    
+    # 顯示槓桿倍數 (使用 st.metric)
+    st.metric(label="槓桿倍數 β", value=leverage)
+    
+    # 顯示原始數據 (放在 Expander 中，保持頁面簡潔)
+    with st.expander("查看所有總覽數據"):
+        st.dataframe(df_C, use_container_width=True, hide_index=True)
+        
 else:
     st.warning("總覽數據載入失敗，請檢查 '表C_總覽'。")
-
 
 # --- 2. 持股分析與比例圖 (使用 df_A 和 df_B) ---
 st.header("2. 持股分析")
@@ -184,5 +218,6 @@ st.markdown("---")
 if not df_G.empty:
     with st.expander("4. 財富藍圖 (表G_財富藍圖)", expanded=False):
         st.dataframe(df_G, use_container_width=True)
+
 
 
