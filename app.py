@@ -15,7 +15,7 @@ SHEET_URL = "https://docs.google.com/spreadsheets/d/1_JBI1pKWv9aw8dGCj89y9yNgoWG
 # 【重要】load_data 函式本身保持不變，但將 SHEET_NAME 作為參數傳入
 @st.cache_data(ttl="10m") 
 def load_data(sheet_name): # <--- 接收工作表名稱參數
-    if SHEET_URL == "YOUR_SPREADSHEET_URL_HERE":
+    if SHEET_URL == "https://docs.google.com/spreadsheets/d/1_JBI1pKWv9aw8dGCj89y9yNgoWG4YKllSMnPLpU_CCM/edit":
         st.error("❌ 請先將代碼中的 SHEET_URL 替換為您的 Google Sheets 完整網址！")
         return pd.DataFrame()
 
@@ -120,4 +120,5 @@ with col2:
 
 st.markdown("---")
 st.info("🎯 **您的儀表板已成功讀取所有主要工作表！**")
+
 
