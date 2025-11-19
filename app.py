@@ -53,6 +53,23 @@ def load_data(sheet_name):
         # 轉換為 DataFrame
         df = pd.DataFrame(data[1:], columns=data[0])
         
+        # 🎯 修正重複欄位名稱 (針對表G等複雜表頭導致的 PyArrow 錯誤)
+        if len(df.columns) != len(set(df.columns)):
+            new_cols = []
+            seen = {}
+            for col in df.columns:
+                # 將空字串替換為 'Unnamed' (或任何非空的名稱)
+                clean_col = "Unnamed" if col == "" else col
+                
+                # 處理重複的名稱
+                if clean_col in seen:
+                    seen[clean_col] += 1
+                    new_cols.append(f"{clean_col}_{seen[clean_col]}")
+                else:
+                    seen[clean_col] = 0
+                    new_cols.append(clean_col)
+            df.columns = new_cols
+
         # 執行資料清理 (將 NaN 替換為 0)
         df = df.fillna(0)
         
@@ -61,16 +78,16 @@ def load_data(sheet_name):
         return df
     
     except gspread.exceptions.SpreadsheetNotFound:
-        st.error(f"GSheets 連線失敗！找不到試算表。請檢查 SHEET_URL 是否正確，並確保金鑰有權限。")
+        st.error(f"GSheets 連線失敗！找不到試算表。請檢查 SHEET_URL 是否正確，並確保金鑰已授予權限。")
         return pd.DataFrame()
     except gspread.exceptions.WorksheetNotFound:
-        st.error(f"GSheets 連線失敗！找不到工作表 '{sheet_name}'。請檢查名稱是否完全正確。")
+        st.error(f"GSheets 連線失敗！找不到工作表 '{sheet_name}'。請檢查工作表名稱是否完全正確。")
         return pd.DataFrame()
     except Exception as e:
         # 🚨 關鍵改變：強制顯示詳細錯誤追蹤
         st.error(f"⚠️ 讀取工作表 '{sheet_name}' 發生未知錯誤。請檢查 Secrets 配置細節或網路連線。")
         st.exception(e) 
-        return pd.DataFrame() 
+        return pd.DataFrame()
 
 # --- 應用程式主體開始 ---
 
@@ -170,3 +187,4 @@ st.markdown("---")
 if not df_G.empty:
     with st.expander("4. 財富藍圖 (表G_財富藍圖)", expanded=False):
         st.dataframe(df_G, use_container_width=True)
+
