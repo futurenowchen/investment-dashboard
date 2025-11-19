@@ -1,6 +1,8 @@
 import streamlit as st
 import pandas as pd
-import plotly.express as px # 假設您後續會使用 Plotly 繪製圖表
+import plotly.express as px
+import gspread # 新增：用於直接連線 Google Sheets
+import json # 新增：用於處理金鑰文件
 
 # 設置頁面配置
 st.set_page_config(layout="wide")
@@ -9,38 +11,58 @@ st.set_page_config(layout="wide")
 # 請務必替換成您 Google Sheets 的【完整網址】
 # ==============================================================================
 SHEET_URL = "https://docs.google.com/spreadsheets/d/1_JBI1pKWv9aw8dGCj89y9yNgoWG4YKllSMnPLpU_CCM/edit" 
-# 假設您的主要持股資料工作表名稱是這個
+# 您的工作表名稱
 SHEET_NAME = "七表_GSheets線上維護版" 
 # ==============================================================================
 
 
-# 使用 Streamlit 內建的 gsheets 連線器，並加入數據快取
-@st.cache_data(ttl="10m") # 設置快取時間為 10 分鐘，加快重複讀取速度
+# 使用 gspread 進行連線和數據讀取
+@st.cache_data(ttl="10m") # 設置快取時間為 10 分鐘
 def load_data():
     if SHEET_URL == "YOUR_SPREADSHEET_URL_HERE":
         st.error("❌ 請先將代碼中的 SHEET_URL 替換為您的 Google Sheets 完整網址！")
         return pd.DataFrame()
 
     try:
-        # 建立連線實例。
-        # Streamlit 會自動使用您在 Secrets 中設定的 [connections.gsheets] 資訊。
-        # 這是取代 'streamlit-gsheets' 的官方標準方法。
-        conn = st.connection("gsheets", type="gsheets")
+        # --- 1. 從 Streamlit Secrets 中讀取金鑰並進行格式處理 ---
         
-        # 讀取數據
-        df = conn.read(
-            spreadsheet=SHEET_URL,
-            worksheet=SHEET_NAME,
-            # 讀取所有欄位。如果您確定要讀前8欄，可以改為 usecols=list(range(8))
-        )
+        # 假設您的 Secrets 區塊命名為 [connections.gsheets]
+        if "gsheets" not in st.secrets.get("connections", {}):
+            st.error("Secrets 錯誤：找不到 [connections.gsheets] 區塊。請檢查您的 Streamlit Cloud Secrets 配置。")
+            return pd.DataFrame()
+            
+        credentials_info = st.secrets["connections"]["gsheets"]
         
-        # 執行資料清理 (將 NaN 替換為 0，避免計算錯誤)
+        # gspread 需要將 private_key 中的換行符號 '\\n' 替換為實際的 '\n'
+        credentials_info["private_key"] = credentials_info["private_key"].replace('\\n', '\n')
+        
+        # --- 2. 使用 gspread 認證 ---
+        gc = gspread.service_account_from_dict(credentials_info)
+        
+        # --- 3. 打開試算表和工作表 ---
+        spreadsheet = gc.open_by_url(SHEET_URL)
+        worksheet = spreadsheet.worksheet(SHEET_NAME)
+        
+        # 取得所有數據，第一行為欄位標頭
+        data = worksheet.get_all_values() 
+        
+        # 轉換為 DataFrame
+        df = pd.DataFrame(data[1:], columns=data[0])
+        
+        # 執行資料清理 (將 NaN 替換為 0)
         df = df.fillna(0)
         return df
     
+    except gspread.exceptions.SpreadsheetNotFound:
+        st.error("GSheets 連線錯誤：找不到該試算表。請檢查 URL 是否正確，並確保金鑰有權限。")
+        return pd.DataFrame()
+    except gspread.exceptions.WorksheetNotFound:
+        st.error(f"GSheets 連線錯誤：找不到工作表 '{SHEET_NAME}'。請檢查工作表名稱是否正確。")
+        return pd.DataFrame()
     except Exception as e:
-        st.error(f"⚠️ 數據讀取失敗！請檢查 Google Sheets 網址、工作表名稱或 Secrets 權限。")
-        st.exception(e) # 顯示詳細錯誤，方便您除錯
+        # 捕捉所有其他錯誤，如金鑰格式錯誤
+        st.error(f"⚠️ 數據讀取失敗！請檢查您的 Secrets 配置細節是否與 JSON 金鑰檔案完全吻合。")
+        st.exception(e) 
         return pd.DataFrame() 
 
 # --- 應用程式主體開始 ---
