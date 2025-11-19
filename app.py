@@ -38,6 +38,11 @@ def load_data(sheet_name):
         gc = gspread.service_account_from_dict(credentials_info)
         
         # --- 3. 打開試算表和工作表 ---
+        # 檢查 SHEET_URL 是否已替換
+        if SHEET_URL == "YOUR_SPREADSHEET_URL_HERE":
+            st.error("❌ 程式碼錯誤：請先將 SHEET_URL 替換為您的 Google Sheets 完整網址！")
+            return pd.DataFrame()
+        
         spreadsheet = gc.open_by_url(SHEET_URL)
         # 使用傳入的 sheet_name 尋找工作表
         worksheet = spreadsheet.worksheet(sheet_name) 
@@ -61,22 +66,10 @@ def load_data(sheet_name):
     except Exception as e:
         # 捕捉所有其他錯誤，例如網路問題或金鑰格式仍有微小問題
         st.error(f"⚠️ 讀取工作表 '{sheet_name}' 失敗。請檢查您的 Secrets 配置細節或網路連線。")
-        # st.exception(e) # 暫時註解，避免畫面過於混亂
         return pd.DataFrame() 
 
 # --- 應用程式主體開始 ---
 
 st.title("💰 投資組合儀表板")
 
-# 🎯 步驟 2：載入所有需要的數據 (請確保這些名稱與您的 Google Sheets 分頁名稱完全一致)
-df_A = load_data("表A_持股總表")
-df_B = load_data("表B_持股比例")
-df_C = load_data("表C_總覽")
-df_D = load_data("表D_現金流")
-df_E = load_data("表E_已實現損益")
-df_F = load_data("表F_每日淨值") # 根據您的檔案清單，也加入這張表
-df_G = load_data("表G_財富藍圖") # 根據您的檔案清單，也加入這張表
-
-
-# --- 1. 投資總覽 (使用 df_C) ---
-st.header("1.
+# 🎯 步驟 2
