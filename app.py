@@ -104,12 +104,12 @@ df_G = load_data("表G_財富藍圖")
 st.header("1. 投資總覽") 
 if not df_C.empty:
     
-    # 🎯 關鍵修正：提取數據並美化風險燈號
-    
     # 將 DataFrame 轉為 Series (方便用項目名稱存取數值)
-    df_C.index = df_C.iloc[:, 0] # 將第一欄設為索引 (項目)
-    series_C = df_C.iloc[:, 1]  # 取得第二欄數值
-    
+    # 我們先複製一份，避免修改原始 DataFrame
+    df_C_display = df_C.copy()
+    df_C_display.index = df_C_display.iloc[:, 0] # 將第一欄設為索引 (項目)
+    series_C = df_C_display.iloc[:, 1]  # 取得第二欄數值
+
     # 提取關鍵值
     risk_level = series_C.get('β風險燈號', 'N/A')
     leverage = series_C.get('槓桿倍數β', 'N/A')
@@ -127,20 +127,58 @@ if not df_C.empty:
     else:
         color = "gray"
         emoji = "❓"
+
+    # 使用欄位來佈局：左邊放完整數據，右邊放指標
+    col_summary, col_indicators = st.columns([2, 1])
     
+    # ----------------------------------------------------
+    # 左側：顯示總覽數據 (放大字體)
+    # ----------------------------------------------------
+    with col_summary:
+        st.subheader("核心資產數據")
+        
+        # 為了放大字體，我們將 DataFrame 轉為 Markdown 表格顯示
+        # 我們將 DataFrame 轉置 (Optional: 讓項目成為欄位標題，但目前保留原始格式)
+        
+        # 由於 st.dataframe 難以放大字體，我們改用 Markdown 顯示
+        markdown_table = "##### 核心總覽\n\n"
+        markdown_table += "| 項目 | 數值 |\n| :--- | :--- |\n"
+        
+        # 排除風險燈號和槓桿倍數，因為它們將單獨顯示
+        items_to_exclude = ['β風險燈號', '槓桿倍數β']
+        
+        for index, row in df_C_display.iterrows():
+            if index not in items_to_exclude:
+                # 這裡使用 Markdown H4 來間接放大字體
+                markdown_table += f"| **{index}** | **{row.iloc[0]}** |\n"
+        
+        st.markdown(markdown_table)
     
-    # 顯示美化後的風險燈號
-    st.subheader(f"風險評級：{emoji} :{color}[{risk_level}]")
-    
-    # 顯示槓桿倍數 (使用 st.metric)
-    st.metric(label="槓桿倍數 β", value=leverage)
-    
-    # 顯示原始數據 (放在 Expander 中，保持頁面簡潔)
-    with st.expander("查看所有總覽數據"):
-        st.dataframe(df_C, use_container_width=True, hide_index=True)
+    # ----------------------------------------------------
+    # 右側：風險燈號和槓桿倍數 (放大字體)
+    # ----------------------------------------------------
+    with col_indicators:
+        st.subheader("風險指標")
+        
+        # 風險燈號 (使用 st.markdown 和 CSS 技巧放大字體)
+        st.markdown(
+            f"""
+            <h4 style='text-align: center; color: {color}; border: 2px solid {color}; padding: 10px; border-radius: 5px;'>
+                {emoji} {risk_level}
+            </h4>
+            """,
+            unsafe_allow_html=True
+        )
+
+        # 槓桿倍數 (使用 st.metric 並搭配放大數值)
+        st.metric(
+            label="槓桿倍數 β", 
+            value=f"{float(leverage):.4f}", # 格式化為小數點後四位
+            delta_color="off"
+        )
         
 else:
-    st.warning("總覽數據載入失敗，請檢查 '表C_總覽'。")
+    st.warning("總
 
 # --- 2. 持股分析與比例圖 (使用 df_A 和 df_B) ---
 st.header("2. 持股分析")
@@ -218,6 +256,7 @@ st.markdown("---")
 if not df_G.empty:
     with st.expander("4. 財富藍圖 (表G_財富藍圖)", expanded=False):
         st.dataframe(df_G, use_container_width=True)
+
 
 
 
