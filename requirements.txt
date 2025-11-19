@@ -3,4 +3,3 @@ pandas
 plotly
 openpyxl
 gspread
-google-auth-oauthlib
