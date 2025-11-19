@@ -114,27 +114,26 @@ if not df_C.empty:
 
     col_summary, col_indicators = st.columns([2, 1])
     
-    # 左側：顯示總覽數據 (放大字體)
+    # 左側：顯示總覽數據 (直接使用 st.dataframe，確保顯示效果)
     with col_summary:
         st.subheader("核心資產數據")
         
-        # 使用 Markdown H4 來間接放大字體
-        markdown_table = "#### 核心總覽\n\n"
-        markdown_table += "| 項目 | 數值 |\n| :--- | :--- |\n"
-        items_to_exclude = ['β風險燈號', '槓桿倍數β']
+        # 🎯 修正：重新使用 st.dataframe 確保表格樣式和互動性
+        # 我們排除掉單獨作為指標顯示的行，讓表格更精簡
+        df_display = df_C_display[~df_C_display.index.isin(['β風險燈號', '槓桿倍數β'])].reset_index()
+        df_display.columns = ["項目", "數值"]
         
-        for index, row in df_C_display.iterrows():
-            if index not in items_to_exclude:
-                # 使用粗體和 H4 達到放大效果
-                markdown_table += f"| **{index}** | **{row.iloc[0]}** |\n"
-        
-        st.markdown(markdown_table)
-    
-    # 右側：風險燈號和槓桿倍數 (放大字體)
+        st.dataframe(
+            df_display, 
+            use_container_width=True, 
+            hide_index=True
+        )
+
+    # 右側：風險燈號和槓桿倍數 (保持視覺強化)
     with col_indicators:
         st.subheader("風險指標")
         
-        # 風險燈號 (使用 HTML 嵌入方式放大字體和顏色)
+        # 風險燈號 (維持放大和顏色效果)
         st.markdown(
             f"""
             <h4 style='text-align: center; color: white; background-color: {color}; border: 2px solid {color}; padding: 10px; border-radius: 5px;'>
@@ -144,7 +143,7 @@ if not df_C.empty:
             unsafe_allow_html=True
         )
 
-        # 槓桿倍數 (使用 st.metric 並搭配放大數值)
+        # 槓桿倍數 (使用 st.metric)
         st.metric(
             label="槓桿倍數 β", 
             value=f"{float(leverage):.4f}" if isinstance(leverage, (int, float, str)) and str(leverage).replace('.', '', 1).isdigit() else str(leverage), # 安全轉換
@@ -152,7 +151,6 @@ if not df_C.empty:
         )
         
 else:
-    # 🎯 修正字串終止錯誤
     st.warning("總覽數據載入失敗，請檢查 '表C_總覽'。")
 
 # ----------------------------------------------------------------------
@@ -188,27 +186,6 @@ with col_chart:
         st.warning("持股比例數據載入失敗，無法繪圖。")
 
 
-# ----------------------------------------------------------------------
-# 3. 交易紀錄與淨值追蹤
-# ----------------------------------------------------------------------
-st.header("3. 交易紀錄與淨值追蹤")
-
-tab1, tab2, tab3 = st.tabs(["現金流", "已實現損益", "每日淨值"])
-
-with tab1:
-    if not df_D.empty:
-        st.subheader("現金流紀錄 (表D_現金流)")
-        st.dataframe(df_D, use_container_width=True)
-    else:
-        st.warning("現金流數據載入失敗，請檢查 '表D_現金流'。")
-
-with tab2:
-    if not df_E.empty:
-        st.subheader("已實現損益 (表E_已實現損益)")
-        st.dataframe(df_E, use_container_width=True)
-    else:
-        st.warning("已實現損益數據載入失敗，請檢查 '表E_已實現損益'。")
-
 with tab3:
     if not df_F.empty and '日期' in df_F.columns and '實質NAV' in df_F.columns:
         st.subheader("每日淨值 (表F_每日淨值)")
@@ -216,6 +193,7 @@ with tab3:
             df_F['日期'] = pd.to_datetime(df_F['日期'], errors='coerce')
             df_F['實質NAV'] = pd.to_numeric(df_F['實質NAV'], errors='coerce')
             
+            # 繪製折線圖
             fig_nav = px.line(
                 df_F.dropna(subset=['日期', '實質NAV']), 
                 x='日期', 
@@ -223,16 +201,19 @@ with tab3:
                 title='📈 實質淨資產價值 (NAV) 趨勢'
             )
             st.plotly_chart(fig_nav, use_container_width=True)
+            
+            # 🎯 修正：在圖表下方新增數據表格
+            with st.expander("查看每日淨值詳細數據", expanded=False):
+                st.dataframe(df_F, use_container_width=True)
+            
         except Exception:
             st.warning("無法繪製每日淨值圖，請檢查 '表F_每日淨值' 數據格式。")
     else:
         st.warning("每日淨值數據載入失敗，請檢查 '表F_每日淨值'。")
-
-
-st.markdown("---")
 # ----------------------------------------------------------------------
 # 4. 財富藍圖
 # ----------------------------------------------------------------------
 if not df_G.empty:
     with st.expander("4. 財富藍圖 (表G_財富藍圖)", expanded=False):
         st.dataframe(df_G, use_container_width=True)
+
