@@ -26,14 +26,18 @@ def load_data():
     try:
         # --- 1. 從 Streamlit Secrets 中讀取金鑰並進行格式處理 ---
         
-        # 假設您的 Secrets 區塊命名為 [connections.gsheets]
+        # 檢查 Secrets 區塊
         if "gsheets" not in st.secrets.get("connections", {}):
             st.error("Secrets 錯誤：找不到 [connections.gsheets] 區塊。請檢查您的 Streamlit Cloud Secrets 配置。")
             return pd.DataFrame()
-            
-        credentials_info = st.secrets["connections"]["gsheets"]
         
-        # gspread 需要將 private_key 中的換行符號 '\\n' 替換為實際的 '\n'
+        # 從 Secrets 讀取金鑰配置 (Secrets 物件是唯讀的)
+        secrets_config = st.secrets["connections"]["gsheets"]
+        
+        # **【關鍵修正】**：複製一份配置，以便進行修改 (dict() 確保我們有一個可寫的副本)
+        credentials_info = dict(secrets_config) 
+        
+        # 修正 private_key 中的換行符號。
         credentials_info["private_key"] = credentials_info["private_key"].replace('\\n', '\n')
         
         # --- 2. 使用 gspread 認證 ---
@@ -53,6 +57,7 @@ def load_data():
         df = df.fillna(0)
         return df
     
+    # 這裡可以加入更詳細的 gspread 異常處理
     except gspread.exceptions.SpreadsheetNotFound:
         st.error("GSheets 連線錯誤：找不到該試算表。請檢查 URL 是否正確，並確保金鑰有權限。")
         return pd.DataFrame()
@@ -60,7 +65,7 @@ def load_data():
         st.error(f"GSheets 連線錯誤：找不到工作表 '{SHEET_NAME}'。請檢查工作表名稱是否正確。")
         return pd.DataFrame()
     except Exception as e:
-        # 捕捉所有其他錯誤，如金鑰格式錯誤
+        # 捕捉所有其他錯誤
         st.error(f"⚠️ 數據讀取失敗！請檢查您的 Secrets 配置細節是否與 JSON 金鑰檔案完全吻合。")
         st.exception(e) 
         return pd.DataFrame() 
@@ -101,3 +106,4 @@ if not df_holdings.empty:
 
 else:
     st.error("由於數據載入失敗，儀表板的分析部分無法顯示。請根據上方的錯誤訊息進行修正。")
+
