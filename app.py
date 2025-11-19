@@ -8,7 +8,7 @@ import gspread
 st.set_page_config(layout="wide")
 
 # ==============================================================================
-SHEET_URL = "YOUR_SPREADSHEET_URL_HERE" # <--- 請再次確認您已替換
+SHEET_URL = "https://docs.google.com/spreadsheets/d/1_JBI1pKWv9aw8dGCj89y9yNgoWG4YKllSMnPLpU_CCM/edit" # <--- 請再次確認您已替換
 # ==============================================================================
 
 
@@ -120,3 +120,4 @@ with col2:
 
 st.markdown("---")
 st.info("🎯 **您的儀表板已成功讀取所有主要工作表！**")
+
