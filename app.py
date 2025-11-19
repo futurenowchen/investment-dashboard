@@ -16,78 +16,75 @@ SHEET_URL = "https://docs.google.com/spreadsheets/d/1_JBI1pKWv9aw8dGCj89y9yNgoWG
 # 使用 gspread 進行連線和數據讀取，並加入數據快取
 @st.cache_data(ttl="10m") 
 def load_data(sheet_name): 
-    # 在嘗試連線前顯示一個狀態訊息
-    st.info(f"正在嘗試連線並載入工作表: '{sheet_name}'...") 
 
-    try:
-        # --- 1. 從 Streamlit Secrets 中讀取金鑰並進行格式處理 ---
+    # 🎯 核心修正：使用 st.spinner 自動管理載入狀態
+    with st.spinner(f"正在載入工作表: '{sheet_name}'..."):
+
+        try:
+            # --- 1. 從 Streamlit Secrets 中讀取金鑰並進行格式處理 ---
+            
+            # 檢查 Secrets 區塊是否存在
+            if "gsheets" not in st.secrets.get("connections", {}):
+                # 錯誤發生時，spinner 會自動停止，但我們手動顯示錯誤
+                st.error("Secrets 錯誤：找不到 [connections.gsheets] 區塊。請檢查您的 Streamlit Cloud Secrets 配置。")
+                return pd.DataFrame()
+            
+            secrets_config = st.secrets["connections"]["gsheets"]
+            
+            # 檢查 SHEET_URL 是否已替換
+            if SHEET_URL == "YOUR_SPREADSHEET_URL_HERE":
+                st.error("❌ 程式碼錯誤：請先將 SHEET_URL 替換為您的 Google Sheets 完整網址！")
+                return pd.DataFrame()
+
+            # 複製配置並修正 private_key
+            credentials_info = dict(secrets_config) 
+            credentials_info["private_key"] = credentials_info["private_key"].replace('\\n', '\n')
+            
+            # --- 2. 使用 gspread 認證 ---
+            gc = gspread.service_account_from_dict(credentials_info)
+            
+            # --- 3. 打開試算表和工作表 ---
+            spreadsheet = gc.open_by_url(SHEET_URL)
+            worksheet = spreadsheet.worksheet(sheet_name) 
+            
+            # 取得所有數據
+            data = worksheet.get_all_values() 
+            
+            # 轉換為 DataFrame
+            df = pd.DataFrame(data[1:], columns=data[0])
+            
+            # 🎯 修正重複欄位名稱
+            if len(df.columns) != len(set(df.columns)):
+                new_cols = []
+                seen = {}
+                for col in df.columns:
+                    clean_col = "Unnamed" if col == "" else col
+                    
+                    if clean_col in seen:
+                        seen[clean_col] += 1
+                        new_cols.append(f"{clean_col}_{seen[clean_col]}")
+                    else:
+                        seen[clean_col] = 0
+                        new_cols.append(clean_col)
+                df.columns = new_cols
+
+            # 執行資料清理
+            df = df.fillna(0)
+            
+            # 當程式碼退出 with st.spinner 區塊時，載入訊息會自動消失
+            return df
         
-        # 檢查 Secrets 區塊是否存在
-        if "gsheets" not in st.secrets.get("connections", {}):
-            st.error("Secrets 錯誤：找不到 [connections.gsheets] 區塊。請檢查您的 Streamlit Cloud Secrets 配置。")
+        # --- 錯誤處理 ---
+        except gspread.exceptions.SpreadsheetNotFound:
+            st.error(f"GSheets 連線失敗！找不到試算表。請檢查 SHEET_URL 是否正確，並確保金鑰已授予權限。")
             return pd.DataFrame()
-        
-        secrets_config = st.secrets["connections"]["gsheets"]
-        
-        # 檢查 SHEET_URL 是否已替換 (這是一個額外的安全檢查)
-        if SHEET_URL == "YOUR_SPREADSHEET_URL_HERE":
-            st.error("❌ 程式碼錯誤：請先將 SHEET_URL 替換為您的 Google Sheets 完整網址！")
+        except gspread.exceptions.WorksheetNotFound:
+            st.error(f"GSheets 連線失敗！找不到工作表 '{sheet_name}'。請檢查名稱是否完全正確。")
             return pd.DataFrame()
-
-        # 【關鍵修正】複製一份配置，以便進行修改 (dict() 確保我們有一個可寫的副本)
-        credentials_info = dict(secrets_config) 
-        
-        # 修正 private_key 中的換行符號。
-        credentials_info["private_key"] = credentials_info["private_key"].replace('\\n', '\n')
-        
-        # --- 2. 使用 gspread 認證 ---
-        gc = gspread.service_account_from_dict(credentials_info)
-        
-        # --- 3. 打開試算表和工作表 ---
-        spreadsheet = gc.open_by_url(SHEET_URL)
-        worksheet = spreadsheet.worksheet(sheet_name) 
-        
-        # 取得所有數據，第一行為欄位標頭
-        data = worksheet.get_all_values() 
-        
-        # 轉換為 DataFrame
-        df = pd.DataFrame(data[1:], columns=data[0])
-        
-        # 🎯 修正重複欄位名稱 (針對表G等複雜表頭導致的 PyArrow 錯誤)
-        if len(df.columns) != len(set(df.columns)):
-            new_cols = []
-            seen = {}
-            for col in df.columns:
-                # 將空字串替換為 'Unnamed' (或任何非空的名稱)
-                clean_col = "Unnamed" if col == "" else col
-                
-                # 處理重複的名稱
-                if clean_col in seen:
-                    seen[clean_col] += 1
-                    new_cols.append(f"{clean_col}_{seen[clean_col]}")
-                else:
-                    seen[clean_col] = 0
-                    new_cols.append(clean_col)
-            df.columns = new_cols
-
-        # 執行資料清理 (將 NaN 替換為 0)
-        df = df.fillna(0)
-        
-        # 成功載入後移除狀態訊息
-        st.empty() 
-        return df
-    
-    except gspread.exceptions.SpreadsheetNotFound:
-        st.error(f"GSheets 連線失敗！找不到試算表。請檢查 SHEET_URL 是否正確，並確保金鑰已授予權限。")
-        return pd.DataFrame()
-    except gspread.exceptions.WorksheetNotFound:
-        st.error(f"GSheets 連線失敗！找不到工作表 '{sheet_name}'。請檢查工作表名稱是否完全正確。")
-        return pd.DataFrame()
-    except Exception as e:
-        # 🚨 關鍵改變：強制顯示詳細錯誤追蹤
-        st.error(f"⚠️ 讀取工作表 '{sheet_name}' 發生未知錯誤。請檢查 Secrets 配置細節或網路連線。")
-        st.exception(e) 
-        return pd.DataFrame()
+        except Exception as e:
+            st.error(f"⚠️ 讀取工作表 '{sheet_name}' 發生未知錯誤。請檢查 Secrets 配置細節或網路連線。")
+            st.exception(e) 
+            return pd.DataFrame()
 
 # --- 應用程式主體開始 ---
 
@@ -187,4 +184,5 @@ st.markdown("---")
 if not df_G.empty:
     with st.expander("4. 財富藍圖 (表G_財富藍圖)", expanded=False):
         st.dataframe(df_G, use_container_width=True)
+
 
