@@ -224,11 +224,59 @@ with tab3:
             st.warning("無法繪製每日淨值圖，請檢查 '表F_每日淨值' 數據格式。")
     else:
         st.warning("每日淨值數據載入失敗，請檢查 '表F_每日淨值'。")
+
+# ----------------------------------------------------------------------
+# 3. 交易紀錄與淨值追蹤
+# ----------------------------------------------------------------------
+st.header("3. 交易紀錄與淨值追蹤")
+
+# 🎯 關鍵行：定義 tab1, tab2, tab3
+tab1, tab2, tab3 = st.tabs(["現金流", "已實現損益", "每日淨值"])
+
+with tab1:
+    if not df_D.empty:
+        st.subheader("現金流紀錄 (表D_現金流)")
+        st.dataframe(df_D, use_container_width=True)
+    else:
+        st.warning("現金流數據載入失敗，請檢查 '表D_現金流'。")
+
+with tab2:
+    if not df_E.empty:
+        st.subheader("已實現損益 (表E_已實現損益)")
+        st.dataframe(df_E, use_container_width=True)
+    else:
+        st.warning("已實現損益數據載入失敗，請檢查 '表E_已實現損益'。")
+
+with tab3:
+    if not df_F.empty and '日期' in df_F.columns and '實質NAV' in df_F.columns:
+        st.subheader("每日淨值 (表F_每日淨值)")
+        try:
+            df_F['日期'] = pd.to_datetime(df_F['日期'], errors='coerce')
+            df_F['實質NAV'] = pd.to_numeric(df_F['實質NAV'], errors='coerce')
+            
+            # 繪製折線圖
+            fig_nav = px.line(
+                df_F.dropna(subset=['日期', '實質NAV']), 
+                x='日期', 
+                y='實質NAV', 
+                title='📈 實質淨資產價值 (NAV) 趨勢'
+            )
+            st.plotly_chart(fig_nav, use_container_width=True)
+            
+            # 在圖表下方新增數據表格
+            with st.expander("查看每日淨值詳細數據", expanded=False):
+                st.dataframe(df_F, use_container_width=True)
+            
+        except Exception:
+            st.warning("無法繪製每日淨值圖，請檢查 '表F_每日淨值' 數據格式。")
+    else:
+        st.warning("每日淨值數據載入失敗，請檢查 '表F_每日淨值'。")
 # ----------------------------------------------------------------------
 # 4. 財富藍圖
 # ----------------------------------------------------------------------
 if not df_G.empty:
     with st.expander("4. 財富藍圖 (表G_財富藍圖)", expanded=False):
         st.dataframe(df_G, use_container_width=True)
+
 
 
