@@ -179,12 +179,18 @@ def update_stock_prices(df_A):
         headers = all_data[0]
         data_rows = all_data[1:]
         
+        # 🎯 DEBUG: 在側邊欄顯示實際讀到的欄位名稱，供用戶診斷
+        st.sidebar.info(f"表A讀取到的欄位名稱：{headers}") 
+        
         # 找到 '股票' 和 '最新收盤價' 的欄位索引
         try:
-            ticker_col_idx = headers.index('股票')
-            price_col_idx = headers.index('最新收盤價')
+            # 🎯 修正: 先清理欄位名稱的頭尾空白後再進行索引查找，提高容錯性
+            cleaned_headers = [h.strip() for h in headers]
+            ticker_col_idx = cleaned_headers.index('股票')
+            price_col_idx = cleaned_headers.index('最新收盤價')
         except ValueError:
-            st.error("❌ 工作表 '表A_持股總表' 必須包含欄位：'股票' 和 '最新收盤價'。")
+            st.error("❌ 寫入失敗：工作表 '表A_持股總表' 必須包含【完全匹配】的欄位：'股票' 和 '最新收盤價'。")
+            st.code(f"您的欄位名稱: {headers}")
             return
 
         # 準備更新的範圍和值
@@ -247,6 +253,7 @@ df_G = load_data('表G_財富藍圖')
 st.sidebar.header("🎯 股價數據管理")
 if st.sidebar.button("🔄 更新最新收盤價 (寫入 Sheets)", type="primary"):
     with st.spinner('正在從 yfinance 獲取數據並寫回 Google Sheets...'):
+        # 🎯 這裡會執行更新，並在失敗時顯示診斷資訊
         update_stock_prices(df_A)
         # 刷新頁面，確保重新讀取數據
         st.rerun() 
