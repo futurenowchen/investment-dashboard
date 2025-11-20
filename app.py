@@ -2,6 +2,8 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import gspread 
+from datetime import datetime
+import yfinance as yf # 🎯 新增：用於獲取股票價格
 
 # 設置頁面配置，使用寬佈局以容納更多數據
 st.set_page_config(layout="wide")
@@ -45,7 +47,6 @@ SHEET_URL = "https://docs.google.com/spreadsheets/d/1_JBI1pKWv9aw8dGCj89y9yNgoWG
 def load_data(sheet_name): 
     # 使用 st.spinner 自動管理載入狀態，乾淨美觀
     with st.spinner(f"正在載入工作表: '{sheet_name}'..."):
-
         try:
             # --- 1. Secrets 認證準備 ---
             if "gsheets" not in st.secrets.get("connections", {}):
@@ -68,15 +69,12 @@ def load_data(sheet_name):
             data = worksheet.get_all_values() 
             df = pd.DataFrame(data[1:], columns=data[0])
             
-            # 🎯 修正重複欄位名稱 (針對表G等複雜表頭導致的 PyArrow 錯誤)
+            # 🎯 修正重複欄位名稱
             if len(df.columns) != len(set(df.columns)):
                 new_cols = []
                 seen = {}
                 for col in df.columns:
-                    # 將空字串替換為 'Unnamed' (或任何非空的名稱)
                     clean_col = "Unnamed" if col == "" else col
-                    
-                    # 處理重複的名稱
                     if clean_col in seen:
                         seen[clean_col] += 1
                         new_cols.append(f"{clean_col}_{seen[clean_col]}")
@@ -90,15 +88,145 @@ def load_data(sheet_name):
         
         # --- 錯誤處理 ---
         except gspread.exceptions.SpreadsheetNotFound:
-            st.error(f'GSheets 連線失敗！找不到試算表。請檢查 SHEET_URL 是否正確。')
+            st.error(f'GSheets 連線失敗：找不到試算表。請檢查 SHEET_URL 是否正確。')
             return pd.DataFrame()
         except gspread.exceptions.WorksheetNotFound:
-            st.error(f"GSheets 連線失敗！找不到工作表 '{sheet_name}'。請檢查名稱是否完全正確。")
+            st.error(f"GSheets 連線失敗：找不到工作表 '{sheet_name}'。請檢查名稱是否完全正確。")
             return pd.DataFrame()
         except Exception as e:
             st.error(f"⚠️ 讀取工作表 '{sheet_name}' 發生未知錯誤。")
             st.exception(e) 
             return pd.DataFrame() 
+
+
+# 新增的函式：用於獲取工作表連線，專門用於寫入操作
+def get_worksheet_connection(sheet_name):
+    """建立 gspread 連線並返回指定的工作表物件，用於寫入資料。"""
+    try:
+        secrets_config = st.secrets["connections"]["gsheets"]
+        credentials_info = dict(secrets_config) 
+        credentials_info["private_key"] = credentials_info["private_key"].replace('\\n', '\n')
+        
+        gc = gspread.service_account_from_dict(credentials_info)
+        spreadsheet = gc.open_by_url(SHEET_URL)
+        worksheet = spreadsheet.worksheet(sheet_name)
+        return worksheet
+    except Exception as e:
+        st.error(f"連線到工作表 '{sheet_name}' 進行寫入操作時發生錯誤。請確保服務帳戶有編輯權限。")
+        st.exception(e)
+        return None
+
+# 🎯 核心新功能：自動更新股價並寫回 Google Sheet (約 125 行)
+def update_stock_prices(df_A):
+    """從 yfinance 獲取最新收盤價並寫入 '表A_持股總表'。"""
+    
+    # 確保 '股票' 欄位存在，且不是空的 DataFrame
+    if df_A.empty or '股票' not in df_A.columns:
+        st.error("❌ '表A_持股總表' 數據不完整，請確保包含 '股票' 代碼欄位。")
+        return
+
+    # 獲取所有唯一的股票代碼，並過濾掉空值
+    tickers = df_A['股票'].astype(str).str.strip().unique()
+    valid_tickers = [t for t in tickers if t]
+    
+    if not valid_tickers:
+        st.warning("工作表中沒有找到有效的股票代碼 (e.g., 2330.TW, AAPL)。")
+        return
+
+    st.info(f"正在獲取 {len(valid_tickers)} 支股票的最新收盤價...")
+    
+    price_updates = {}
+    
+    # 使用 yfinance 獲取數據
+    try:
+        # 獲取最新價格 (period='1d' 效率最高)
+        data = yf.download(valid_tickers, period='1d', interval='1d', progress=False)
+
+        if data.empty:
+            st.warning("無法從 yfinance 獲取任何數據，請檢查網絡或代碼是否正確。")
+            return
+        
+        # 處理單一支股票和多支股票的返回格式
+        if len(valid_tickers) == 1:
+            # 單一股票返回 Series，需要轉換成 DataFrame 格式
+            latest_prices = data['Close'].iloc[-1] 
+            # 由於是單一股票，直接使用 ticker 作為鍵
+            if not pd.isna(latest_prices):
+                price_updates[valid_tickers[0]] = latest_prices
+        else:
+            # 多支股票返回 DataFrame
+            latest_prices_df = data['Close'].iloc[-1]
+            for ticker in valid_tickers:
+                price = latest_prices_df.get(ticker)
+                if price is not None and not pd.isna(price):
+                    price_updates[ticker] = price
+        
+    except Exception as e:
+        st.error(f"❌ 獲取股價時發生錯誤：{e}")
+        return
+
+    if not price_updates:
+        st.warning("沒有成功獲取到任何股票的最新價格。")
+        return
+
+    # 寫回 Google Sheets
+    try:
+        worksheet = get_worksheet_connection('表A_持股總表')
+        if not worksheet: return
+
+        # 獲取整個工作表的數據 (包含標頭)
+        all_data = worksheet.get_all_values()
+        headers = all_data[0]
+        data_rows = all_data[1:]
+        
+        # 找到 '股票' 和 '最新收盤價' 的欄位索引
+        try:
+            ticker_col_idx = headers.index('股票')
+            price_col_idx = headers.index('最新收盤價')
+        except ValueError:
+            st.error("❌ 工作表 '表A_持股總表' 必須包含欄位：'股票' 和 '最新收盤價'。")
+            return
+
+        # 準備更新的範圍和值
+        updates = []
+        for i, row in enumerate(data_rows):
+            # i+2 是實際的行號 (標頭佔用第 1 行)
+            row_num = i + 2 
+            
+            # 確保行長度足夠
+            if len(row) > ticker_col_idx:
+                ticker = row[ticker_col_idx].strip()
+                
+                if ticker in price_updates:
+                    new_price = round(price_updates[ticker], 4)
+                    
+                    # 檢查該行是否足夠長來容納新價格，如果不足，則填充空字串
+                    if len(row) <= price_col_idx:
+                        row.extend([''] * (price_col_idx - len(row) + 1))
+                    
+                    # 檢查舊價格是否需要更新
+                    if str(row[price_col_idx]) != str(new_price):
+                        # 創建更新範圍 (e.g., 'C2', 'C3'...)
+                        cell_range = gspread.utils.rowcol_to_a1(row_num, price_col_idx + 1)
+                        updates.append({
+                            'range': cell_range,
+                            'values': [[str(new_price)]]
+                        })
+
+        if updates:
+            # 批量更新，效率最高
+            worksheet.batch_update(updates, value_input_option='USER_ENTERED')
+            st.success(f"🎉 成功更新 {len(updates)} 筆最新收盤價！")
+            
+            # 清除快取，讓 Streamlit 重新載入數據
+            st.cache_data.clear()
+        else:
+            st.info("所有股票價格已是最新，無需更新。")
+
+    except Exception as e:
+        st.error(f"❌ 寫入 Google Sheets 失敗：{e}")
+        st.exception(e)
+
 
 # --- 應用程式主體開始 ---
 
@@ -114,6 +242,18 @@ df_F = load_data('表F_每日淨值')
 df_G = load_data('表G_財富藍圖')
 
 # ---------------------------------------------------
+# 0. 股價即時更新區塊 (新增，位於側邊欄)
+# ---------------------------------------------------
+st.sidebar.header("🎯 股價數據管理")
+if st.sidebar.button("🔄 更新最新收盤價 (寫入 Sheets)", type="primary"):
+    with st.spinner('正在從 yfinance 獲取數據並寫回 Google Sheets...'):
+        update_stock_prices(df_A)
+        # 刷新頁面，確保重新讀取數據
+        st.rerun() 
+st.sidebar.caption("💡 點擊後會覆蓋 '表A_持股總表' 中的 '最新收盤價' 欄位。")
+st.sidebar.markdown("---")
+
+# ---------------------------------------------------
 # 1. 投資總覽 (核心總覽表格 + 風險指標燈號)
 # ---------------------------------------------------
 st.header('1. 投資總覽') 
@@ -122,7 +262,6 @@ if not df_C.empty:
     df_C_display = df_C.copy()
     
     # 🎯 欄位處理：確保索引設置和欄位名稱唯一性 (解決 ValueError)
-    # 1. 使用第一欄（項目）作為新索引
     df_C_display.set_index(df_C_display.columns[0], inplace=True)
     
     # 2. 將剩下的唯一一欄（數值）重新命名為 '數值'
@@ -130,7 +269,6 @@ if not df_C.empty:
         df_C_display.rename(columns={df_C_display.columns[0]: '數值'}, inplace=True)
         series_C = df_C_display['數值']
     else:
-        # 處理只有一欄時的情況
         series_C = df_C_display.iloc[:, 0]
 
     # 提取關鍵值
@@ -174,7 +312,6 @@ if not df_C.empty:
         st.subheader('風險指標')
         
         # 風險燈號 (使用 HTML 嵌入方式放大字體和顏色)
-        # 💡 調整字體大小：將 h4 改為 h3，並增加 padding，使其更顯眼。
         html_content = (
             f"<h3 style='text-align: center; color: white; background-color: {color}; border: 2px solid {color}; padding: 15px; border-radius: 8px; font-weight: bold;'>"
             f"{emoji} {risk_level}"
@@ -288,9 +425,78 @@ with tab3:
 
 
 st.markdown('---')
+
 # ---------------------------------------------------
-# 4. 財富藍圖
+# 4. 資料輸入與管理 (新增現金流)
+# ---------------------------------------------------
+st.header('4. 資料輸入與管理')
+
+# 使用 Tab 來分開不同的輸入類型
+tab_cash, tab_blueprint = st.tabs(['新增現金流交易 (表D)', '財富藍圖 (表G)'])
+
+with tab_cash:
+    st.subheader('新增現金流交易')
+    st.warning('⚠️ 注意：此功能會直接在您的 Google Sheets "表D_現金流" 最後新增一行資料。')
+
+    # 建立 Streamlit 表單
+    with st.form("cash_flow_form", clear_on_submit=True):
+        
+        # 獲取今日日期作為預設值
+        default_date = datetime.now().date()
+        date = st.date_input("日期", default_date)
+        
+        item = st.selectbox(
+            "項目 (請與您的表格欄位相符)",
+            ['投入資金', '贖回資金', '股息/利息收入', '費用/稅金', '其他'],
+            index=0
+        )
+        
+        # 確保金額是正數輸入，程式內部再處理正負號
+        amount = st.number_input("金額 (例如：投入/流入 輸入 10000)", min_value=0.0, format="%.2f")
+        
+        is_outflow = st.checkbox("這是流出/贖回交易 (勾選表示金額為負數)")
+        
+        submitted = st.form_submit_button("✅ 送出交易")
+
+        if submitted:
+            if SHEET_URL == "YOUR_SPREADSHEET_URL_HERE":
+                st.error("請先在程式碼開頭替換 SHEET_URL！無法寫入。")
+            elif amount == 0.0:
+                st.error("金額不能為零。")
+            else:
+                try:
+                    worksheet = get_worksheet_connection('表D_現金流')
+                    if worksheet:
+                        
+                        final_amount = -amount if is_outflow else amount
+                        
+                        # 根據金額正負調整為流入或流出
+                        inflow = final_amount if final_amount > 0 else 0
+                        outflow = abs(final_amount) if final_amount < 0 else 0
+                        
+                        # 這裡假設您的 Google Sheet 欄位順序是: 日期 | 項目 | 流入金額 | 流出金額 | 備註
+                        new_row = [
+                            date.strftime('%Y/%m/%d'), 
+                            item, 
+                            inflow, 
+                            outflow, 
+                            "" # 備註欄 (請確保這個列表的長度與您的 Sheet 欄位數匹配)
+                        ] 
+
+                        worksheet.append_row(new_row, value_input_option='USER_ENTERED')
+                        
+                        # 成功後，清除快取，讓儀表板自動刷新數據
+                        st.cache_data.clear()
+                        st.success(f"成功新增一筆交易：{item}, 金額: {final_amount:.2f}")
+
+                except Exception as e:
+                    st.error(f"寫入 Google Sheets 失敗：{e}")
+                    st.exception(e)
+
+
+# ---------------------------------------------------
+# 5. 財富藍圖
 # ---------------------------------------------------
 if not df_G.empty:
-    with st.expander('4. 財富藍圖 (表G_財富藍圖)', expanded=False):
+    with st.expander('5. 財富藍圖 (表G_財富藍圖)', expanded=False):
         st.dataframe(df_G, use_container_width=True)
