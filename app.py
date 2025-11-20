@@ -48,30 +48,43 @@ if 'live_prices' not in st.session_state:
     st.session_state['live_prices'] = {} # {ticker: price}
 
 
+# 🎯 新增連線工具函式
+def get_gsheet_connection():
+    """建立並返回 gspread 客戶端和試算表物件。"""
+    try:
+        if "gsheets" not in st.secrets.get("connections", {}):
+            st.error("Secrets 錯誤：找不到 [connections.gsheets] 區塊。請檢查您的 Streamlit Cloud Secrets 配置。")
+            return None, None
+        
+        if SHEET_URL == "YOUR_SPREADSHEET_URL_HERE":
+            st.error("❌ 程式碼錯誤：請先將 SHEET_URL 替換為您的 Google Sheets 完整網址！")
+            return None, None
+
+        secrets_config = st.secrets["connections"]["gsheets"]
+        credentials_info = dict(secrets_config) 
+        credentials_info["private_key"] = credentials_info["private_key"].replace('\\n', '\n')
+        
+        gc = gspread.service_account_from_dict(credentials_info)
+        spreadsheet = gc.open_by_url(SHEET_URL)
+        return gc, spreadsheet
+    
+    except Exception as e:
+        st.error(f"⚠️ 連線至 Google Sheets 發生錯誤。")
+        st.exception(e)
+        return None, None
+
+
 # 數據載入函式 (僅用於讀取)
-# 🎯 修正：移除 st.cache_data(ttl="10m")，確保每次載入頁面時都從 Google Sheets 讀取最新數據。
-@st.cache_data(ttl=None) # 將 ttl 設為 None，讓快取僅在函式引數變更時失效
+@st.cache_data(ttl=None) 
 def load_data(sheet_name): 
     with st.spinner(f"正在載入工作表: '{sheet_name}'..."):
         try:
-            # --- 1. Secrets 認證準備 ---
-            if "gsheets" not in st.secrets.get("connections", {}):
-                st.error("Secrets 錯誤：找不到 [connections.gsheets] 區塊。請檢查您的 Streamlit Cloud Secrets 配置。")
+            _, spreadsheet = get_gsheet_connection()
+            if not spreadsheet:
                 return pd.DataFrame()
             
-            secrets_config = st.secrets["connections"]["gsheets"]
-            if SHEET_URL == "YOUR_SPREADSHEET_URL_HERE":
-                st.error("❌ 程式碼錯誤：請先將 SHEET_URL 替換為您的 Google Sheets 完整網址！")
-                return pd.DataFrame()
-
-            credentials_info = dict(secrets_config) 
-            credentials_info["private_key"] = credentials_info["private_key"].replace('\\n', '\n')
-            
-            # --- 2. 連線與數據獲取 ---
-            gc = gspread.service_account_from_dict(credentials_info)
-            spreadsheet = gc.open_by_url(SHEET_URL)
+            # --- 獲取數據 ---
             worksheet = spreadsheet.worksheet(sheet_name) 
-            
             data = worksheet.get_all_values() 
             df = pd.DataFrame(data[1:], columns=data[0])
             
@@ -93,38 +106,31 @@ def load_data(sheet_name):
             return df
         
         # --- 錯誤處理 ---
-        except gspread.exceptions.SpreadsheetNotFound:
-            st.error(f'GSheets 連線失敗：找不到試算表。請檢查 SHEET_URL 是否正確。')
-            return pd.DataFrame()
         except gspread.exceptions.WorksheetNotFound:
             st.error(f"GSheets 連線失敗：找不到工作表 '{sheet_name}'。請檢查名稱是否完全正確。")
             return pd.DataFrame()
         except Exception as e:
+            # 已經在 get_gsheet_connection 處理了連線錯誤，這裡主要處理工作表錯誤
             st.error(f"⚠️ 讀取工作表 '{sheet_name}' 發生未知錯誤。")
             st.exception(e) 
             return pd.DataFrame() 
 
-# 🎯 新增函式：僅負責獲取股價
-@st.cache_data(ttl="60s") # 股價仍保留 60 秒快取，避免過度呼叫 yfinance API
+# 🎯 獲取股價函式 (保留快取 60 秒)
+@st.cache_data(ttl="60s") 
 def fetch_current_prices(valid_tickers):
     """從 yfinance 獲取最新收盤價，並返回價格字典。"""
     
     st.info(f"正在從 yfinance 獲取 {len(valid_tickers)} 支股票的最新收盤價...")
     price_updates = {}
-    
-    # 增加延遲，避免 yfinance 拒絕請求
-    time.sleep(1)
+    time.sleep(1) # 增加延遲，避免 yfinance 拒絕請求
 
     try:
-        # 獲取最新價格 (period='1d' 效率最高)
-        # auto_adjust=True 獲取的是調整後的價格
         data = yf.download(valid_tickers, period='1d', interval='1d', progress=False)
 
         if data.empty:
             st.warning("無法從 yfinance 獲取任何數據，請檢查股票代碼格式 (e.g., 2330.TW)。")
             return {}
         
-        # 處理單一支股票和多支股票的返回格式
         if len(valid_tickers) == 1:
             latest_prices = data['Close'].iloc[-1] 
             if not pd.isna(latest_prices):
@@ -142,6 +148,53 @@ def fetch_current_prices(valid_tickers):
         st.error(f"❌ 獲取股價時發生錯誤：{e}")
         return {}
 
+
+# 🎯 新增寫入函式
+def write_prices_to_sheet(df_A, price_updates):
+    """將最新的價格寫入到 Google Sheets 的 '表A_持股總表' E 欄。"""
+    
+    # 檢查連線
+    _, spreadsheet = get_gsheet_connection()
+    if not spreadsheet:
+        return False
+
+    try:
+        worksheet = spreadsheet.worksheet('表A_持股總表')
+    except gspread.exceptions.WorksheetNotFound:
+        st.error("寫入失敗：找不到工作表 '表A_持股總表'。")
+        return False
+        
+    # --- 步驟 1: 準備要寫入的數據 ---
+    
+    # 找到股票代碼所在的列 (df_A[股票] 對應 A 欄)
+    # Gspread 的 range.update 需要一個列表的列表
+    write_values = []
+    
+    # 遍歷持股總表中的每一行
+    for index, row in df_A.iterrows():
+        ticker = str(row['股票']).strip()
+        price = price_updates.get(ticker) # 從獲取的價格字典中查找價格
+
+        # 🎯 寫入邏輯：如果找到價格，則使用價格，否則寫入空字串或 0
+        if price is not None:
+            write_values.append([f"{price:.2f}"]) # 格式化為字串，保留兩位小數
+        else:
+            write_values.append(['']) # 未找到價格則留空
+
+    # --- 步驟 2: 執行寫入 ---
+    
+    # E 欄是第 5 欄 (A=1, B=2, C=3, D=4, E=5)
+    # 我們從數據的第 2 行 (A2) 開始寫入，因為第 1 行是標題
+    start_row = 2 
+    end_row = start_row + len(write_values) - 1
+    
+    # 寫入範圍: 'E2:E(end_row)'
+    range_to_update = f'E{start_row}:E{end_row}'
+    
+    # 執行批次更新
+    worksheet.update(range_to_update, write_values, value_input_option='USER_ENTERED')
+    
+    return True
 
 # --- 應用程式主體開始 ---
 
@@ -161,8 +214,8 @@ df_G = load_data('表G_財富藍圖')
 # ---------------------------------------------------
 st.sidebar.header("🎯 股價數據管理")
 
-# 僅在 Streamlit 中顯示的即時價格按鈕
-if st.sidebar.button("🔄 獲取即時收盤價 (僅顯示)", type="primary"):
+# 🎯 修正按鈕文字和邏輯
+if st.sidebar.button("💾 獲取即時價格並寫入 Sheets", type="primary"):
     if df_A.empty or '股票' not in df_A.columns:
         st.sidebar.error("❌ '表A_持股總表' 數據不完整或沒有 '股票' 欄位。")
     else:
@@ -173,17 +226,24 @@ if st.sidebar.button("🔄 獲取即時收盤價 (僅顯示)", type="primary"):
         if not valid_tickers:
             st.sidebar.warning("工作表中沒有找到有效的股票代碼。")
         else:
-            # 呼叫新的獲取價格函式
-            st.session_state['live_prices'] = fetch_current_prices(valid_tickers)
-            if st.session_state['live_prices']:
-                st.sidebar.success(f"🎉 成功獲取 {len(st.session_state['live_prices'])} 筆最新價格！")
+            # 步驟 1: 呼叫新的獲取價格函式
+            price_updates = fetch_current_prices(valid_tickers)
+            st.session_state['live_prices'] = price_updates # 更新 session state 供儀表板即時顯示
+            
+            if price_updates:
+                # 步驟 2: 將價格寫回 Google Sheets
+                if write_prices_to_sheet(df_A, price_updates):
+                    st.sidebar.success(f"🎉 成功寫入 {len(price_updates)} 筆最新價格到 Sheets！")
+                    # 步驟 3: 清除 load_data 快取並重新載入頁面
+                    load_data.clear()
+                    st.rerun() 
+                else:
+                    st.sidebar.error("❌ 寫入 Google Sheets 失敗，請檢查連線配置。")
+
             else:
-                st.sidebar.warning("獲取價格失敗，請檢查股票代碼。")
+                st.sidebar.warning("獲取價格失敗，未進行寫入。請檢查股票代碼。")
             
-            # 刷新頁面，確保持股表重新繪製
-            st.rerun() 
-            
-st.sidebar.caption("💡 價格將顯示在下方的持股總表 (不會寫入 Google Sheets)。")
+st.sidebar.caption("💡 點擊此按鈕，價格會寫入 Google Sheets 的 E 欄。")
 st.sidebar.markdown("---")
 
 # ---------------------------------------------------
@@ -278,8 +338,8 @@ with col_data:
         df_display = df_A.copy()
         
         # 🎯 檢查 Session State 中是否有最新的即時價格
+        # 如果使用者點擊了寫入按鈕，live_prices 會被更新，並在此顯示
         if st.session_state['live_prices']:
-            # 使用 .map() 將即時價格加入 DataFrame
             df_display['即時收盤價'] = df_display['股票'].astype(str).str.strip().map(st.session_state['live_prices']).fillna('')
             
             # 將新的欄位移到前面，提高可見度
@@ -287,7 +347,6 @@ with col_data:
             df_display = df_display[cols]
             
         with st.expander('持股總表 (表A_持股總表)', expanded=True):
-            # 顯示增強後的 DataFrame
             st.dataframe(df_display, use_container_width=True)
 
 with col_chart:
