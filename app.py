@@ -49,7 +49,8 @@ if 'live_prices' not in st.session_state:
 
 
 # 數據載入函式 (僅用於讀取)
-@st.cache_data(ttl="10m") 
+# 🎯 修正：移除 st.cache_data(ttl="10m")，確保每次載入頁面時都從 Google Sheets 讀取最新數據。
+@st.cache_data(ttl=None) # 將 ttl 設為 None，讓快取僅在函式引數變更時失效
 def load_data(sheet_name): 
     with st.spinner(f"正在載入工作表: '{sheet_name}'..."):
         try:
@@ -104,7 +105,7 @@ def load_data(sheet_name):
             return pd.DataFrame() 
 
 # 🎯 新增函式：僅負責獲取股價
-@st.cache_data(ttl="60s") # 增加快取時間，避免過度呼叫 API
+@st.cache_data(ttl="60s") # 股價仍保留 60 秒快取，避免過度呼叫 yfinance API
 def fetch_current_prices(valid_tickers):
     """從 yfinance 獲取最新收盤價，並返回價格字典。"""
     
