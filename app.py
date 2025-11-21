@@ -34,12 +34,18 @@ h3 { font-size: 1.5em; } /* 針對 st.subheader() */
     font-size: 2.5em !important; /* Metric value 數值 */
 }
 
-/* 讓快速按鈕更緊湊 */
-/* 調整 multiselect 和按鈕的對齊，讓它們看起來在同一行 */
+/* 🎯 修正 1: 讓快速按鈕與 multiselect 更好的對齊 */
 .stButton>button {
     width: 100%;
-    margin-top: 29px; 
+    /* 調整 margin-top 以對齊 multiselect 的文字輸入框 */
+    margin-top: 15px; 
 }
+
+/* 讓 Multiselect 的標籤 (雖然是空的) 不佔用太多空間，讓按鈕可以往上對齊 */
+div[data-testid="stMultiSelect"] > label {
+    display: none; 
+}
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -202,14 +208,19 @@ def write_prices_to_sheet(df_A, price_updates):
 
 # 🎯 數值清潔函式
 def clean_numeric_string(s):
-    """移除常見的非數字符號，以便於轉換為 float。"""
+    """移除常見的非數字符號，以便於轉換為 float。 (強化版本，支援移除 '萬')"""
     if pd.isna(s) or s is None:
         return None
     s = str(s).strip()
+    
     # 移除千分位逗號、貨幣符號 ($¥€)
-    s = s.replace(',', '').replace('$', '').replace('¥', '').replace('€', '') 
-    # 如果是百分比，可以選擇性處理，但在此情境中，目標通常是絕對金額，先移除%
-    s = s.replace('%', '') 
+    s = s.replace(',', '').replace('$', '').replace('¥', '').replace('€', '').replace('%', '') 
+    
+    # 🎯 修正 3 強化: 移除常見的中文計量單位 '萬' (並進行數值調整)
+    # 注意: 如果 Sheets 中是直接寫 '10萬'，這裡需要調整，但由於 Sheets 數據通常已是數字格式，我們主要移除字元。
+    # 假設 Sheets 已經把 '萬' 換算成絕對金額，這裡只需移除字元即可。
+    s = s.replace('萬', '')
+    
     return s if s else None
 
 # --- 應用程式主體開始 ---
@@ -379,12 +390,12 @@ if not df_C.empty:
             # 增強錯誤提示：確認實際存在哪些 key
             missing_info = []
             if pd.isna(target) or target <= 0:
-                missing_info.append(f"'{target_name_key}' (請確認數值 > 0)")
+                missing_info.append(f"'{target_name_key}' (Target Value: {target_value_raw} -> Cleaned: {cleaned_target_raw}, 請確認數值 > 0)")
             if pd.isna(gap):
-                missing_info.append(f"'{gap_name_key}'")
+                missing_info.append(f"'{gap_name_key}' (Gap Value: {gap_value_raw} -> Cleaned: {cleaned_gap_raw})")
                 
             if missing_info:
-                st.caption(f"⚠️ **無法計算進度：** 請在 '表C_總覽' 的第一欄中確保以下項目的數值是有效的數字 (已移除符號)：{', '.join(missing_info)}。")
+                st.caption(f"⚠️ **無法計算進度：** 請在 '表C_總覽' 的第一欄中確保以下項目的數值是有效的數字。")
             else:
                  st.caption(f"請在 '表C_總覽' 中定義 '{target_name_key}' 和 '{gap_name_key}' 欄位及其數值。")
         
@@ -423,7 +434,7 @@ with col_chart:
             # 假設總資產行在 '股票' 欄位中包含 '總資產'
             df_chart = df_B[
                 (df_B['市值（元）'] > 0) & 
-                (~df_B['股票'].astype(str).str.contains('總資產', na=False))
+                (~df_B['股票'].astype(str).str.contains('總資產|Total Asset', na=False))
             ].copy()
             
             if not df_chart.empty:
@@ -528,10 +539,14 @@ with tab2:
                 if 'pnl_filter' not in st.session_state:
                     st.session_state['pnl_filter'] = all_stocks 
 
-                # 🎯 步驟 2: 配置 multiselect 及其快速控制按鈕
-                # 分成三欄：多選框 (4)、全選按鈕 (1)、清除按鈕 (1)
+                # 🎯 步驟 2: 配置 multiselect 及其快速控制按鈕 (修正按鈕位置)
+                # 分成三欄：標籤/Multiselect (4)、全選按鈕 (1)、清除按鈕 (1)
                 col_multiselect, col_btn_all, col_btn_none = st.columns([4, 1, 1])
-
+                
+                # 使用 markdown 作為標籤，以避免 multiselect 內建 label 造成的垂直空間問題
+                with col_multiselect:
+                    st.markdown("##### 篩選股票 (可多選，支援搜尋)")
+                
                 with col_btn_all:
                     if st.button("全選", key='btn_pnl_all'):
                         # 點擊後，設定 state 為所有股票，並重跑
@@ -544,18 +559,16 @@ with tab2:
                         st.session_state['pnl_filter'] = []
                         st.rerun()
 
+                # Multiselect 放在標籤欄位下方，使用空標籤，確保它能與按鈕對齊
                 with col_multiselect:
-                    # 🎯 修正 2: 移除 'value' 參數，避免與 'key' 衝突導致錯誤
-                    st.markdown("##### 篩選股票 (可多選，支援搜尋)")
                     # Multiselect 透過 key='pnl_filter' 自動從 st.session_state['pnl_filter'] 讀取數值
                     selected_stocks = st.multiselect(
-                        ' ', # 使用空標籤讓按鈕看起來更美觀
+                        ' ', # 使用空標籤 (但 CSS 隱藏了 label)
                         options=all_stocks, 
                         key='pnl_filter' 
                     )
                     
                 # 執行篩選
-                # selected_stocks 已經是 multiselect 的當前值 (等同於 st.session_state['pnl_filter'])
                 if selected_stocks:
                     df_E_filtered = df_E_clean[df_E_clean['股票'].isin(selected_stocks)]
                 else:
