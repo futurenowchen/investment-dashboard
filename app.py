@@ -35,9 +35,10 @@ h3 { font-size: 1.5em; } /* 針對 st.subheader() */
 }
 
 /* 讓快速按鈕更緊湊 */
+/* 調整 multiselect 和按鈕的對齊，讓它們看起來在同一行 */
 .stButton>button {
     width: 100%;
-    margin-top: 15px; /* 讓按鈕和 multiselect 對齊 */
+    margin-top: 29px; 
 }
 </style>
 """, unsafe_allow_html=True)
@@ -417,20 +418,26 @@ with col_chart:
     if not df_B.empty and '市值（元）' in df_B.columns and '股票' in df_B.columns:
         try:
             df_B['市值（元）'] = pd.to_numeric(df_B['市值（元）'], errors='coerce')
-            df_chart = df_B[df_B['市值（元）'] > 0]
+            
+            # 🎯 修正 1: 排除 '總資產' 或類似的總結行
+            # 假設總資產行在 '股票' 欄位中包含 '總資產'
+            df_chart = df_B[
+                (df_B['市值（元）'] > 0) & 
+                (~df_B['股票'].astype(str).str.contains('總資產', na=False))
+            ].copy()
             
             if not df_chart.empty:
                 fig = px.pie(
                     df_chart, 
                     values='市值（元）', 
                     names='股票', 
-                    title='📊 投資組合比例'
+                    title='📊 投資組合比例 (排除總資產)'
                 )
                 st.plotly_chart(fig, use_container_width=True)
             else:
                 st.warning('無有效數據可繪製比例圖。')
-        except Exception:
-            st.warning('無法產生持股比例圖，請檢查 "表B_持股比例" 數據格式。')
+        except Exception as e:
+            st.warning(f'無法產生持股比例圖，請檢查 "表B_持股比例" 數據格式。錯誤: {e}')
     else:
         st.warning('持股比例數據載入失敗，無法繪圖。')
 
@@ -517,7 +524,7 @@ with tab2:
                 all_stocks = df_E_clean['股票'].astype(str).unique().tolist()
                 
                 # 🎯 步驟 1: 初始化 session state，確保預設為全選
-                # 'pnl_filter' 用來儲存 multiselect 的值
+                # 僅在 session state 尚未設定時初始化
                 if 'pnl_filter' not in st.session_state:
                     st.session_state['pnl_filter'] = all_stocks 
 
@@ -538,15 +545,17 @@ with tab2:
                         st.rerun()
 
                 with col_multiselect:
-                    # Multiselect 讀取並寫入 session state 的值
+                    # 🎯 修正 2: 移除 'value' 參數，避免與 'key' 衝突導致錯誤
+                    st.markdown("##### 篩選股票 (可多選，支援搜尋)")
+                    # Multiselect 透過 key='pnl_filter' 自動從 st.session_state['pnl_filter'] 讀取數值
                     selected_stocks = st.multiselect(
-                        '篩選股票 (可多選，支援搜尋)', 
+                        ' ', # 使用空標籤讓按鈕看起來更美觀
                         options=all_stocks, 
-                        value=st.session_state['pnl_filter'], # 顯式控制顯示值
-                        key='pnl_filter' # 使用相同的 key，讓使用者操作時也能更新 state
+                        key='pnl_filter' 
                     )
                     
                 # 執行篩選
+                # selected_stocks 已經是 multiselect 的當前值 (等同於 st.session_state['pnl_filter'])
                 if selected_stocks:
                     df_E_filtered = df_E_clean[df_E_clean['股票'].isin(selected_stocks)]
                 else:
@@ -573,6 +582,7 @@ with tab2:
                 st.dataframe(df_E_filtered, use_container_width=True, hide_index=True)
 
             except Exception as e:
+                # 🎯 將錯誤輸出到控制台，以便於調試
                 st.error(f"已實現損益篩選發生錯誤：{e}")
                 st.dataframe(df_E, use_container_width=True)
         else:
