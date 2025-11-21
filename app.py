@@ -9,7 +9,7 @@ import time # 用於處理 yfinance 的限速
 # 設置頁面配置，使用寬佈局以容納更多數據
 st.set_page_config(layout="wide")
 
-# 🎯 注入自訂 CSS 來增大整體文字和標題大小
+# 設置自訂 CSS 來美化佈局和字體大小
 st.markdown("""
 <style>
 /* 增加應用程式的基礎字體大小 */
@@ -34,7 +34,7 @@ h3 { font-size: 1.5em; } /* 針對 st.subheader() */
     font-size: 2.5em !important; /* Metric value 數值 */
 }
 
-/* 🎯 修正 2: 移除多餘的 margin-top，讓按鈕與 Multiselect 底部對齊 */
+/* 修正 2: 移除多餘的 margin-top，讓按鈕與 Multiselect 底部對齊 */
 .stButton>button {
     width: 100%;
     margin-top: 0px; 
@@ -46,12 +46,11 @@ div[data-testid="stMultiSelect"] > label {
 }
 
 /* 讓 Multiselect 和按鈕在同一行時，能有緊密的空間感 */
-/* 由於 Streamlit 的 flex 佈局，將按鈕的垂直間距移除是關鍵 */
 </style>
 """, unsafe_allow_html=True)
 
 # ==============================================================================
-# 🎯 步驟 1：請務必替換成您 Google Sheets 的【完整網址】
+# 🎯 步驟 1：已替換成您 Google Sheets 的【完整網址】
 # ==============================================================================
 SHEET_URL = "https://docs.google.com/spreadsheets/d/1_JBI1pKWv9aw8dGCj89y9yNgoWG4YKllSMnPLpU_CCM/edit" 
 # ==============================================================================
@@ -66,29 +65,28 @@ if 'live_prices' not in st.session_state:
 def get_gsheet_connection():
     """建立並返回 gspread 客戶端和試算表物件。"""
     try:
+        # 檢查 Streamlit Secrets 配置
         if "gsheets" not in st.secrets.get("connections", {}):
             st.error("Secrets 錯誤：找不到 [connections.gsheets] 區塊。請檢查您的 Streamlit Cloud Secrets 配置。")
             return None, None
         
-        if SHEET_URL == "YOUR_SPREADSHEET_URL_HERE":
-            st.error("❌ 程式碼錯誤：請先將 SHEET_URL 替換為您的 Google Sheets 完整網址！")
-            return None, None
-
         secrets_config = st.secrets["connections"]["gsheets"]
         credentials_info = dict(secrets_config) 
         credentials_info["private_key"] = credentials_info["private_key"].replace('\\n', '\n')
         
         gc = gspread.service_account_from_dict(credentials_info)
+        # 使用完整的 URL 打開試算表
         spreadsheet = gc.open_by_url(SHEET_URL)
         return gc, spreadsheet
     
     except Exception as e:
-        st.error(f"⚠️ 連線至 Google Sheets 發生錯誤。")
+        st.error(f"⚠️ 連線至 Google Sheets 發生錯誤，請確認網址和服務帳戶權限是否正確。")
         st.exception(e)
         return None, None
 
 
 # 數據載入函式 (僅用於讀取)
+# 🎯 使用 ttl=None 永久快取，需要手動或程式碼清除
 @st.cache_data(ttl=None) 
 def load_data(sheet_name): 
     with st.spinner(f"正在載入工作表: '{sheet_name}'..."):
@@ -243,9 +241,9 @@ df_G = load_data('表G_財富藍圖')
 # ---------------------------------------------------
 # 0. 股價即時更新區塊 (位於側邊欄)
 # ---------------------------------------------------
-st.sidebar.header("🎯 股價數據管理")
+st.sidebar.header("🎯 數據同步與管理") # 變更標題
 
-# 🎯 修正按鈕文字和邏輯
+# 🎯 獲取即時價格並寫入 Sheets
 if st.sidebar.button("💾 獲取即時價格並寫入 Sheets", type="primary"):
     if df_A.empty or '股票' not in df_A.columns:
         st.sidebar.error("❌ '表A_持股總表' 數據不完整或沒有 '股票' 欄位。")
@@ -275,7 +273,17 @@ if st.sidebar.button("💾 獲取即時價格並寫入 Sheets", type="primary"):
                 st.sidebar.warning("獲取價格失敗，未進行寫入。請檢查股票代碼。")
             
 st.sidebar.caption("💡 點擊此按鈕，價格會寫入 Google Sheets 的 E 欄。")
-st.sidebar.markdown("---")
+
+st.sidebar.markdown("---") # 分隔線
+
+# 🎯 新增手動刷新按鈕
+if st.sidebar.button("🔄 手動刷新所有 Sheets 數據"):
+    load_data.clear() # 清除所有工作表的快取
+    st.sidebar.success("✅ 數據快取已清除，正在重新載入...")
+    st.rerun()
+
+st.sidebar.caption("💡 如果在 Sheets 中手動修改了數據，請點擊此按鈕同步。")
+st.sidebar.markdown("---") # 最終分隔線
 
 # ---------------------------------------------------
 # 1. 投資總覽 (核心總覽表格 + 風險指標燈號 + 目標進度)
@@ -379,7 +387,7 @@ if not df_C.empty:
         if not pd.isna(target) and not pd.isna(gap) and target > 0:
             current = target - gap
             percent_achieved = (current / target)
-            display_percent = min(100, round(percent_achieved * 100, 2)) # 🎯 修正 1: 進度顯示保留兩位小數
+            display_percent = min(100, round(percent_achieved * 100, 2)) # 進度顯示保留兩位小數
             
             st.markdown(f"**{target_name_key}** ({display_percent:.2f}%)")
             st.progress(min(1.0, percent_achieved)) # st.progress 接受 0.0 到 1.0
@@ -568,7 +576,7 @@ with tab2:
                 with col_btn_none:
                     if st.button("清除篩選", key='btn_pnl_none'):
                         # 點擊後，設定 state 為空列表，並重跑
-                        st.session_state['pnl_filter'] = [] # 🎯 邏輯正確: 清除篩選=不選取任何股票
+                        st.session_state['pnl_filter'] = [] 
                         st.rerun()
 
                 # 執行篩選
@@ -661,4 +669,3 @@ with tab_blueprint:
         st.caption('💡 **注意:** 目標進度條目前是使用 **表C_總覽** 的數據來計算。')
     else:
         st.warning('財富藍圖數據載入失敗，請檢查 "表G_財富藍圖"。')
-
