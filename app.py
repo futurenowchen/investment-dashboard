@@ -33,6 +33,12 @@ h3 { font-size: 1.5em; } /* 針對 st.subheader() */
 .stMetric > div:nth-child(2) > div:first-child {
     font-size: 2.5em !important; /* Metric value 數值 */
 }
+
+/* 讓快速按鈕更緊湊 */
+.stButton>button {
+    width: 100%;
+    margin-top: 15px; /* 讓按鈕和 multiselect 對齊 */
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -193,6 +199,18 @@ def write_prices_to_sheet(df_A, price_updates):
     
     return True
 
+# 🎯 數值清潔函式
+def clean_numeric_string(s):
+    """移除常見的非數字符號，以便於轉換為 float。"""
+    if pd.isna(s) or s is None:
+        return None
+    s = str(s).strip()
+    # 移除千分位逗號、貨幣符號 ($¥€)
+    s = s.replace(',', '').replace('$', '').replace('¥', '').replace('€', '') 
+    # 如果是百分比，可以選擇性處理，但在此情境中，目標通常是絕對金額，先移除%
+    s = s.replace('%', '') 
+    return s if s else None
+
 # --- 應用程式主體開始 ---
 
 st.title('💰 投資組合儀表板')
@@ -324,18 +342,22 @@ if not df_C.empty:
         
         st.markdown("---")
         
-        # 🎯 新功能 3：目標進度表 (表C_總覽) - 修正讀取問題
+        # 🎯 目標進度表 (表C_總覽) - 修正讀取問題
         st.subheader('🎯 財富目標進度')
         
         target_name_key = '短期財務目標'
         gap_name_key = '短期財務目標差距'
 
-        # 🎯 檢查 key 是否存在，並使用 .get() 提取數值
+        # 🎯 步驟 1: 提取原始值
         target_value_raw = series_C.get(target_name_key)
         gap_value_raw = series_C.get(gap_name_key)
         
-        target = pd.to_numeric(target_value_raw, errors='coerce')
-        gap = pd.to_numeric(gap_value_raw, errors='coerce')
+        # 🎯 步驟 2: 清潔字串並轉換為數字 (解決Sheets公式格式化問題)
+        cleaned_target_raw = clean_numeric_string(target_value_raw)
+        cleaned_gap_raw = clean_numeric_string(gap_value_raw)
+        
+        target = pd.to_numeric(cleaned_target_raw, errors='coerce')
+        gap = pd.to_numeric(cleaned_gap_raw, errors='coerce')
         
         # 僅在兩個值都是有效數字且目標大於0時顯示進度條
         if not pd.isna(target) and not pd.isna(gap) and target > 0:
@@ -353,15 +375,15 @@ if not df_C.empty:
                 st.caption(f"Sheets 中計算的達成進度: {progress_val}")
                 
         else:
-            # 🎯 增強錯誤提示：確認實際存在哪些 key
+            # 增強錯誤提示：確認實際存在哪些 key
             missing_info = []
             if pd.isna(target) or target <= 0:
-                missing_info.append(f"'{target_name_key}' (目標數值)")
+                missing_info.append(f"'{target_name_key}' (請確認數值 > 0)")
             if pd.isna(gap):
-                missing_info.append(f"'{gap_name_key}' (差距數值)")
+                missing_info.append(f"'{gap_name_key}'")
                 
             if missing_info:
-                st.caption(f"⚠️ **無法計算進度：** 請在 '表C_總覽' 的第一欄中確保以下項目名稱及其對應的數值是有效的數字：{', '.join(missing_info)}。")
+                st.caption(f"⚠️ **無法計算進度：** 請在 '表C_總覽' 的第一欄中確保以下項目的數值是有效的數字 (已移除符號)：{', '.join(missing_info)}。")
             else:
                  st.caption(f"請在 '表C_總覽' 中定義 '{target_name_key}' 和 '{gap_name_key}' 欄位及其數值。")
         
@@ -422,7 +444,7 @@ st.header('3. 交易紀錄與淨值追蹤')
 tab1, tab2, tab3 = st.tabs(['現金流', '已實現損益', '每日淨值'])
 
 with tab1:
-    # 🎯 現金流表格篩選與統計 - 修正預設為全選
+    # 🎯 現金流表格篩選與統計 - 預設為全選
     if not df_D.empty:
         st.subheader('現金流紀錄 (表D_現金流)')
         
@@ -436,9 +458,9 @@ with tab1:
                 # 篩選器
                 available_categories = df_D_clean['動作'].astype(str).unique().tolist()
                 
-                # 🎯 修正: 將預設選項設為所有類別 (全選)
+                # 修正: 將預設選項設為所有類別 (全選)
                 selected_categories = st.multiselect(
-                    '篩選動作', 
+                    '篩選動作 (預設全選)', 
                     options=available_categories, 
                     default=available_categories, # 預設為全選
                     key='cashflow_filter'
@@ -480,7 +502,7 @@ with tab1:
 
 
 with tab2:
-    # 🎯 已實現損益表格篩選與統計 - 修正為複選並預設全選
+    # 🎯 已實現損益表格篩選與統計 - 優化為複選 + 快速按鈕
     if not df_E.empty:
         st.subheader('已實現損益 (表E_已實現損益)')
         
@@ -494,14 +516,36 @@ with tab2:
                 # 篩選器
                 all_stocks = df_E_clean['股票'].astype(str).unique().tolist()
                 
-                # 🎯 修正: 使用 multiselect 並預設全選
-                selected_stocks = st.multiselect(
-                    '篩選股票 (可多選)', 
-                    options=all_stocks, 
-                    default=all_stocks, # 預設為全選
-                    key='pnl_filter'
-                )
-                
+                # 🎯 步驟 1: 初始化 session state，確保預設為全選
+                # 'pnl_filter' 用來儲存 multiselect 的值
+                if 'pnl_filter' not in st.session_state:
+                    st.session_state['pnl_filter'] = all_stocks 
+
+                # 🎯 步驟 2: 配置 multiselect 及其快速控制按鈕
+                # 分成三欄：多選框 (4)、全選按鈕 (1)、清除按鈕 (1)
+                col_multiselect, col_btn_all, col_btn_none = st.columns([4, 1, 1])
+
+                with col_btn_all:
+                    if st.button("全選", key='btn_pnl_all'):
+                        # 點擊後，設定 state 為所有股票，並重跑
+                        st.session_state['pnl_filter'] = all_stocks
+                        st.rerun()
+
+                with col_btn_none:
+                    if st.button("清除篩選", key='btn_pnl_none'):
+                        # 點擊後，設定 state 為空列表，並重跑
+                        st.session_state['pnl_filter'] = []
+                        st.rerun()
+
+                with col_multiselect:
+                    # Multiselect 讀取並寫入 session state 的值
+                    selected_stocks = st.multiselect(
+                        '篩選股票 (可多選，支援搜尋)', 
+                        options=all_stocks, 
+                        value=st.session_state['pnl_filter'], # 顯式控制顯示值
+                        key='pnl_filter' # 使用相同的 key，讓使用者操作時也能更新 state
+                    )
+                    
                 # 執行篩選
                 if selected_stocks:
                     df_E_filtered = df_E_clean[df_E_clean['股票'].isin(selected_stocks)]
