@@ -204,7 +204,7 @@ df_C = load_data('表C_總覽')
 df_D = load_data('表D_現金流')
 df_E = load_data('表E_已實現損益')
 df_F = load_data('表F_每日淨值')
-df_G = load_data('表G_財富藍圖') # 雖然目標進度改用 df_C，但保留 df_G 的載入以供下方顯示
+df_G = load_data('表G_財富藍圖') 
 
 # ---------------------------------------------------
 # 0. 股價即時更新區塊 (位於側邊欄)
@@ -324,13 +324,13 @@ if not df_C.empty:
         
         st.markdown("---")
         
-        # 🎯 新功能 3：目標進度表 (改用 表C_總覽 的指定欄位)
+        # 🎯 新功能 3：目標進度表 (表C_總覽) - 修正讀取問題
         st.subheader('🎯 財富目標進度')
         
-        # 提取目標數據從 series_C (來自表C_總覽)
         target_name_key = '短期財務目標'
         gap_name_key = '短期財務目標差距'
 
+        # 🎯 檢查 key 是否存在，並使用 .get() 提取數值
         target_value_raw = series_C.get(target_name_key)
         gap_value_raw = series_C.get(gap_name_key)
         
@@ -352,10 +352,18 @@ if not df_C.empty:
             if progress_val:
                 st.caption(f"Sheets 中計算的達成進度: {progress_val}")
                 
-        elif not pd.isna(target) and target > 0:
-            st.caption(f"請在 '表C_總覽' 中提供 '{gap_name_key}' 數值以計算進度。目標數值: {target:,.0f}")
         else:
-            st.caption(f"請在 '表C_總覽' 中定義 '{target_name_key}' 和 '{gap_name_key}' 欄位及其數值。")
+            # 🎯 增強錯誤提示：確認實際存在哪些 key
+            missing_info = []
+            if pd.isna(target) or target <= 0:
+                missing_info.append(f"'{target_name_key}' (目標數值)")
+            if pd.isna(gap):
+                missing_info.append(f"'{gap_name_key}' (差距數值)")
+                
+            if missing_info:
+                st.caption(f"⚠️ **無法計算進度：** 請在 '表C_總覽' 的第一欄中確保以下項目名稱及其對應的數值是有效的數字：{', '.join(missing_info)}。")
+            else:
+                 st.caption(f"請在 '表C_總覽' 中定義 '{target_name_key}' 和 '{gap_name_key}' 欄位及其數值。")
         
 
 else:
@@ -414,13 +422,12 @@ st.header('3. 交易紀錄與淨值追蹤')
 tab1, tab2, tab3 = st.tabs(['現金流', '已實現損益', '每日淨值'])
 
 with tab1:
-    # 🎯 現金流表格篩選與統計 - 修正欄位名稱
+    # 🎯 現金流表格篩選與統計 - 修正預設為全選
     if not df_D.empty:
         st.subheader('現金流紀錄 (表D_現金流)')
         
         df_D_clean = df_D.copy()
         
-        # 🎯 依據使用者提供的欄位名稱調整：淨收／支出, 動作
         if '淨收／支出' in df_D_clean.columns and '動作' in df_D_clean.columns:
             try:
                 # 數據清洗：將金額轉換為數字
@@ -429,32 +436,28 @@ with tab1:
                 # 篩選器
                 available_categories = df_D_clean['動作'].astype(str).unique().tolist()
                 
-                # 設定預設選項，優先選擇常見類別
-                default_categories = [c for c in ['買進', '賣出', '存入', '支出', '質押借款', '還款'] if c in available_categories]
-                if not default_categories and available_categories:
-                    default_categories = available_categories[:min(4, len(available_categories))]
-
+                # 🎯 修正: 將預設選項設為所有類別 (全選)
                 selected_categories = st.multiselect(
-                    '篩選動作', # 🎯 欄位名稱從 類別 改為 動作
+                    '篩選動作', 
                     options=available_categories, 
-                    default=default_categories, 
+                    default=available_categories, # 預設為全選
                     key='cashflow_filter'
                 )
                 
                 # 執行篩選
                 if selected_categories:
-                    df_D_filtered = df_D_clean[df_D_clean['動作'].isin(selected_categories)] # 🎯 使用 動作 欄位
+                    df_D_filtered = df_D_clean[df_D_clean['動作'].isin(selected_categories)] 
                 else:
                     df_D_filtered = pd.DataFrame() 
                     
                 # 總計計算
-                total_cash_flow = df_D_filtered['淨收／支出'].sum() # 🎯 使用 淨收／支出 欄位
+                total_cash_flow = df_D_filtered['淨收／支出'].sum()
                 
                 # 顯示統計數據
                 cash_col1, cash_col2 = st.columns(2)
                 with cash_col1:
                     st.metric(
-                        label=f"💰 篩選淨收／支出總額 ({len(selected_categories)} 個動作)", # 🎯 標籤修正
+                        label=f"💰 篩選淨收／支出總額 ({len(selected_categories)} 個動作)", 
                         value=f"{total_cash_flow:,.2f}",
                         delta=f"{(total_cash_flow / 10000):,.2f} 萬",
                         delta_color="off"
@@ -477,34 +480,36 @@ with tab1:
 
 
 with tab2:
-    # 🎯 已實現損益表格篩選與統計 - 修正欄位名稱
+    # 🎯 已實現損益表格篩選與統計 - 修正為複選並預設全選
     if not df_E.empty:
         st.subheader('已實現損益 (表E_已實現損益)')
         
         df_E_clean = df_E.copy()
         
-        # 🎯 依據使用者提供的欄位名稱調整：已實現損益, 股票
         if '已實現損益' in df_E_clean.columns and '股票' in df_E_clean.columns:
             try:
                 # 數據清洗：將損益欄位轉換為數字
-                df_E_clean['已實現損益'] = pd.to_numeric(df_E_clean['已實現損益'], errors='coerce').fillna(0) # 🎯 欄位名稱調整
+                df_E_clean['已實現損益'] = pd.to_numeric(df_E_clean['已實現損益'], errors='coerce').fillna(0)
                 
                 # 篩選器
-                all_stocks = ['所有股票'] + df_E_clean['股票'].astype(str).unique().tolist()
-                selected_stock = st.selectbox(
-                    '篩選股票', 
+                all_stocks = df_E_clean['股票'].astype(str).unique().tolist()
+                
+                # 🎯 修正: 使用 multiselect 並預設全選
+                selected_stocks = st.multiselect(
+                    '篩選股票 (可多選)', 
                     options=all_stocks, 
-                    index=0, 
+                    default=all_stocks, # 預設為全選
                     key='pnl_filter'
                 )
                 
                 # 執行篩選
-                df_E_filtered = df_E_clean
-                if selected_stock != '所有股票':
-                    df_E_filtered = df_E_clean[df_E_clean['股票'] == selected_stock]
+                if selected_stocks:
+                    df_E_filtered = df_E_clean[df_E_clean['股票'].isin(selected_stocks)]
+                else:
+                    df_E_filtered = pd.DataFrame()
                     
                 # 總報酬計算
-                total_pnl = df_E_filtered['已實現損益'].sum() # 🎯 欄位名稱調整
+                total_pnl = df_E_filtered['已實現損益'].sum()
                 
                 # 顯示統計數據
                 pnl_col1, pnl_col2 = st.columns(2)
@@ -582,7 +587,6 @@ with tab_blueprint:
     if not df_G.empty:
         st.subheader('財富藍圖 (表G_財富藍圖)')
         st.caption('此表格數據來自 Google Sheets "表G_財富藍圖"。')
-        # 顯示所有欄位，但特別提醒用戶，進度條已改用表C
         st.dataframe(df_G, use_container_width=True)
         st.caption('💡 **注意:** 目標進度條目前是使用 **表C_總覽** 的數據來計算。')
     else:
