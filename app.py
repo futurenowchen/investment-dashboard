@@ -53,7 +53,7 @@ div[data-testid="stMultiSelect"] > label {
 # ==============================================================================
 # 🎯 步驟 1：請務必替換成您 Google Sheets 的【完整網址】
 # ==============================================================================
-SHEET_URL = "YOUR_SPREADSHEET_URL_HERE" 
+SHEET_URL = "https://docs.google.com/spreadsheets/d/1_JBI1pKWv9aw8dGCj89y9yNgoWG4YKllSMnPLpU_CCM/edit" 
 # ==============================================================================
 
 
@@ -661,3 +661,4 @@ with tab_blueprint:
         st.caption('💡 **注意:** 目標進度條目前是使用 **表C_總覽** 的數據來計算。')
     else:
         st.warning('財富藍圖數據載入失敗，請檢查 "表G_財富藍圖"。')
+
