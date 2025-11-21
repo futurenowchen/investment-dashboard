@@ -165,9 +165,6 @@ def write_prices_to_sheet(df_A, price_updates):
         return False
         
     # --- 步驟 1: 準備要寫入的數據 ---
-    
-    # 找到股票代碼所在的列 (df_A[股票] 對應 A 欄)
-    # Gspread 的 range.update 需要一個列表的列表
     write_values = []
     
     # 遍歷持股總表中的每一行
@@ -177,7 +174,7 @@ def write_prices_to_sheet(df_A, price_updates):
 
         # 🎯 寫入邏輯：如果找到價格，則使用價格，否則寫入空字串或 0
         if price is not None:
-            write_values.append([f"{price:.2f}"]) # 格式化為字串，保留兩位小數
+            write_values.append([f"{price:,.2f}"]) # 格式化為字串，保留兩位小數並加上千分位
         else:
             write_values.append(['']) # 未找到價格則留空
 
@@ -247,7 +244,7 @@ st.sidebar.caption("💡 點擊此按鈕，價格會寫入 Google Sheets 的 E �
 st.sidebar.markdown("---")
 
 # ---------------------------------------------------
-# 1. 投資總覽 (核心總覽表格 + 風險指標燈號)
+# 1. 投資總覽 (核心總覽表格 + 風險指標燈號 + 目標進度)
 # ---------------------------------------------------
 st.header('1. 投資總覽') 
 if not df_C.empty:
@@ -324,6 +321,39 @@ if not df_C.empty:
             delta_color='off'
         )
         
+        st.markdown("---")
+        
+        # 🎯 新功能 3：目標進度表 (表G_財富藍圖)
+        st.subheader('🎯 財富目標進度')
+        if not df_G.empty and '目標名稱' in df_G.columns and '目前數值' in df_G.columns and '目標數值' in df_G.columns:
+            try:
+                df_G_clean = df_G.copy()
+                # 數據清洗：確保目標數值是數字
+                df_G_clean['目前數值'] = pd.to_numeric(df_G_clean['目前數值'], errors='coerce').fillna(0)
+                df_G_clean['目標數值'] = pd.to_numeric(df_G_clean['目標數值'], errors='coerce').fillna(0)
+                
+                # 過濾掉沒有目標的行
+                df_G_clean = df_G_clean[df_G_clean['目標數值'] > 0]
+
+                for index, row in df_G_clean.iterrows():
+                    target_name = row['目標名稱']
+                    current = row['目前數值']
+                    target = row['目標數值']
+                    
+                    percent_achieved = (current / target)
+                    display_percent = min(100, round(percent_achieved * 100, 1)) # Cap at 100%
+                    
+                    st.markdown(f"**{target_name}** ({display_percent:.1f}%)")
+                    st.progress(min(1.0, percent_achieved)) # st.progress 接受 0.0 到 1.0
+                    st.caption(f"目前: {current:,.0f} / 目標: {target:,.0f}")
+                    if index < len(df_G_clean) - 1:
+                        st.markdown("---") # Separator between goals
+                    
+            except Exception as e:
+                st.warning(f'無法顯示財富目標進度，請檢查 "表G_財富藍圖" 的數據格式。')
+        else:
+            st.caption('請在 "表G_財富藍圖" 中定義您的目標、目前數值與目標數值。')
+
 else:
     st.warning('總覽數據載入失敗，請檢查 "表C_總覽"。')
 
@@ -372,7 +402,7 @@ with col_chart:
 
 
 # ---------------------------------------------------
-# 3. 交易紀錄與淨值追蹤
+# 3. 交易紀錄與淨值追蹤 (新增篩選功能)
 # ---------------------------------------------------
 st.header('3. 交易紀錄與淨值追蹤')
 
@@ -380,18 +410,122 @@ st.header('3. 交易紀錄與淨值追蹤')
 tab1, tab2, tab3 = st.tabs(['現金流', '已實現損益', '每日淨值'])
 
 with tab1:
+    # 🎯 新功能 2：現金流表格篩選與統計
     if not df_D.empty:
         st.subheader('現金流紀錄 (表D_現金流)')
-        st.dataframe(df_D, use_container_width=True)
+        
+        df_D_clean = df_D.copy()
+        
+        if '金額（元）' in df_D_clean.columns and '類別' in df_D_clean.columns:
+            try:
+                # 數據清洗：將金額轉換為數字
+                df_D_clean['金額（元）'] = pd.to_numeric(df_D_clean['金額（元）'], errors='coerce').fillna(0)
+                
+                # 篩選器
+                available_categories = df_D_clean['類別'].astype(str).unique().tolist()
+                
+                # 設定預設選項，優先選擇常見類別
+                default_categories = [c for c in ['存入', '支出', '買入', '賣出'] if c in available_categories]
+                if not default_categories and available_categories:
+                    default_categories = available_categories[:min(4, len(available_categories))]
+
+                selected_categories = st.multiselect(
+                    '篩選類別', 
+                    options=available_categories, 
+                    default=default_categories, 
+                    key='cashflow_filter'
+                )
+                
+                # 執行篩選
+                if selected_categories:
+                    df_D_filtered = df_D_clean[df_D_clean['類別'].isin(selected_categories)]
+                else:
+                    df_D_filtered = pd.DataFrame() 
+                    
+                # 總計計算
+                total_cash_flow = df_D_filtered['金額（元）'].sum()
+                
+                # 顯示統計數據
+                cash_col1, cash_col2 = st.columns(2)
+                with cash_col1:
+                    st.metric(
+                        label=f"💰 篩選總金額 ({len(selected_categories)} 個類別)", 
+                        value=f"{total_cash_flow:,.2f}",
+                        delta=f"{(total_cash_flow / 10000):,.2f} 萬",
+                        delta_color="off"
+                    )
+
+                with cash_col2:
+                    st.markdown(f"**總交易筆數：** {len(df_D_filtered)}")
+                
+                # 顯示篩選後的表格
+                st.dataframe(df_D_filtered, use_container_width=True, hide_index=True)
+
+            except Exception as e:
+                st.error(f"現金流篩選發生錯誤：{e}")
+                st.dataframe(df_D, use_container_width=True)
+        else:
+            st.warning("請確保 '表D_現金流' 包含 '金額（元）' 和 '類別' 欄位。")
+
     else:
         st.warning('現金流數據載入失敗，請檢查 "表D_現金流"。')
 
+
 with tab2:
+    # 🎯 新功能 1：已實現損益表格篩選與統計
     if not df_E.empty:
         st.subheader('已實現損益 (表E_已實現損益)')
-        st.dataframe(df_E, use_container_width=True)
+        
+        df_E_clean = df_E.copy()
+        
+        if '已實現損益（元）' in df_E_clean.columns and '股票' in df_E_clean.columns:
+            try:
+                # 數據清洗：將損益欄位轉換為數字
+                df_E_clean['已實現損益（元）'] = pd.to_numeric(df_E_clean['已實現損益（元）'], errors='coerce').fillna(0)
+                
+                # 篩選器
+                all_stocks = ['所有股票'] + df_E_clean['股票'].astype(str).unique().tolist()
+                selected_stock = st.selectbox(
+                    '篩選股票', 
+                    options=all_stocks, 
+                    index=0, 
+                    key='pnl_filter'
+                )
+                
+                # 執行篩選
+                df_E_filtered = df_E_clean
+                if selected_stock != '所有股票':
+                    df_E_filtered = df_E_clean[df_E_clean['股票'] == selected_stock]
+                    
+                # 總報酬計算
+                total_pnl = df_E_filtered['已實現損益（元）'].sum()
+                
+                # 顯示統計數據
+                pnl_col1, pnl_col2 = st.columns(2)
+                with pnl_col1:
+                    st.metric(
+                        label="🎯 總實現報酬 (元)", 
+                        value=f"{total_pnl:,.2f}",
+                        delta=f"{(total_pnl / 10000):,.2f} 萬",
+                        delta_color="off"
+                    )
+                
+                with pnl_col2:
+                    st.markdown(f"**總交易筆數：** {len(df_E_filtered)}")
+
+
+                # 顯示篩選後的表格
+                st.dataframe(df_E_filtered, use_container_width=True, hide_index=True)
+
+            except Exception as e:
+                st.error(f"已實現損益篩選發生錯誤：{e}")
+                st.dataframe(df_E, use_container_width=True)
+        else:
+            st.warning("請確保 '表E_已實現損益' 包含 '已實現損益（元）' 和 '股票' 欄位。")
+        
     else:
         st.warning('已實現損益數據載入失敗，請檢查 "表E_已實現損益"。')
+
 
 with tab3:
     if not df_F.empty and '日期' in df_F.columns and '實質NAV' in df_F.columns:
