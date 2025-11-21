@@ -34,25 +34,26 @@ h3 { font-size: 1.5em; } /* 針對 st.subheader() */
     font-size: 2.5em !important; /* Metric value 數值 */
 }
 
-/* 🎯 修正 1: 讓快速按鈕與 multiselect 更好的對齊 */
+/* 🎯 修正 2: 移除多餘的 margin-top，讓按鈕與 Multiselect 底部對齊 */
 .stButton>button {
     width: 100%;
-    /* 調整 margin-top 以對齊 multiselect 的文字輸入框 */
-    margin-top: 15px; 
+    margin-top: 0px; 
 }
 
-/* 讓 Multiselect 的標籤 (雖然是空的) 不佔用太多空間，讓按鈕可以往上對齊 */
+/* 隱藏 Multiselect 的標籤 (在 HTML 級別隱藏，配合 label_visibility="collapsed" 使用) */
 div[data-testid="stMultiSelect"] > label {
     display: none; 
 }
 
+/* 讓 Multiselect 和按鈕在同一行時，能有緊密的空間感 */
+/* 由於 Streamlit 的 flex 佈局，將按鈕的垂直間距移除是關鍵 */
 </style>
 """, unsafe_allow_html=True)
 
 # ==============================================================================
 # 🎯 步驟 1：請務必替換成您 Google Sheets 的【完整網址】
 # ==============================================================================
-SHEET_URL = "https://docs.google.com/spreadsheets/d/1_JBI1pKWv9aw8dGCj89y9yNgoWG4YKllSMnPLpU_CCM/edit" 
+SHEET_URL = "YOUR_SPREADSHEET_URL_HERE" 
 # ==============================================================================
 
 
@@ -206,22 +207,25 @@ def write_prices_to_sheet(df_A, price_updates):
     
     return True
 
-# 🎯 數值清潔函式
+# 🎯 數值清潔函式 (修正: 移除所有非數字和非小數點的字元)
 def clean_numeric_string(s):
-    """移除常見的非數字符號，以便於轉換為 float。 (強化版本，支援移除 '萬')"""
+    """移除所有非數字、非小數點、非負號的字元，以便於轉換為 float。"""
     if pd.isna(s) or s is None:
         return None
+        
     s = str(s).strip()
     
-    # 移除千分位逗號、貨幣符號 ($¥€)
-    s = s.replace(',', '').replace('$', '').replace('¥', '').replace('€', '').replace('%', '') 
+    # 將所有非 (數字, 負號, 小數點) 的字元替換為空字串
+    # 注意：這裡假設 Sheets 中的數字是以點 '.' 作為小數點
+    import re
+    cleaned_s = re.sub(r'[^\d.-]', '', s) 
+
+    # 處理多個負號或多個小數點的情況
+    if cleaned_s.count('-') > 1 or cleaned_s.count('.') > 1:
+        # 如果格式異常，則返回 None 讓 pd.to_numeric 處理
+        return None
     
-    # 🎯 修正 3 強化: 移除常見的中文計量單位 '萬' (並進行數值調整)
-    # 注意: 如果 Sheets 中是直接寫 '10萬'，這裡需要調整，但由於 Sheets 數據通常已是數字格式，我們主要移除字元。
-    # 假設 Sheets 已經把 '萬' 換算成絕對金額，這裡只需移除字元即可。
-    s = s.replace('萬', '')
-    
-    return s if s else None
+    return cleaned_s if cleaned_s else None
 
 # --- 應用程式主體開始 ---
 
@@ -375,9 +379,9 @@ if not df_C.empty:
         if not pd.isna(target) and not pd.isna(gap) and target > 0:
             current = target - gap
             percent_achieved = (current / target)
-            display_percent = min(100, round(percent_achieved * 100, 1)) # Cap at 100%
+            display_percent = min(100, round(percent_achieved * 100, 2)) # 🎯 修正 1: 進度顯示保留兩位小數
             
-            st.markdown(f"**{target_name_key}** ({display_percent:.1f}%)")
+            st.markdown(f"**{target_name_key}** ({display_percent:.2f}%)")
             st.progress(min(1.0, percent_achieved)) # st.progress 接受 0.0 到 1.0
             st.caption(f"目前累積: {current:,.0f} / 目標: {target:,.0f} (差距: {gap:,.0f})")
             
@@ -390,12 +394,12 @@ if not df_C.empty:
             # 增強錯誤提示：確認實際存在哪些 key
             missing_info = []
             if pd.isna(target) or target <= 0:
-                missing_info.append(f"'{target_name_key}' (Target Value: {target_value_raw} -> Cleaned: {cleaned_target_raw}, 請確認數值 > 0)")
+                missing_info.append(f"'{target_name_key}' (Target Value: {target_value_raw} -> Cleaned: {cleaned_target_raw})")
             if pd.isna(gap):
                 missing_info.append(f"'{gap_name_key}' (Gap Value: {gap_value_raw} -> Cleaned: {cleaned_gap_raw})")
                 
             if missing_info:
-                st.caption(f"⚠️ **無法計算進度：** 請在 '表C_總覽' 的第一欄中確保以下項目的數值是有效的數字。")
+                st.caption(f"⚠️ **無法計算進度：** 請檢查 '表C_總覽' 中以下項目的原始數值是否正確（例如有無中文符號或千分位符號未被正確清除）。")
             else:
                  st.caption(f"請在 '表C_總覽' 中定義 '{target_name_key}' 和 '{gap_name_key}' 欄位及其數值。")
         
@@ -430,11 +434,10 @@ with col_chart:
         try:
             df_B['市值（元）'] = pd.to_numeric(df_B['市值（元）'], errors='coerce')
             
-            # 🎯 修正 1: 排除 '總資產' 或類似的總結行
-            # 假設總資產行在 '股票' 欄位中包含 '總資產'
+            # 排除 '總資產' 或類似的總結行
             df_chart = df_B[
                 (df_B['市值（元）'] > 0) & 
-                (~df_B['股票'].astype(str).str.contains('總資產|Total Asset', na=False))
+                (~df_B['股票'].astype(str).str.contains('總資產|Total Asset|總結', na=False))
             ].copy()
             
             if not df_chart.empty:
@@ -535,18 +538,27 @@ with tab2:
                 all_stocks = df_E_clean['股票'].astype(str).unique().tolist()
                 
                 # 🎯 步驟 1: 初始化 session state，確保預設為全選
-                # 僅在 session state 尚未設定時初始化
                 if 'pnl_filter' not in st.session_state:
                     st.session_state['pnl_filter'] = all_stocks 
 
                 # 🎯 步驟 2: 配置 multiselect 及其快速控制按鈕 (修正按鈕位置)
-                # 分成三欄：標籤/Multiselect (4)、全選按鈕 (1)、清除按鈕 (1)
+                # 分成三欄：標籤 (4/6)、全選按鈕 (1)、清除按鈕 (1)
                 col_multiselect, col_btn_all, col_btn_none = st.columns([4, 1, 1])
                 
-                # 使用 markdown 作為標籤，以避免 multiselect 內建 label 造成的垂直空間問題
+                # 使用 markdown 作為標籤
                 with col_multiselect:
                     st.markdown("##### 篩選股票 (可多選，支援搜尋)")
                 
+                # Multiselect 放在標籤欄位下方，並使用 label_visibility="collapsed" 確保緊湊
+                with col_multiselect:
+                    # Multiselect 透過 key='pnl_filter' 自動從 st.session_state['pnl_filter'] 讀取數值
+                    selected_stocks = st.multiselect(
+                        'Pnl Filter', # 雖然設置了 label，但使用 CSS 和 label_visibility 隱藏
+                        options=all_stocks, 
+                        key='pnl_filter',
+                        label_visibility="collapsed" # 🎯 關鍵修正：隱藏標籤，避免佔用垂直空間
+                    )
+                    
                 with col_btn_all:
                     if st.button("全選", key='btn_pnl_all'):
                         # 點擊後，設定 state 為所有股票，並重跑
@@ -556,18 +568,9 @@ with tab2:
                 with col_btn_none:
                     if st.button("清除篩選", key='btn_pnl_none'):
                         # 點擊後，設定 state 為空列表，並重跑
-                        st.session_state['pnl_filter'] = []
+                        st.session_state['pnl_filter'] = [] # 🎯 邏輯正確: 清除篩選=不選取任何股票
                         st.rerun()
 
-                # Multiselect 放在標籤欄位下方，使用空標籤，確保它能與按鈕對齊
-                with col_multiselect:
-                    # Multiselect 透過 key='pnl_filter' 自動從 st.session_state['pnl_filter'] 讀取數值
-                    selected_stocks = st.multiselect(
-                        ' ', # 使用空標籤 (但 CSS 隱藏了 label)
-                        options=all_stocks, 
-                        key='pnl_filter' 
-                    )
-                    
                 # 執行篩選
                 if selected_stocks:
                     df_E_filtered = df_E_clean[df_E_clean['股票'].isin(selected_stocks)]
