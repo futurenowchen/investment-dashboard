@@ -242,7 +242,18 @@ df_G = load_data('表G_財富藍圖')
 # ---------------------------------------------------
 st.sidebar.header("🎯 股價數據管理")
 
-# 🎯 修正按鈕文字和邏輯
+# 🎯 新增：手動清除快取並重新載入 Sheets 數據的功能
+if st.sidebar.button("🔄 立即重新載入 Sheets 數據"):
+    load_data.clear() # 清除所有 Sheets 數據的快取
+    st.session_state['live_prices'] = {} # 清除即時價格，下次股價按鈕會重新獲取
+    st.sidebar.success("✅ 所有 Sheets 快取已清除，正在重新載入數據...")
+    st.rerun() 
+    
+st.sidebar.caption("💡 點擊此按鈕可強制從 Google Sheets 獲取最新資料。")
+st.sidebar.markdown("---")
+
+
+# 🎯 修正按鈕文字和邏輯 (舊的按鈕保持功能不變)
 if st.sidebar.button("💾 獲取即時價格並寫入 Sheets", type="primary"):
     if df_A.empty or '股票' not in df_A.columns:
         st.sidebar.error("❌ '表A_持股總表' 數據不完整或沒有 '股票' 欄位。")
@@ -293,23 +304,30 @@ if not df_C.empty:
         series_C = df_C_display.iloc[:, 0]
 
     # 提取關鍵值
-    risk_level = str(series_C.get('β風險燈號', 'N/A'))
+    # 🎯 修正 1: 確保從 Sheets 讀取的字串先去頭尾空白，再進行判斷
+    risk_level_raw = str(series_C.get('β風險燈號', 'N/A'))
+    risk_level = risk_level_raw.strip() 
     leverage = str(series_C.get('槓桿倍數β', 'N/A'))
 
-    # 🎯 修正 2: 風險等級顏色判斷
-    if '安全' in risk_level:
-        color = 'green' # 綠色
-        emoji = '✅'
-    elif '警戒' in risk_level:
-        color = 'yellow' # 黃色
-        emoji = '⚠️'
-    elif '危險' in risk_level:
-        color = 'red' # 紅色
-        emoji = '🚨'
-    else:
-        color = 'gray'
-        emoji = '❓'
+    # 🎯 修正 2: 風險等級顏色判斷邏輯，使用更強烈的顏色代碼
+    color_mapping = {
+        '安全': {'color': 'green', 'emoji': '✅', 'bg': '#28a745', 'text': 'white'}, # 綠色
+        '警示': {'color': 'yellow', 'emoji': '⚠️', 'bg': '#ffc107', 'text': 'black'}, # 黃色 (文字黑)
+        '危險': {'color': 'red', 'emoji': '🚨', 'bg': '#dc3545', 'text': 'white'}, # 紅色
+    }
 
+    if '安全' in risk_level:
+        style = color_mapping['安全']
+    elif '警示' in risk_level:
+        style = color_mapping['警示']
+    elif '危險' in risk_level:
+        style = color_mapping['危險']
+    else:
+        # 未知狀態使用預設灰色
+        style = {'color': 'gray', 'emoji': '❓', 'bg': '#6c757d', 'text': 'white'}
+        
+    final_risk_level_text = risk_level if risk_level != 'N/A' else '未知'
+    
     col_summary, col_indicators = st.columns([2, 1])
     
     # 左側：顯示總覽數據 
@@ -335,17 +353,10 @@ if not df_C.empty:
         
         # 風險燈號 (使用 HTML 嵌入方式放大字體和顏色)
         html_content = (
-            f"<h3 style='text-align: center; color: white; background-color: {color}; border: 2px solid {color}; padding: 15px; border-radius: 8px; font-weight: bold;'>"
-            f"{emoji} {risk_level}"
+            f"<h3 style='text-align: center; color: {style['text']}; background-color: {style['bg']}; border: 2px solid {style['bg']}; padding: 15px; border-radius: 8px; font-weight: bold;'>"
+            f"{style['emoji']} {final_risk_level_text}"
             "</h3>"
         )
-        # 對於黃色背景，將文字設為黑色以提高可讀性
-        if color == 'yellow':
-             html_content = (
-                f"<h3 style='text-align: center; color: black; background-color: {color}; border: 2px solid {color}; padding: 15px; border-radius: 8px; font-weight: bold;'>"
-                f"{emoji} {risk_level}"
-                "</h3>"
-            )
         st.markdown(html_content, unsafe_allow_html=True)
 
         # 槓桿倍數 (使用 st.metric 並搭配放大數值)
@@ -546,7 +557,8 @@ with tab2:
                 # 檢查是否有日期欄位，並進行排序
                 date_col_name = None
                 for col in df_E_clean.columns:
-                    if '日期' in col:
+                    # 寬鬆檢查，只要欄位名稱包含 '日期' 即可
+                    if '日期' in col: 
                         date_col_name = col
                         break
 
