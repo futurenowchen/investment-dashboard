@@ -296,15 +296,15 @@ if not df_C.empty:
     risk_level = str(series_C.get('β風險燈號', 'N/A'))
     leverage = str(series_C.get('槓桿倍數β', 'N/A'))
 
-    # 風險等級顏色判斷
+    # 🎯 修正 2: 風險等級顏色判斷
     if '安全' in risk_level:
-        color = 'green'
+        color = 'green' # 綠色
         emoji = '✅'
     elif '警戒' in risk_level:
-        color = 'orange'
+        color = 'yellow' # 黃色
         emoji = '⚠️'
     elif '危險' in risk_level:
-        color = 'red'
+        color = 'red' # 紅色
         emoji = '🚨'
     else:
         color = 'gray'
@@ -339,6 +339,13 @@ if not df_C.empty:
             f"{emoji} {risk_level}"
             "</h3>"
         )
+        # 對於黃色背景，將文字設為黑色以提高可讀性
+        if color == 'yellow':
+             html_content = (
+                f"<h3 style='text-align: center; color: black; background-color: {color}; border: 2px solid {color}; padding: 15px; border-radius: 8px; font-weight: bold;'>"
+                f"{emoji} {risk_level}"
+                "</h3>"
+            )
         st.markdown(html_content, unsafe_allow_html=True)
 
         # 槓桿倍數 (使用 st.metric 並搭配放大數值)
@@ -355,7 +362,7 @@ if not df_C.empty:
         
         st.markdown("---")
         
-        # 🎯 目標進度表 (表C_總覽) - 修正讀取問題
+        # 🎯 目標進度表 (表C_總覽) 
         st.subheader('🎯 財富目標進度')
         
         target_name_key = '短期財務目標'
@@ -474,7 +481,7 @@ with tab1:
                 df_D_clean['淨收／支出'] = pd.to_numeric(df_D_clean['淨收／支出'], errors='coerce').fillna(0)
                 # 🎯 處理日期欄位並排序
                 df_D_clean['日期'] = pd.to_datetime(df_D_clean['日期'], errors='coerce')
-                # 🎯 排序：依日期由新到舊
+                # 排序：依日期由新到舊
                 df_D_clean = df_D_clean.sort_values(by='日期', ascending=False)
                 
                 # 篩選器
@@ -511,7 +518,6 @@ with tab1:
                     st.markdown(f"**總交易筆數：** {len(df_D_filtered)}")
                 
                 # 顯示篩選後的表格 (包含 用途／股票 欄位)
-                # 🎯 已排序過的表格
                 st.dataframe(df_D_filtered, use_container_width=True, hide_index=True)
 
             except Exception as e:
@@ -531,16 +537,25 @@ with tab2:
         
         df_E_clean = df_E.copy()
         
-        if '已實現損益' in df_E_clean.columns and '股票' in df_E_clean.columns and '平倉日期' in df_E_clean.columns:
+        # 🎯 修正 1: 移除對 '平倉日期' 的依賴。如果 Sheets 中沒有日期欄位，則無法排序。
+        if '已實現損益' in df_E_clean.columns and '股票' in df_E_clean.columns:
             try:
                 # 數據清洗：將損益欄位轉換為數字
                 df_E_clean['已實現損益'] = pd.to_numeric(df_E_clean['已實現損益'], errors='coerce').fillna(0)
                 
-                # 🎯 處理日期欄位並排序
-                df_E_clean['平倉日期'] = pd.to_datetime(df_E_clean['平倉日期'], errors='coerce')
-                # 🎯 排序：依平倉日期由新到舊
-                df_E_clean = df_E_clean.sort_values(by='平倉日期', ascending=False)
-                
+                # 檢查是否有日期欄位，並進行排序
+                date_col_name = None
+                for col in df_E_clean.columns:
+                    if '日期' in col:
+                        date_col_name = col
+                        break
+
+                if date_col_name:
+                    # 處理日期欄位並排序 (由新到舊)
+                    df_E_clean[date_col_name] = pd.to_datetime(df_E_clean[date_col_name], errors='coerce')
+                    df_E_clean = df_E_clean.sort_values(by=date_col_name, ascending=False)
+                # 否則，保持原始順序
+
                 # 篩選器
                 all_stocks = df_E_clean['股票'].astype(str).unique().tolist()
                 
@@ -548,7 +563,7 @@ with tab2:
                 if 'pnl_filter' not in st.session_state:
                     st.session_state['pnl_filter'] = all_stocks 
 
-                # 🎯 步驟 2: 配置 multiselect 及其快速控制按鈕 (修正按鈕位置)
+                # 🎯 步驟 2: 配置 multiselect 及其快速控制按鈕 
                 col_multiselect, col_btn_all, col_btn_none = st.columns([4, 1, 1])
                 
                 # 使用 markdown 作為標籤
@@ -598,7 +613,7 @@ with tab2:
 
 
                 # 顯示篩選後的表格
-                # 🎯 已排序過的表格
+                # 🎯 保持排序或原始順序
                 st.dataframe(df_E_filtered, use_container_width=True, hide_index=True)
 
             except Exception as e:
@@ -606,7 +621,7 @@ with tab2:
                 st.error(f"已實現損益篩選發生錯誤：{e}")
                 st.dataframe(df_E, use_container_width=True)
         else:
-            st.warning("請確保 '表E_已實現損益' 包含 '已實現損益'、'股票' 和 **'平倉日期'** 欄位。")
+            st.warning("請確保 '表E_已實現損益' 包含 '已實現損益' 和 '股票' 欄位。")
         
     else:
         st.warning('已實現損益數據載入失敗，請檢查 "表E_已實現損益"。')
@@ -620,11 +635,10 @@ with tab3:
             df_F_cleaned['日期'] = pd.to_datetime(df_F_cleaned['日期'], errors='coerce')
             df_F_cleaned['實質NAV'] = pd.to_numeric(df_F_cleaned['實質NAV'], errors='coerce')
             
-            # 🎯 排序：依日期由新到舊
+            # 排序：依日期由新到舊 (用於表格顯示)
             df_F_cleaned = df_F_cleaned.sort_values(by='日期', ascending=False)
 
-            # 繪製折線圖
-            # 注意: 繪圖數據保持不變，因為圖表通常應按時間順序 (升序) 顯示
+            # 繪製折線圖 (圖表需按日期升序排列)
             df_F_chart = df_F_cleaned.sort_values(by='日期', ascending=True)
             fig_nav = px.line(
                 df_F_chart.dropna(subset=['日期', '實質NAV']), 
@@ -644,7 +658,7 @@ with tab3:
                 if df_subset.empty:
                      df_subset = df_F
                      
-                # 🎯 已排序過的表格
+                # 🎯 已排序過的表格 (新到舊)
                 st.dataframe(df_subset, use_container_width=True)
             
         except Exception:
