@@ -69,10 +69,9 @@ if 'live_prices' not in st.session_state:
     st.session_state['live_prices'] = {} 
 
 
-# 🎯 數值清潔函式 (已修正 pd.isna 對 Series 的衝突)
+# 🎯 數值清潔函式 (僅用於移除 Sheets 格式化符號)
 def clean_sheets_string(s):
     """移除 Sheets 輸出中常見的逗號和貨幣符號。"""
-    # 🎯 關鍵修正：確保 s 是一個字串，避免對整個 Series 進行判斷
     if s is None or not isinstance(s, str):
         return s 
         
@@ -260,7 +259,7 @@ CURRENCY_FORMAT = lambda x: f"{pd.to_numeric(x, errors='coerce'):,.2f}" if pd.no
 # ---------------------------------------------------
 st.sidebar.header("🎯 股價數據管理")
 
-# 🎯 修正：將「立即重新載入」按鈕移到主頁，與數據相關聯
+# 🎯 修正：將「獲取即時價格」按鈕和「重新載入」按鈕並列顯示
 if st.sidebar.button("💾 獲取即時價格並寫入 Sheets", type="primary"):
     if df_A.empty or '股票' not in df_A.columns:
         st.sidebar.error("❌ '表A_持股總表' 數據不完整或沒有 '股票' 欄位。")
@@ -286,6 +285,15 @@ if st.sidebar.button("💾 獲取即時價格並寫入 Sheets", type="primary"):
                 st.sidebar.warning("獲取價格失敗，未進行寫入。請檢查股票代碼。")
             
 st.sidebar.caption("💡 點擊此按鈕，價格會寫入 Google Sheets 的 E 欄。")
+
+# 🎯 恢復「立即重新載入」按鈕
+if st.sidebar.button("🔄 立即重新載入 Sheets 數據"):
+    load_data.clear() 
+    st.session_state['live_prices'] = {} 
+    st.sidebar.success("✅ 所有 Sheets 快取已清除，正在重新載入數據...")
+    st.rerun() 
+st.sidebar.caption("💡 點擊此按鈕可強制從 Google Sheets 獲取最新資料。")
+
 st.sidebar.markdown("---")
 
 
@@ -293,15 +301,6 @@ st.sidebar.markdown("---")
 # 1. 投資總覽 (核心總覽表格 + 風險指標燈號 + 目標進度)
 # ---------------------------------------------------
 st.header('1. 投資總覽') 
-
-# 🎯 修正：將立即重新載入按鈕放在主頁的頂部
-if st.button("🔄 立即重新載入 Sheets 數據 (清除快取)"):
-    load_data.clear() 
-    st.session_state['live_prices'] = {} 
-    st.success("✅ 所有 Sheets 快取已清除，正在重新載入數據...")
-    st.rerun() 
-st.markdown("---")
-
 
 if not df_C.empty:
     
@@ -455,7 +454,7 @@ with col_data:
                     '浮動損益': '{:,.0f}',
                     '預估獲利率': '{:.2%}',
                     # 關鍵修正: 處理 NaN 和即時收盤價
-                    '即時收盤價': lambda x: f"{x:,.2f}" if pd.notna(x) else '',
+                    '即時收盤價': lambda x: f"{pd.to_numeric(x, errors='coerce'):,.2f}" if pd.notna(x) else '',
                 }),
                 use_container_width=True, 
                 hide_index=True
