@@ -6,6 +6,7 @@ from datetime import datetime
 import yfinance as yf 
 import time 
 import re 
+import numpy as np # 用於處理 NaN
 
 # 設置頁面配置，使用寬佈局以容納更多數據
 st.set_page_config(layout="wide")
@@ -63,12 +64,11 @@ if 'live_prices' not in st.session_state:
     st.session_state['live_prices'] = {} 
 
 
-# 🎯 數值清潔函式 (修正: 確保只處理單一字串值)
-def clean_numeric_string(s):
-    """移除所有可能干擾轉換的非數字符號 (e.g., , $ % 萬)"""
-    # 🎯 關鍵修正：必須先檢查是否為字串，避免對 pd.Series 或 NaT 進行 string 操作
+# 🎯 數值清潔函式 (僅用於移除 Sheets 格式化符號)
+def clean_sheets_string(s):
+    """移除 Sheets 輸出中常見的逗號和貨幣符號。"""
     if pd.isna(s) or s is None or not isinstance(s, str):
-        return None
+        return s # 如果不是字串，直接返回
         
     s = s.strip()
     
@@ -76,7 +76,6 @@ def clean_numeric_string(s):
     s = s.replace(',', '').replace('$', '').replace('¥', '').replace('%', '').replace('萬', '0000')
     s = s.replace('(', '-').replace(')', '') # 處理負數格式 (括號)
     
-    # 僅返回非空字串
     return s if s else None
 
 # 🎯 新增連線工具函式
@@ -119,11 +118,9 @@ def load_data(sheet_name):
             data = worksheet.get_all_values() 
             df = pd.DataFrame(data[1:], columns=data[0])
             
-            # 🎯 關鍵修正：對所有欄位進行預先清理 (解決 ValueError: 逗號/符號問題)
+            # 🎯 關鍵修正：僅在讀取時清理符號，不進行全域數據類型轉換
             for col in df.columns:
-                # 僅對非 '股票' 類的數值/日期欄位進行清理
-                if col not in ['股票', '股票名稱', '用途／股票', '動作', '備註']:
-                    df[col] = df[col].apply(clean_numeric_string) 
+                df[col] = df[col].apply(clean_sheets_string) 
 
             # 修正重複欄位名稱
             if len(df.columns) != len(set(df.columns)):
@@ -139,7 +136,7 @@ def load_data(sheet_name):
                         new_cols.append(clean_col)
                 df.columns = new_cols
 
-            df = df.fillna('') # 填充空字串，防止 NaN 混淆
+            df = df.replace('', np.nan) # 將空字串替換為 NaN
             return df
         
         # --- 錯誤處理 ---
@@ -245,7 +242,8 @@ df_G = load_data('表G_財富藍圖')
 
 # 🎯 金額和日期格式化樣式 (確保在全域或主體開始前被定義)
 DATE_FORMAT = lambda x: x.strftime('%Y-%m-%d') if pd.notnull(x) and isinstance(x, datetime) else str(x)
-CURRENCY_FORMAT = lambda x: f"{pd.to_numeric(x, errors='coerce'):,.2f}" if pd.notnull(x) and pd.to_numeric(x, errors='coerce') is not None else str(x)
+# CURRENCY_FORMAT 處理 NaN (np.nan) 時是安全的
+CURRENCY_FORMAT = lambda x: f"{pd.to_numeric(x, errors='coerce'):,.2f}" if pd.notnull(x) and pd.to_numeric(x, errors='coerce') is not None else ''
 
 
 # ---------------------------------------------------
@@ -432,7 +430,7 @@ with col_data:
         df_display = df_A.copy()
         
         if st.session_state['live_prices']:
-            df_display['即時收盤價'] = df_display['股票'].astype(str).str.strip().map(st.session_state['live_prices']).fillna('')
+            df_display['即時收盤價'] = df_display['股票'].astype(str).str.strip().map(st.session_state['live_prices']).fillna(np.nan)
             
             cols = ['即時收盤價'] + [col for col in df_display.columns if col != '即時收盤價']
             df_display = df_display[cols]
@@ -447,7 +445,8 @@ with col_data:
                     '市值（元）': '{:,.0f}',
                     '浮動損益': '{:,.0f}',
                     '預估獲利率': '{:.2%}',
-                    '即時收盤價': '{:,.2f}'
+                    # 關鍵修正: 處理 NaN 和即時收盤價
+                    '即時收盤價': lambda x: f"{x:,.2f}" if pd.notna(x) else '',
                 }),
                 use_container_width=True, 
                 hide_index=True
@@ -498,8 +497,12 @@ with tab1:
         
         if '淨收／支出' in df_D_clean.columns and '動作' in df_D_clean.columns and '日期' in df_D_clean.columns:
             try:
-                # 數據轉換：淨收／支出可以轉換為數字
+                # 數據轉換
                 df_D_clean['淨收／支出'] = pd.to_numeric(df_D_clean['淨收／支出'], errors='coerce').fillna(0)
+                df_D_clean['累積現金'] = pd.to_numeric(df_D_clean['累積現金'], errors='coerce').fillna(0)
+                df_D_clean['數量'] = pd.to_numeric(df_D_clean['數量'], errors='coerce').fillna(0)
+                df_D_clean['成交價'] = pd.to_numeric(df_D_clean['成交價'], errors='coerce').fillna(0)
+                
                 # 處理日期欄位並排序
                 df_D_clean['日期'] = pd.to_datetime(df_D_clean['日期'], errors='coerce')
                 df_D_clean = df_D_clean.sort_values(by='日期', ascending=False)
@@ -535,12 +538,12 @@ with tab1:
                         '日期': DATE_FORMAT,
                         '淨收／支出': CURRENCY_FORMAT,
                         '累積現金': CURRENCY_FORMAT,
-                        '數量': lambda x: f"{pd.to_numeric(x, errors='coerce'):,.0f}" if pd.notnull(x) and pd.to_numeric(x, errors='coerce') is not None else str(x),
-                        '成交價': lambda x: f"{pd.to_numeric(x, errors='coerce'):,.2f}" if pd.notnull(x) and pd.to_numeric(x, errors='coerce') is not None else str(x),
+                        '數量': '{:,.0f}',
+                        '成交價': '{:,.2f}',
                     }), 
                     use_container_width=True, 
                     hide_index=True,
-                    height=300 # 增加表格高度
+                    height=300 
                 )
                 
                 # 🎯 底部標註
@@ -577,9 +580,13 @@ with tab2:
         # 檢查必要欄位
         if '已實現損益' in df_E_clean.columns and '股票' in df_E_clean.columns:
             try:
-                # 數據轉換：將損益欄位轉換為數字
+                # 數據轉換
                 df_E_clean['已實現損益'] = pd.to_numeric(df_E_clean['已實現損益'], errors='coerce').fillna(0)
-                
+                df_E_clean['投資成本'] = pd.to_numeric(df_E_clean['投資成本'], errors='coerce').fillna(0)
+                df_E_clean['帳面收入'] = pd.to_numeric(df_E_clean['帳面收入'], errors='coerce').fillna(0)
+                df_E_clean['成交均價'] = pd.to_numeric(df_E_clean['成交均價'], errors='coerce').fillna(0)
+                df_E_clean['成交股數'] = pd.to_numeric(df_E_clean['成交股數'], errors='coerce').fillna(0)
+
                 date_col_name = None
                 for col in df_E_clean.columns:
                     if '日期' in col: 
@@ -644,12 +651,12 @@ with tab2:
                         '已實現損益': CURRENCY_FORMAT,
                         '投資成本': CURRENCY_FORMAT,
                         '帳面收入': CURRENCY_FORMAT,
-                        '成交均價': lambda x: f"{pd.to_numeric(x, errors='coerce'):,.2f}" if pd.notnull(x) and pd.to_numeric(x, errors='coerce') is not None else str(x),
-                        '成交股數': lambda x: f"{pd.to_numeric(x, errors='coerce'):,.0f}" if pd.notnull(x) and pd.to_numeric(x, errors='coerce') is not None else str(x),
+                        '成交均價': '{:,.2f}',
+                        '成交股數': '{:,.0f}',
                     }), 
                     use_container_width=True, 
                     hide_index=True,
-                    height=300 # 增加表格高度
+                    height=300 
                 )
                 
                 # 🎯 底部標註
@@ -681,8 +688,12 @@ with tab3:
         st.subheader('每日淨值 (表F_每日淨值)')
         try:
             df_F_cleaned = df_F.copy()
+            
+            # 數據轉換
             df_F_cleaned['日期'] = pd.to_datetime(df_F_cleaned['日期'], errors='coerce')
             df_F_cleaned['實質NAV'] = pd.to_numeric(df_F_cleaned['實質NAV'], errors='coerce')
+            df_F_cleaned['股票市值'] = pd.to_numeric(df_F_cleaned['股票市值'], errors='coerce')
+            df_F_cleaned['現金'] = pd.to_numeric(df_F_cleaned['現金'], errors='coerce')
             
             # 排序：依日期由新到舊 (用於表格顯示)
             df_F_cleaned = df_F_cleaned.sort_values(by='日期', ascending=False)
@@ -715,7 +726,7 @@ with tab3:
                         '槓桿倍數β': lambda x: f"{pd.to_numeric(x, errors='coerce'):.2f}" if pd.notnull(x) and pd.to_numeric(x, errors='coerce') is not None else str(x),
                     }), 
                     use_container_width=True,
-                    height=300 # 增加表格高度
+                    height=300 
                 )
                 
                 # 🎯 底部標註
