@@ -5,7 +5,7 @@ import gspread
 from datetime import datetime
 import yfinance as yf 
 import time 
-import re # 用於字串清理
+import re 
 
 # 設置頁面配置，使用寬佈局以容納更多數據
 st.set_page_config(layout="wide")
@@ -38,7 +38,7 @@ h3 { font-size: 1.5em; } /* 針對 st.subheader() */
 /* 🎯 按鈕與 Multiselect 緊湊對齊 */
 .stButton>button {
     width: 100%;
-    /* 關鍵 CSS 修正 */
+    /* 關鍵 CSS 修正：確保按鈕與 Multiselect 頂部對齊 */
     margin-top: 25px; 
     height: 35px;
 }
@@ -62,24 +62,26 @@ SHEET_URL = "https://docs.google.com/spreadsheets/d/1_JBI1pKWv9aw8dGCj89y9yNgoWG
 if 'live_prices' not in st.session_state:
     st.session_state['live_prices'] = {} 
 
-# 🎯 數值清潔函式 (修正: 移除所有非數字和非小數點的字元)
+
+# 🎯 數值清潔函式 (修正: 確保只處理單一字串值)
 def clean_numeric_string(s):
     """移除所有可能干擾轉換的非數字符號 (e.g., , $ % 萬)"""
-    if pd.isna(s) or s is None or s == '':
+    # 🎯 關鍵修正：必須先檢查是否為字串，避免對 pd.Series 或 NaT 進行 string 操作
+    if pd.isna(s) or s is None or not isinstance(s, str):
         return None
         
-    s = str(s).strip()
+    s = s.strip()
     
     # 移除千分位逗號, 貨幣符號, 百分號, 中文計量單位
     s = s.replace(',', '').replace('$', '').replace('¥', '').replace('%', '').replace('萬', '0000')
     s = s.replace('(', '-').replace(')', '') # 處理負數格式 (括號)
     
+    # 僅返回非空字串
     return s if s else None
 
 # 🎯 新增連線工具函式
 def get_gsheet_connection():
     """建立並返回 gspread 客戶端和試算表物件。"""
-    # 這裡的邏輯與之前保持一致
     try:
         if "gsheets" not in st.secrets.get("connections", {}):
             st.error("Secrets 錯誤：找不到 [connections.gsheets] 區塊。請檢查您的 Streamlit Cloud Secrets 配置。")
@@ -103,7 +105,7 @@ def get_gsheet_connection():
         return None, None
 
 
-# 數據載入函式 (僅用於讀取)
+# 數據載入函式 (已修正全域清理衝突)
 @st.cache_data(ttl=None) 
 def load_data(sheet_name): 
     with st.spinner(f"正在載入工作表: '{sheet_name}'..."):
@@ -156,7 +158,7 @@ def fetch_current_prices(valid_tickers):
     
     st.info(f"正在從 yfinance 獲取 {len(valid_tickers)} 支股票的最新收盤價...")
     price_updates = {}
-    time.sleep(1) 
+    time.sleep(1) # 增加延遲，避免 yfinance 拒絕請求
 
     try:
         data = yf.download(valid_tickers, period='1d', interval='1d', progress=False)
@@ -183,7 +185,7 @@ def fetch_current_prices(valid_tickers):
         return {}
 
 
-# 🎯 新增寫入函式
+# 🎯 新增寫入函式 (用於將股價寫回 Google Sheets)
 def write_prices_to_sheet(df_A, price_updates):
     """將最新的價格寫入到 Google Sheets 的 '表A_持股總表' E 欄。"""
     
@@ -243,7 +245,8 @@ df_G = load_data('表G_財富藍圖')
 
 # 🎯 金額和日期格式化樣式 (確保在全域或主體開始前被定義)
 DATE_FORMAT = lambda x: x.strftime('%Y-%m-%d') if pd.notnull(x) and isinstance(x, datetime) else str(x)
-CURRENCY_FORMAT = lambda x: f"{x:,.2f}" if pd.notnull(x) and pd.to_numeric(x, errors='coerce') is not None else str(x)
+CURRENCY_FORMAT = lambda x: f"{pd.to_numeric(x, errors='coerce'):,.2f}" if pd.notnull(x) and pd.to_numeric(x, errors='coerce') is not None else str(x)
+
 
 # ---------------------------------------------------
 # 0. 股價即時更新區塊 (位於側邊欄)
@@ -261,7 +264,7 @@ st.sidebar.caption("💡 點擊此按鈕可強制從 Google Sheets 獲取最新�
 st.sidebar.markdown("---")
 
 
-# 🎯 修正按鈕文字和邏輯 (舊的按鈕保持功能不變)
+# 🎯 股價寫入 Sheets 按鈕
 if st.sidebar.button("💾 獲取即時價格並寫入 Sheets", type="primary"):
     if df_A.empty or '股票' not in df_A.columns:
         st.sidebar.error("❌ '表A_持股總表' 數據不完整或沒有 '股票' 欄位。")
@@ -309,8 +312,7 @@ if not df_C.empty:
 
     # 提取關鍵值
     risk_level_raw = str(series_C.get('β風險燈號', 'N/A'))
-    import re
-    risk_level = re.sub(r'\s+', '', risk_level_raw) 
+    risk_level = risk_level_raw.strip().replace(" ", "") 
     leverage = str(series_C.get('槓桿倍數β', 'N/A'))
 
     # 風險等級顏色判斷邏輯
@@ -337,6 +339,7 @@ if not df_C.empty:
     with col_summary:
         st.subheader('核心資產數據')
         
+        # 排除掉單獨作為指標顯示的行，以及用於目標追蹤的行
         exclude_cols = ['β風險燈號', '槓桿倍數β', '短期財務目標', '短期財務目標差距', '達成進度']
         df_display = df_C_display[~df_C_display.index.isin(exclude_cols)].reset_index()
         
@@ -435,7 +438,20 @@ with col_data:
             df_display = df_display[cols]
             
         with st.expander('持股總表 (表A_持股總表)', expanded=True):
-            st.dataframe(df_display, use_container_width=True)
+            # 🎯 格式化持股總表
+            st.dataframe(
+                df_display.style.format({
+                    '持有數量（股）': '{:,.0f}',
+                    '平均成本': '{:,.2f}',
+                    '收盤價': '{:,.2f}',
+                    '市值（元）': '{:,.0f}',
+                    '浮動損益': '{:,.0f}',
+                    '預估獲利率': '{:.2%}',
+                    '即時收盤價': '{:,.2f}'
+                }),
+                use_container_width=True, 
+                hide_index=True
+            )
 
 with col_chart:
     if not df_B.empty and '市值（元）' in df_B.columns and '股票' in df_B.columns:
@@ -470,11 +486,6 @@ with col_chart:
 # ---------------------------------------------------
 st.header('3. 交易紀錄與淨值追蹤')
 
-# 🎯 金額和日期格式化樣式 (因為 load_data 已經清理字串，這裡可以直接用)
-DATE_FORMAT = lambda x: x.strftime('%Y-%m-%d') if pd.notnull(x) and isinstance(x, datetime) else str(x)
-CURRENCY_FORMAT = lambda x: f"{pd.to_numeric(x, errors='coerce'):,.2f}" if pd.notnull(x) and pd.to_numeric(x, errors='coerce') is not None else str(x)
-
-
 # 步驟：定義分頁 Tab
 tab1, tab2, tab3 = st.tabs(['現金流', '已實現損益', '每日淨值'])
 
@@ -485,7 +496,6 @@ with tab1:
         
         df_D_clean = df_D.copy()
         
-        # 🎯 檢查必要欄位
         if '淨收／支出' in df_D_clean.columns and '動作' in df_D_clean.columns and '日期' in df_D_clean.columns:
             try:
                 # 數據轉換：淨收／支出可以轉換為數字
@@ -525,7 +535,6 @@ with tab1:
                         '日期': DATE_FORMAT,
                         '淨收／支出': CURRENCY_FORMAT,
                         '累積現金': CURRENCY_FORMAT,
-                        # 數量和成交價使用一般數值格式，避免過度清理的字串無法轉換
                         '數量': lambda x: f"{pd.to_numeric(x, errors='coerce'):,.0f}" if pd.notnull(x) and pd.to_numeric(x, errors='coerce') is not None else str(x),
                         '成交價': lambda x: f"{pd.to_numeric(x, errors='coerce'):,.2f}" if pd.notnull(x) and pd.to_numeric(x, errors='coerce') is not None else str(x),
                     }), 
@@ -536,9 +545,14 @@ with tab1:
                 
                 # 🎯 底部標註
                 if not df_D_filtered.empty:
-                    date_min = df_D_filtered['日期'].min()
-                    date_max = df_D_filtered['日期'].max()
-                    st.caption(f"📝 數據範圍：**{date_min.strftime('%Y-%m-%d')}** ~ **{date_max.strftime('%Y-%m-%d')}**，總筆數 **{len(df_D_filtered)}** 筆。")
+                    valid_dates = df_D_filtered['日期'].dropna()
+                    date_min = valid_dates.min() if not valid_dates.empty else 'N/A'
+                    date_max = valid_dates.max() if not valid_dates.empty else 'N/A'
+                    
+                    date_min_str = date_min.strftime('%Y-%m-%d') if isinstance(date_min, datetime) else date_min
+                    date_max_str = date_max.strftime('%Y-%m-%d') if isinstance(date_max, datetime) else date_max
+                    
+                    st.caption(f"📝 數據範圍：**{date_min_str}** ~ **{date_max_str}**，總筆數 **{len(df_D_filtered)}** 筆。")
                 else:
                      st.caption("📝 數據範圍：無交易紀錄符合篩選條件。")
 
@@ -597,8 +611,6 @@ with tab2:
                     )
                     
                 with col_btn_all:
-                    # 🎯 關鍵修正：確保 CSS 樣式作用於 Multiselect 後的按鈕
-                    st.markdown('<style>div.stButton button { margin-top: 25px; height: 35px; }</style>', unsafe_allow_html=True)
                     if st.button("全選", key='btn_pnl_all'):
                         st.session_state['pnl_filter'] = all_stocks
                         st.rerun()
@@ -641,10 +653,15 @@ with tab2:
                 )
                 
                 # 🎯 底部標註
-                if not df_E_filtered.empty:
-                    date_min = df_E_filtered[date_col_name].min()
-                    date_max = df_E_filtered[date_col_name].max()
-                    st.caption(f"📝 數據範圍：**{date_min.strftime('%Y-%m-%d')}** ~ **{date_max.strftime('%Y-%m-%d')}**，總筆數 **{len(df_E_filtered)}** 筆。")
+                if not df_E_filtered.empty and date_col_name:
+                    valid_dates = df_E_filtered[date_col_name].dropna()
+                    date_min = valid_dates.min() if not valid_dates.empty else 'N/A'
+                    date_max = valid_dates.max() if not valid_dates.empty else 'N/A'
+                    
+                    date_min_str = date_min.strftime('%Y-%m-%d') if isinstance(date_min, datetime) else date_min
+                    date_max_str = date_max.strftime('%Y-%m-%d') if isinstance(date_max, datetime) else date_max
+                    
+                    st.caption(f"📝 數據範圍：**{date_min_str}** ~ **{date_max_str}**，總筆數 **{len(df_E_filtered)}** 筆。")
                 else:
                     st.caption("📝 數據範圍：無交易紀錄符合篩選條件。")
 
@@ -703,9 +720,14 @@ with tab3:
                 
                 # 🎯 底部標註
                 if not df_subset.empty:
-                    date_min = df_subset['日期'].min()
-                    date_max = df_subset['日期'].max()
-                    st.caption(f"📝 數據範圍：**{date_min.strftime('%Y-%m-%d')}** ~ **{date_max.strftime('%Y-%m-%d')}**，共 **{len(df_subset)}** 筆歷史紀錄。")
+                    valid_dates = df_subset['日期'].dropna()
+                    date_min = valid_dates.min() if not valid_dates.empty else 'N/A'
+                    date_max = valid_dates.max() if not valid_dates.empty else 'N/A'
+                    
+                    date_min_str = date_min.strftime('%Y-%m-%d') if isinstance(date_min, datetime) else date_min
+                    date_max_str = date_max.strftime('%Y-%m-%d') if isinstance(date_max, datetime) else date_max
+                    
+                    st.caption(f"📝 數據範圍：**{date_min_str}** ~ **{date_max_str}**，共 **{len(df_subset)}** 筆歷史紀錄。")
                 else:
                     st.caption("📝 數據範圍：無歷史淨值紀錄。")
 
@@ -713,7 +735,5 @@ with tab3:
         except Exception as e:
             # 🎯 關鍵修正：將錯誤輸出，幫助您診斷是哪個欄位轉換失敗
             st.warning(f'無法繪製每日淨值圖或顯示表格，請檢查 "表F_每日淨值" 數據格式。錯誤: {e}')
-            st.dataframe(df_F, use_container_width=True)
-            st.caption("⚠️ 表F 原始資料如下，請檢查是否有非數字或非日期的內容。")
     else:
         st.warning('每日淨值數據載入失敗，請檢查 "表F_每日淨值"。')
