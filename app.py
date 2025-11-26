@@ -22,23 +22,17 @@ h3 { font-size: 1.5em; }
 .stMetric > div:first-child { font-size: 1.25em !important; }
 .stMetric > div:nth-child(2) > div:first-child { font-size: 2.5em !important; }
 
-/* 側邊欄按鈕 */
+/* 側邊欄按鈕樣式 */
 div[data-testid="stSidebar"] .stButton button {
     width: 100%; height: 45px; margin-bottom: 10px; border: 1px solid #ccc;
 }
-
-/* Tabs 內按鈕對齊 */
-div[data-testid="stVerticalBlock"] > div[data-testid="stHorizontalBlock"] > div:nth-child(2) .stButton > button,
-div[data-testid="stVerticalBlock"] > div[data-testid="stHorizontalBlock"] > div:nth-child(3) .stButton > button {
-    margin-top: 25px; height: 35px;
-}
-
-div[data-testid="stMultiSelect"] > label { display: none; }
 
 /* 進度條顏色 */
 .stProgress > div > div > div > div {
     background-color: #007bff;
 }
+/* 隱藏 Multiselect 的標籤 */
+div[data-testid="stMultiSelect"] > label { display: none; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -202,7 +196,7 @@ if not df_C.empty:
     risk_txt = re.sub(r'\s+', '', risk)
     lev = safe_float(df_c.loc['槓桿倍數β', col_val]) if '槓桿倍數β' in df_c.index else 0
 
-    # 🎯 風險燈號顏色邏輯 (嚴格修復)
+    # 🎯 風險燈號顏色邏輯 (綠黃紅)
     style = {'e':'❓', 'bg':'#6c757d', 't':'white'}
     if '安全' in risk_txt: 
         style = {'e':'✅', 'bg':'#28a745', 't':'white'} # 綠
@@ -215,11 +209,11 @@ if not df_C.empty:
     with c1:
         st.subheader('核心資產')
         mask = ~df_c.index.isin(['β風險燈號', '槓桿倍數β', '短期財務目標', '短期財務目標差距', '達成進度'])
+        # 純字串顯示，不用 style.format
         st.dataframe(df_c[mask], use_container_width=True)
     
     with c2:
         st.subheader('風險指標')
-        # 風險燈號 HTML
         st.markdown(f"<div style='background:{style['bg']};color:{style['t']};padding:15px;border-radius:10px;text-align:center;font-size:1.5em;font-weight:bold;margin-bottom:10px;'>{style['e']} {risk}</div>", unsafe_allow_html=True)
         st.metric("槓桿倍數", f"{lev:.2f}")
         
@@ -262,6 +256,7 @@ with c1:
         if st.session_state['live_prices']:
             df_show['即時價'] = df_show['股票'].map(st.session_state['live_prices']).fillna('')
         
+        # 預先格式化為字串 (絕對不會崩潰)
         for c in ['持有數量（股）', '市值（元）', '浮動損益']: 
             if c in df_show.columns: df_show[c] = df_show[c].apply(fmt_int)
         for c in ['平均成本', '收盤價', '即時價']:
@@ -284,6 +279,7 @@ t1, t2, t3 = st.tabs(['現金流', '已實現損益', '每日淨值'])
 with t1:
     if not df_D.empty:
         df_calc = df_D.copy()
+        # 排序
         if '日期' in df_calc.columns:
             df_calc['dt'] = pd.to_datetime(df_calc['日期'], errors='coerce')
             df_calc.sort_values('dt', ascending=False, inplace=True)
@@ -297,6 +293,7 @@ with t1:
         c_a.metric("篩選淨額", fmt_money(total))
         c_b.markdown(f"**筆數：** {len(df_calc)}")
         
+        # 顯示用 (轉字串)
         df_view = df_calc.drop(columns=['dt'], errors='ignore').copy()
         if '日期' in df_view.columns: df_view['日期'] = df_view['日期'].apply(fmt_date)
         for c in ['淨收／支出', '累積現金', '成交價']:
