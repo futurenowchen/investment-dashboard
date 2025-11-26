@@ -36,15 +36,20 @@ h3 { font-size: 1.5em; } /* 針對 st.subheader() */
     font-size: 2.5em !important; /* Metric value 數值 */
 }
 
-/* 🎯 按鈕與 Multiselect 緊湊對齊 */
+/* 🎯 按鈕對齊修正 */
 .stButton>button {
     width: 100%;
-    /* 關鍵 CSS 修正：確保按鈕與 Multiselect 頂部對齊 */
-    margin-top: 25px; 
+    /* 調整按鈕大小以適應排版 */
     height: 35px;
+    margin-top: 0px; 
+}
+/* 調整 Tabs 內按鈕的垂直對齊 */
+div[data-testid="stVerticalBlock"] > div[data-testid="stHorizontalBlock"] > div:nth-child(2) .stButton > button,
+div[data-testid="stVerticalBlock"] > div[data-testid="stHorizontalBlock"] > div:nth-child(3) .stButton > button {
+    margin-top: 25px; /* 僅對 Tabs 內的按鈕進行垂直對齊 */
 }
 
-/* 隱藏 Multiselect 的標籤 (在 HTML 級別隱藏，配合 label_visibility="collapsed" 使用) */
+/* 隱藏 Multiselect 的標籤 */
 div[data-testid="stMultiSelect"] > label {
     display: none; 
 }
@@ -118,9 +123,11 @@ def load_data(sheet_name):
             data = worksheet.get_all_values() 
             df = pd.DataFrame(data[1:], columns=data[0])
             
-            # 🎯 關鍵修正：僅在讀取時清理符號，不進行全域數據類型轉換
+            # 🎯 修正：移除 df[col].apply(clean_sheets_string) 衝突行
             for col in df.columns:
-                df[col] = df[col].apply(clean_sheets_string) 
+                # 僅對非 '股票' 類的欄位進行清理，因為股票欄位可能包含特殊字元
+                if col not in ['股票', '股票名稱', '用途／股票', '動作', '備註']:
+                    df[col] = df[col].apply(clean_sheets_string) 
 
             # 修正重複欄位名稱
             if len(df.columns) != len(set(df.columns)):
@@ -251,18 +258,7 @@ CURRENCY_FORMAT = lambda x: f"{pd.to_numeric(x, errors='coerce'):,.2f}" if pd.no
 # ---------------------------------------------------
 st.sidebar.header("🎯 股價數據管理")
 
-# 🎯 新增：手動清除快取並重新載入 Sheets 數據的功能
-if st.sidebar.button("🔄 立即重新載入 Sheets 數據"):
-    load_data.clear() 
-    st.session_state['live_prices'] = {} 
-    st.sidebar.success("✅ 所有 Sheets 快取已清除，正在重新載入數據...")
-    st.rerun() 
-    
-st.sidebar.caption("💡 點擊此按鈕可強制從 Google Sheets 獲取最新資料。")
-st.sidebar.markdown("---")
-
-
-# 🎯 股價寫入 Sheets 按鈕
+# 🎯 修正：將「立即重新載入」按鈕移到主頁，與數據相關聯
 if st.sidebar.button("💾 獲取即時價格並寫入 Sheets", type="primary"):
     if df_A.empty or '股票' not in df_A.columns:
         st.sidebar.error("❌ '表A_持股總表' 數據不完整或沒有 '股票' 欄位。")
@@ -290,10 +286,21 @@ if st.sidebar.button("💾 獲取即時價格並寫入 Sheets", type="primary"):
 st.sidebar.caption("💡 點擊此按鈕，價格會寫入 Google Sheets 的 E 欄。")
 st.sidebar.markdown("---")
 
+
 # ---------------------------------------------------
 # 1. 投資總覽 (核心總覽表格 + 風險指標燈號 + 目標進度)
 # ---------------------------------------------------
 st.header('1. 投資總覽') 
+
+# 🎯 修正：將立即重新載入按鈕放在主頁的頂部
+if st.button("🔄 立即重新載入 Sheets 數據 (清除快取)"):
+    load_data.clear() 
+    st.session_state['live_prices'] = {} 
+    st.success("✅ 所有 Sheets 快取已清除，正在重新載入數據...")
+    st.rerun() 
+st.markdown("---")
+
+
 if not df_C.empty:
     
     df_C_display = df_C.copy()
