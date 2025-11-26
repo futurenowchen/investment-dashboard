@@ -29,7 +29,7 @@ h3 { font-size: 1.5em; }
 .stMetric > div:nth-child(2) > div:first-child { font-size: 2.5em !important; }
 
 /* 🎯 按鈕對齊修正 */
-/* 修正側邊欄按鈕，讓兩個按鈕上下緊密排列 */
+/* 修正側邊欄按鈕，讓兩個按鈕上下緊密排列 (Vertical alignment) */
 div[data-testid="stSidebar"] div[data-testid="stVerticalBlock"] .stButton button {
     width: 100%;
     height: 40px; 
@@ -117,10 +117,19 @@ def load_data(sheet_name):
             data = worksheet.get_all_values() 
             df = pd.DataFrame(data[1:], columns=data[0])
             
-            # 🎯 關鍵修正：智能逐欄清理 (只清理可能是數值的欄位)
+            # 🎯 關鍵修正：只對特定的數值相關欄位進行清理 (繞過表G的錯誤)
+            
+            # 確定需要清理的數值相關欄位 (排除明顯的非數值欄位)
+            # 這比之前安全得多，不會嘗試清理像 '一、財富階層對照表...' 這種文字
+            numeric_cols = [
+                '持有數量（股）', '平均成本', '收盤價', '市值（元）', '浮動損益', '淨收／支出', 
+                '累積現金', '實質NAV', '股票市值', '現金', '借款餘額', '總資產市值', 
+                '達成進度', '短期財務目標', '短期財務目標差距', '已實現損益', '投資成本', 
+                '帳面收入', '成交均價', '成交股數', '槓桿倍數β'
+            ]
+            
             for col in df.columns:
-                # 排除明顯的非數值欄位
-                if col not in ['股票', '股票名稱', '用途／股票', '動作', '備註']:
+                if col in numeric_cols:
                     # 應用向量化清理器到字串格式的欄位
                     df[col] = df[col].astype(str).apply(vectorized_cleaner)
                 
