@@ -60,7 +60,7 @@ if 'live_prices' not in st.session_state:
     st.session_state['live_prices'] = {} 
 
 
-# 🎯 數值清潔函式 (最原始、最安全，不依賴 Pandas 結構)
+# 🎯 數值清潔函式 (僅用於移除 Sheets 格式化符號)
 def clean_sheets_value(value):
     """清理單一字串中的格式化符號 (逗號, 萬, % 等)"""
     if value is None or not isinstance(value, str):
@@ -73,6 +73,10 @@ def clean_sheets_value(value):
     s = s.replace('(', '-').replace(')', '') # 處理負數格式 (括號)
     
     return s if s else np.nan
+
+# 🎯 向量化清理函式 (使用 numpy.vectorize 實現對整個 DataFrame 的安全操作)
+# 我們需要它來在 app 主體中安全地處理 Series
+vectorized_cleaner = np.vectorize(clean_sheets_value)
 
 # 🎯 新增連線工具函式
 def get_gsheet_connection():
@@ -100,7 +104,7 @@ def get_gsheet_connection():
         return None, None
 
 
-# 數據載入函式 (已修正全域清理衝突)
+# 數據載入函式 (僅安全地讀取字串數據)
 @st.cache_data(ttl=None) 
 def load_data(sheet_name): 
     with st.spinner(f"正在載入工作表: '{sheet_name}'..."):
@@ -114,19 +118,8 @@ def load_data(sheet_name):
             data = worksheet.get_all_values() 
             df = pd.DataFrame(data[1:], columns=data[0])
             
-            # 🎯 關鍵修正：智能逐欄清理 (只清理數值相關欄位) - 解決 ValueError
-            numeric_cols = [
-                '持有數量（股）', '平均成本', '收盤價', '市值（元）', '浮動損益', '淨收／支出', 
-                '累積現金', '實質NAV', '股票市值', '現金', '借款餘額', '總資產市值', 
-                '達成進度', '短期財務目標', '短期財務目標差距', '已實現損益', '投資成本', 
-                '帳面收入', '成交均價', '成交股數', '槓桿倍數β'
-            ]
+            # 🎯 最終修正：只進行欄位重命名，所有清理在應用程序主體中執行
             
-            for col in df.columns:
-                if col in numeric_cols:
-                    # 🎯 最終修正：對整欄應用字串處理，然後替換 NaN
-                    df[col] = df[col].astype(str).apply(clean_sheets_value)
-                
             # 修正重複欄位名稱
             if len(df.columns) != len(set(df.columns)):
                 new_cols = []
@@ -141,7 +134,8 @@ def load_data(sheet_name):
                         new_cols.append(clean_col)
                 df.columns = new_cols
 
-            df = df.replace('', np.nan) # 將空字串替換為 NaN
+            # 🎯 載入時將所有數據轉為字串，確保安全
+            df = df.astype(str).replace('', np.nan) 
             return df
         
         # --- 錯誤處理 ---
@@ -646,7 +640,7 @@ with tab2:
                         delta_color="off"
                     )
                 
-                with pnl_col2:
+                with col_multiselect:
                     st.markdown(f"**總交易筆數：** {len(df_E_filtered)}")
 
                 # 🎯 表格顯示與格式化
