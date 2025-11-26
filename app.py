@@ -75,7 +75,6 @@ def clean_sheets_value(value):
     return s if s else np.nan
 
 # 🎯 向量化清理函式 (使用 numpy.vectorize 實現對整個 DataFrame 的安全操作)
-# 修正：將清理函式向量化，以安全地應用到 DataFrame 的 Series 上
 vectorized_cleaner = np.vectorize(clean_sheets_value)
 
 # 🎯 新增連線工具函式
@@ -118,10 +117,13 @@ def load_data(sheet_name):
             data = worksheet.get_all_values() 
             df = pd.DataFrame(data[1:], columns=data[0])
             
-            # 🎯 關鍵修正：使用 df.apply(lambda...) 配合向量化操作安全清理所有數據 (解決 ValueError)
-            # 這能確保對 Series 的調用是安全的，且能處理所有的字串
-            df = df.apply(lambda x: vectorized_cleaner(x), axis=0) 
-
+            # 🎯 關鍵修正：智能逐欄清理 (只清理可能是數值的欄位)
+            for col in df.columns:
+                # 排除明顯的非數值欄位
+                if col not in ['股票', '股票名稱', '用途／股票', '動作', '備註']:
+                    # 應用向量化清理器到字串格式的欄位
+                    df[col] = df[col].astype(str).apply(vectorized_cleaner)
+                
             # 修正重複欄位名稱
             if len(df.columns) != len(set(df.columns)):
                 new_cols = []
