@@ -365,91 +365,28 @@ with t3:
                     st.caption(f"📅 紀錄: {df_calc['dt'].min().date()} ~ {df_calc['dt'].max().date()}")
 
 st.markdown('---')
-# 4. 財富藍圖
 st.header('4. 財富藍圖')
 if not df_G.empty:
     try:
-        # 嘗試自動分割表格
-        # 尋找標題行的索引
-        # 假設標題都在第一欄 (index 0)
-        df_g_str = df_G.astype(str)
-        col0 = df_g_str.columns[0]
-        
-        # 找出包含中文數字標題的行
-        mask_sec1 = df_g_str[col0].str.contains('一、', na=False)
-        mask_sec2 = df_g_str[col0].str.contains('二、', na=False)
-        mask_sec3 = df_g_str[col0].str.contains('三、', na=False)
-        
-        idx1 = df_g_str[mask_sec1].index[0] if mask_sec1.any() else None
-        idx2 = df_g_str[mask_sec2].index[0] if mask_sec2.any() else None
-        idx3 = df_g_str[mask_sec3].index[0] if mask_sec3.any() else None
-        
-        # 如果找不到分隔，就顯示原始表格
-        if idx1 is None:
-            st.dataframe(df_G, use_container_width=True)
-        else:
-            # --- 第一區塊：財富階層對照表 ---
-            st.subheader('一、財富階層對照表（美元為主軸）')
-            # 範圍：從 idx1 + 1 (標題下一行是欄位名) 到 idx2 (第二標題前)
-            end1 = idx2 if idx2 is not None else len(df_G)
-            # 取得標題列 (假設標題在 idx1 + 1) - 這裡可能需要根據實際csv微調，通常標題就是下一行
-            # 但如果 csv 讀取時已經把第一行當 header 了，那 idx1 可能就是資料的第一行
-            # 為了保險，我們直接取數據
+        for i, row in df_G.iterrows():
+            level = row.get('階層') or row.iloc[0]
+            money = row.get('美金金額範圍') or row.iloc[1]
+            twd = row.get('約當台幣') or row.iloc[2]
+            desc = row.get('財富階層意義') or row.iloc[3]
+            time_est = row.get('以年報酬率18–20%推估所需時間') or (row.iloc[4] if len(row)>4 else "")
             
-            # 修正策略：如果 '一、' 是 header，那它不會在 data 裡。
-            # 如果 '一、' 是 data 的一部分，那我們用切片。
-            
-            # 簡單暴力法：假設結構固定，直接顯示
-            # 這裡用一個更通用的顯示方法：過濾掉標題行本身，只顯示內容
-            
-            # 實際上，最乾淨的方法可能是直接把這個 DataFrame 顯示出來，但隱藏 index
-            # 但為了美觀，我們分開處理
-            
-            # 1. 財富階層
-            # 篩選出第一階段的資料 (在 idx1 和 idx2 之間)
-            # 如果 idx1 是數據行，那它就是標題列。
-            # 讓我們重新檢視使用者的 csv 結構，通常 header 已被讀取。
-            # 如果 '一、' 被讀成 header，那邏輯不同。
-            # 假設 '一、' 是 content row
-            
-            # 重新定義策略：直接用 st.table 或 st.dataframe 顯示切割後的數據
-            
-            # 取得數據切片
-            # Slice 1: 從 idx1 到 idx2
-            sub_df1 = df_G.iloc[idx1+1 : idx2] if idx2 else df_G.iloc[idx1+1:]
-            # 清理空行
-            sub_df1 = sub_df1.dropna(how='all')
-            # 第一行通常是該區塊的欄位名稱，將其設為 header
-            if not sub_df1.empty:
-                 sub_df1.columns = sub_df1.iloc[0]
-                 sub_df1 = sub_df1[1:]
-                 st.dataframe(sub_df1, use_container_width=True, hide_index=True)
-
-            # --- 第二區塊：個人三階段發展藍圖 ---
-            if idx2 is not None:
-                st.subheader('二、個人三階段發展藍圖')
-                end2 = idx3 if idx3 is not None else len(df_G)
-                sub_df2 = df_G.iloc[idx2+1 : end2]
-                sub_df2 = sub_df2.dropna(how='all')
-                if not sub_df2.empty:
-                    sub_df2.columns = sub_df2.iloc[0] # 重設標頭
-                    sub_df2 = sub_df2[1:]
-                    st.dataframe(sub_df2, use_container_width=True, hide_index=True)
-
-            # --- 第三區塊：財富里程碑預估 ---
-            if idx3 is not None:
-                # 標題可能很長，直接從數據中抓取完整標題
-                title3 = df_G.iloc[idx3, 0] # 取得該行第一欄的文字
-                st.subheader(title3)
-                
-                sub_df3 = df_G.iloc[idx3+1 :]
-                sub_df3 = sub_df3.dropna(how='all')
-                if not sub_df3.empty:
-                    sub_df3.columns = sub_df3.iloc[0]
-                    sub_df3 = sub_df3[1:]
-                    st.dataframe(sub_df3, use_container_width=True, hide_index=True)
-
-    except Exception as e:
-        # 如果自動分割失敗 (例如格式不符)，退回顯示原始完整表格
-        st.warning(f"無法自動分段顯示，展示原始表格。")
-        st.dataframe(df_G, use_container_width=
+            with st.container():
+                st.markdown(f"#### {level}")
+                c1, c2, c3 = st.columns([2, 2, 3])
+                c1.caption("資金範圍 (USD)")
+                c1.write(f"**{money}**")
+                c2.caption("約當台幣 (TWD)")
+                c2.write(f"**{twd}**")
+                c3.caption("階段意義")
+                c3.info(desc)
+                if time_est: st.success(f"🚀 推估時間: {time_est}")
+                st.divider()
+    except:
+        st.dataframe(df_G, use_container_width=True)
+else:
+    st.info("無財富藍圖資料")
