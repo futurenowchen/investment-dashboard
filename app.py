@@ -22,10 +22,23 @@ h3 { font-size: 1.5em; }
 .stMetric > div:first-child { font-size: 1.25em !important; }
 .stMetric > div:nth-child(2) > div:first-child { font-size: 2.5em !important; }
 
+/* 側邊欄按鈕 */
 div[data-testid="stSidebar"] .stButton button {
     width: 100%; height: 45px; margin-bottom: 10px; border: 1px solid #ccc;
 }
+
+/* Tabs 內按鈕對齊 */
+div[data-testid="stVerticalBlock"] > div[data-testid="stHorizontalBlock"] > div:nth-child(2) .stButton > button,
+div[data-testid="stVerticalBlock"] > div[data-testid="stHorizontalBlock"] > div:nth-child(3) .stButton > button {
+    margin-top: 25px; height: 35px;
+}
+
 div[data-testid="stMultiSelect"] > label { display: none; }
+
+/* 進度條顏色 */
+.stProgress > div > div > div > div {
+    background-color: #007bff;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -189,22 +202,29 @@ if not df_C.empty:
     risk_txt = re.sub(r'\s+', '', risk)
     lev = safe_float(df_c.loc['槓桿倍數β', col_val]) if '槓桿倍數β' in df_c.index else 0
 
-    # 燈號樣式
+    # 🎯 風險燈號顏色邏輯 (嚴格修復)
     style = {'e':'❓', 'bg':'#6c757d', 't':'white'}
-    if '安全' in risk_txt: style = {'e':'✅', 'bg':'#28a745', 't':'white'}
-    elif '警戒' in risk_txt: style = {'e':'⚠️', 'bg':'#ffc107', 't':'black'}
-    elif '危險' in risk_txt: style = {'e':'🚨', 'bg':'#dc3545', 't':'white'}
+    if '安全' in risk_txt: 
+        style = {'e':'✅', 'bg':'#28a745', 't':'white'} # 綠
+    elif '警戒' in risk_txt or '警示' in risk_txt: 
+        style = {'e':'⚠️', 'bg':'#ffc107', 't':'black'} # 黃 (文字黑)
+    elif '危險' in risk_txt: 
+        style = {'e':'🚨', 'bg':'#dc3545', 't':'white'} # 紅
 
     c1, c2 = st.columns([2, 1])
     with c1:
+        st.subheader('核心資產')
         mask = ~df_c.index.isin(['β風險燈號', '槓桿倍數β', '短期財務目標', '短期財務目標差距', '達成進度'])
         st.dataframe(df_c[mask], use_container_width=True)
+    
     with c2:
-        st.markdown(f"<div style='background:{style['bg']};color:{style['t']};padding:10px;border-radius:8px;text-align:center;font-size:1.2em;font-weight:bold'>{style['e']} {risk}</div>", unsafe_allow_html=True)
+        st.subheader('風險指標')
+        # 風險燈號 HTML
+        st.markdown(f"<div style='background:{style['bg']};color:{style['t']};padding:15px;border-radius:10px;text-align:center;font-size:1.5em;font-weight:bold;margin-bottom:10px;'>{style['e']} {risk}</div>", unsafe_allow_html=True)
         st.metric("槓桿倍數", f"{lev:.2f}")
         
         st.markdown("---")
-        # 目標進度
+        # 🎯 財務目標視覺強化 (大字體 + 藍色進度條)
         try:
             target = safe_float(df_c.loc['短期財務目標', col_val]) if '短期財務目標' in df_c.index else 0
             gap = safe_float(df_c.loc['短期財務目標差距', col_val]) if '短期財務目標差距' in df_c.index else 0
@@ -212,9 +232,25 @@ if not df_C.empty:
             if target > 0:
                 curr = target - gap
                 pct = max(0.0, min(1.0, curr/target))
-                st.markdown(f"**短期目標** <span style='float:right;color:#007bff;font-size:1.2em'>{pct*100:.1f}%</span>", unsafe_allow_html=True)
+                
+                st.markdown(f"""
+                <div style="background-color:#f8f9fa; padding:15px; border-radius:10px; margin-bottom:10px; border:1px solid #e9ecef;">
+                    <div style="font-size:1.1em; color:#6c757d; margin-bottom:5px;">短期財務目標達成率</div>
+                    <div style="font-size:2.8em; font-weight:bold; color:#007bff; line-height:1.1;">
+                        {pct*100:.1f}%
+                    </div>
+                    <div style="margin-top:8px; font-size:0.95em; display:flex; justify-content:space-between; color:#495057;">
+                        <span>目前: <b>{fmt_int(curr)}</b></span>
+                        <span>目標: <b>{fmt_int(target)}</b></span>
+                    </div>
+                     <div style="text-align:right; font-size:0.85em; color:#dc3545; margin-top:2px;">
+                        (差 {fmt_int(gap)})
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
                 st.progress(pct)
-                st.caption(f"目前: {fmt_int(curr)} / 目標: {fmt_int(target)}")
+            else:
+                st.caption("無法計算進度")
         except: pass
 
 # 2. 持股
@@ -222,18 +258,17 @@ st.header('2. 持股分析')
 c1, c2 = st.columns([1, 1])
 with c1:
     if not df_A.empty:
-        df_A_show = df_A.copy()
+        df_show = df_A.copy()
         if st.session_state['live_prices']:
-            df_A_show['即時價'] = df_A_show['股票'].map(st.session_state['live_prices']).fillna('')
+            df_show['即時價'] = df_show['股票'].map(st.session_state['live_prices']).fillna('')
         
-        # 格式化 (修復 NameError)
         for c in ['持有數量（股）', '市值（元）', '浮動損益']: 
-            if c in df_A_show.columns: df_A_show[c] = df_A_show[c].apply(fmt_int)
+            if c in df_show.columns: df_show[c] = df_show[c].apply(fmt_int)
         for c in ['平均成本', '收盤價', '即時價']:
-            if c in df_A_show.columns: df_A_show[c] = df_A_show[c].apply(fmt_money)
+            if c in df_show.columns: df_show[c] = df_show[c].apply(fmt_money)
             
         with st.expander("持股明細", expanded=True):
-            st.dataframe(df_A_show, use_container_width=True)
+            st.dataframe(df_show, use_container_width=True)
 
 with c2:
     if not df_B.empty and '市值（元）' in df_B.columns:
@@ -303,33 +338,20 @@ with t2:
         st.dataframe(df_view, use_container_width=True, height=400)
 
 with t3:
-    # 🎯 優化每日淨值折線圖互動
     if not df_F.empty:
         df_calc = df_F.copy()
         if '實質NAV' in df_calc.columns and '日期' in df_calc.columns:
             df_calc['dt'] = pd.to_datetime(df_calc['日期'], errors='coerce')
             df_calc['nav'] = df_calc['實質NAV'].apply(safe_float)
             
-            # 確保日期排序正確以供繪圖
+            # 確保日期排序正確 (舊->新)
             df_chart = df_calc.sort_values('dt')
+            fig = px.line(df_chart, x='dt', y='nav', title='NAV 趨勢',
+                          hover_data={'dt': '|%Y-%m-%d', 'nav': ':,.0f'})
             
-            fig = px.line(
-                df_chart, 
-                x='dt', 
-                y='nav', 
-                title='NAV 趨勢',
-                # 增加懸停時的詳細資訊
-                hover_data={'dt': '|%Y-%m-%d', 'nav': ':,.0f'}
-            )
-            
-            # 優化懸停樣式：統一顯示X軸，並設定標籤
-            fig.update_traces(
-                hovertemplate='<b>日期</b>: %{x|%Y-%m-%d}<br><b>淨值</b>: %{y:,.0f}<extra></extra>'
-            )
-            fig.update_layout(
-                hovermode="x unified",  # 讓滑鼠移動時顯示一條垂直線，同時顯示該點數據
-                yaxis_tickformat=",.0f" # 讓Y軸數字有千分位
-            )
+            # 懸停優化
+            fig.update_traces(hovertemplate='<b>日期</b>: %{x|%Y-%m-%d}<br><b>淨值</b>: %{y:,.0f}<extra></extra>')
+            fig.update_layout(hovermode="x unified", yaxis_tickformat=",.0f")
             
             st.plotly_chart(fig, use_container_width=True)
             
@@ -339,9 +361,10 @@ with t3:
                 for c in ['實質NAV', '股票市值', '現金']:
                     if c in df_disp.columns: df_disp[c] = df_disp[c].apply(fmt_money)
                 st.dataframe(df_disp, use_container_width=True)
+                if not df_calc.empty:
+                    st.caption(f"📅 紀錄: {df_calc['dt'].min().date()} ~ {df_calc['dt'].max().date()}")
 
 st.markdown('---')
-# 4. 財富藍圖
 st.header('4. 財富藍圖')
 if not df_G.empty:
     try:
