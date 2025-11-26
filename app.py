@@ -219,11 +219,16 @@ if not df_C.empty:
 
     # 燈號邏輯
     colors = {'安全': ('#28a745', '✅', 'white'), '警戒': ('#ffc107', '⚠️', 'black'), '危險': ('#dc3545', '🚨', 'white')}
-    c_code, emoji, txt_col = colors.get('安全') # 預設
-    for k, v in colors.items():
-        if k in risk_clean:
-            c_code, emoji, txt_col = v
-            break
+    # 預設為灰色
+    c_code, emoji, txt_col = ('#6c757d', '❓', 'white')
+    
+    # 模糊比對風險等級
+    if '安全' in risk_clean:
+        c_code, emoji, txt_col = colors['安全']
+    elif '警戒' in risk_clean or '警示' in risk_clean: # 包含 "警示" 以防萬一
+        c_code, emoji, txt_col = colors['警戒']
+    elif '危險' in risk_clean:
+        c_code, emoji, txt_col = colors['危險']
 
     c1, c2 = st.columns([2, 1])
     with c1:
@@ -238,19 +243,43 @@ if not df_C.empty:
         st.metric("槓桿倍數 β", f"{leverage:.2f}")
         
         st.markdown("---")
-        st.write("**財務目標進度**")
-        # 目標進度計算
+        st.subheader('🎯 財富目標進度')
+        
+        # 為了增強視覺，我們將計算邏輯稍微提取出來
         try:
             t_val = safe_numeric(pd.Series([df_C_disp.loc['短期財務目標', val_col]]))[0]
             gap_val = safe_numeric(pd.Series([df_C_disp.loc['短期財務目標差距', val_col]]))[0]
             
             if t_val > 0:
                 curr = t_val - gap_val
-                prog = min(1.0, max(0.0, curr / t_val))
-                st.progress(prog)
-                st.caption(f"{curr:,.0f} / {t_val:,.0f} ({prog*100:.1f}%)")
+                pct = min(1.0, max(0.0, curr / t_val))
+                pct_display = pct * 100
+                
+                # 使用 HTML/CSS 增強視覺效果
+                st.markdown(f"""
+                <div style="margin-bottom: 5px;">
+                    <span style="font-size: 1.2em; font-weight: bold;">短期財務目標</span>
+                    <span style="float: right; font-size: 1.5em; font-weight: bold; color: #007bff;">{pct_display:.1f}%</span>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                st.progress(pct)
+                
+                # 將數字顯示得更清楚
+                st.markdown(f"""
+                <div style="display: flex; justify-content: space-between; font-size: 0.9em; color: gray;">
+                    <span>目前: <b>{curr:,.0f}</b></span>
+                    <span>目標: <b>{t_val:,.0f}</b></span>
+                </div>
+                <div style="text-align: right; font-size: 0.8em; color: #dc3545;">
+                    差距: {gap_val:,.0f}
+                </div>
+                """, unsafe_allow_html=True)
+
         except Exception:
-            st.caption("無法計算目標進度")
+            st.caption("無法計算目標進度，請檢查 '表C' 欄位")
+else:
+    st.warning('總覽數據載入失敗。')
 
 # --- 2. 持股分析 ---
 st.header('2. 持股分析')
@@ -275,15 +304,17 @@ with c1:
 
 with c2:
     if not df_B.empty and '市值（元）' in df_B.columns:
-        # 轉換數值用於繪圖
-        df_B['市值_num'] = safe_numeric(df_B['市值（元）'])
-        # 排除總資產
-        df_chart = df_B[~df_B['股票'].str.contains('總資產|Total', na=False)]
-        df_chart = df_chart[df_chart['市值_num'] > 0]
-        
-        if not df_chart.empty:
-            fig = px.pie(df_chart, values='市值_num', names='股票', title='投資組合比例')
-            st.plotly_chart(fig, use_container_width=True)
+        try:
+            # 轉換數值用於繪圖
+            df_B['市值_num'] = safe_numeric(df_B['市值（元）'])
+            # 排除總資產
+            df_chart = df_B[~df_B['股票'].str.contains('總資產|Total', na=False)]
+            df_chart = df_chart[df_chart['市值_num'] > 0]
+            
+            if not df_chart.empty:
+                fig = px.pie(df_chart, values='市值_num', names='股票', title='投資組合比例')
+                st.plotly_chart(fig, use_container_width=True)
+        except Exception: pass
 
 # --- 3. 交易紀錄 ---
 st.header('3. 交易紀錄與淨值')
@@ -300,7 +331,7 @@ with tab1:
         df_D = df_D.sort_values('日期_dt', ascending=False)
         
         cats = df_D['動作'].unique().tolist()
-        sel_cats = st.multiselect('篩選動作', cats, default=cats)
+        sel_cats = st.multiselect('篩選動作 (預設全選)', cats, default=cats, key='cf_filter')
         df_show = df_D[df_D['動作'].isin(sel_cats)]
         
         st.metric("篩選總額", f"{df_show['淨收／支出_num'].sum():,.0f}")
