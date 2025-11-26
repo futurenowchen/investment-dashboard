@@ -37,16 +37,16 @@ h3 { font-size: 1.5em; } /* 針對 st.subheader() */
 }
 
 /* 🎯 按鈕對齊修正 */
-.stButton>button {
-    width: 100%;
-    /* 調整按鈕大小以適應排版 */
-    height: 35px;
-    margin-top: 0px; 
+/* 修正側邊欄按鈕，讓兩個按鈕上下緊密排列 */
+div[data-testid="stSidebar"] div[data-testid="stVerticalBlock"] > div[data-testid="stVerticalBlock"] .stButton:first-child {
+    margin-bottom: 5px; 
 }
+
 /* 調整 Tabs 內按鈕的垂直對齊 */
 div[data-testid="stVerticalBlock"] > div[data-testid="stHorizontalBlock"] > div:nth-child(2) .stButton > button,
 div[data-testid="stVerticalBlock"] > div[data-testid="stHorizontalBlock"] > div:nth-child(3) .stButton > button {
     margin-top: 25px; /* 僅對 Tabs 內的按鈕進行垂直對齊 */
+    height: 35px;
 }
 
 /* 隱藏 Multiselect 的標籤 */
@@ -72,8 +72,9 @@ if 'live_prices' not in st.session_state:
 # 🎯 數值清潔函式 (僅用於移除 Sheets 格式化符號)
 def clean_sheets_string(s):
     """移除 Sheets 輸出中常見的逗號和貨幣符號。"""
+    # 關鍵修正：確保 s 是一個字串
     if pd.isna(s) or s is None or not isinstance(s, str):
-        return s # 如果不是字串，直接返回
+        return s 
         
     s = s.strip()
     
@@ -123,7 +124,7 @@ def load_data(sheet_name):
             data = worksheet.get_all_values() 
             df = pd.DataFrame(data[1:], columns=data[0])
             
-            # 🎯 修正：移除 df[col].apply(clean_sheets_string) 衝突行
+            # 🎯 關鍵修正：確保只在需要時清理字串，不進行全域 apply(clean_sheets_string)
             for col in df.columns:
                 # 僅對非 '股票' 類的欄位進行清理，因為股票欄位可能包含特殊字元
                 if col not in ['股票', '股票名稱', '用途／股票', '動作', '備註']:
