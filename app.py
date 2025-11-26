@@ -361,29 +361,88 @@ with t3:
                 if not df_calc.empty:
                     st.caption(f"📅 紀錄: {df_calc['dt'].min().date()} ~ {df_calc['dt'].max().date()}")
 
+
+# 4. 財富藍圖
 st.markdown('---')
 st.header('4. 財富藍圖')
 if not df_G.empty:
     try:
-        for i, row in df_G.iterrows():
-            level = row.get('階層') or row.iloc[0]
-            money = row.get('美金金額範圍') or row.iloc[1]
-            twd = row.get('約當台幣') or row.iloc[2]
-            desc = row.get('財富階層意義') or row.iloc[3]
-            time_est = row.get('以年報酬率18–20%推估所需時間') or (row.iloc[4] if len(row)>4 else "")
+        # 將 DataFrame 還原為列表，以便重新解析結構 (解決標題混在內文的問題)
+        # 包含欄位名稱的一整份資料表
+        all_rows = [df_G.columns.tolist()] + df_G.values.tolist()
+        
+        current_title = None
+        current_data = []
+        
+        for row in all_rows:
+            # 確保第一個儲存格是字串並去除空白
+            first_cell = str(row[0]).strip()
             
-            with st.container():
-                st.markdown(f"#### {level}")
-                c1, c2, c3 = st.columns([2, 2, 3])
-                c1.caption("資金範圍 (USD)")
-                c1.write(f"**{money}**")
-                c2.caption("約當台幣 (TWD)")
-                c2.write(f"**{twd}**")
-                c3.caption("階段意義")
-                c3.info(desc)
-                if time_est: st.success(f"🚀 推估時間: {time_est}")
-                st.divider()
-    except:
+            # 判斷是否為章節標題 (一、二、三、...)
+            if first_cell.startswith(('一、', '二、', '三、', '四、', '五、')):
+                # 如果已有累積的數據，先渲染上一個區塊的表格
+                if current_title:
+                    st.subheader(current_title)
+                    if len(current_data) > 0:
+                        # 第一列通常是該區塊的欄位名稱
+                        headers = current_data[0]
+                        body = current_data[1:] if len(current_data) > 1 else []
+                        
+                        # 處理可能的重複欄位名 (如有多個空欄位)
+                        unique_headers = []
+                        seen = {}
+                        for h in headers:
+                            h_str = str(h).strip()
+                            # 如果標題是空的，給它一個名字以免顯示怪異
+                            if not h_str: h_str = "-" 
+                            if h_str in seen:
+                                seen[h_str] += 1
+                                unique_headers.append(f"{h_str}_{seen[h_str]}")
+                            else:
+                                seen[h_str] = 0
+                                unique_headers.append(h_str)
+                        
+                        if body:
+                            df_section = pd.DataFrame(body, columns=unique_headers)
+                            st.dataframe(df_section, use_container_width=True, hide_index=True)
+                        else:
+                            st.info("此章節暫無詳細數據")
+                
+                # 開始新區塊：更新標題，清空數據暫存
+                current_title = first_cell
+                current_data = []
+            
+            # 如果不是標題，且該行不是全空，則加入當前區塊的數據
+            elif any(str(c).strip() for c in row):
+                if current_title is not None:
+                    current_data.append(row)
+        
+        # 渲染最後一個區塊 (迴圈結束後)
+        if current_title:
+            st.subheader(current_title)
+            if len(current_data) > 0:
+                headers = current_data[0]
+                body = current_data[1:] if len(current_data) > 1 else []
+                
+                unique_headers = []
+                seen = {}
+                for h in headers:
+                    h_str = str(h).strip()
+                    if not h_str: h_str = "-"
+                    if h_str in seen:
+                        seen[h_str] += 1
+                        unique_headers.append(f"{h_str}_{seen[h_str]}")
+                    else:
+                        seen[h_str] = 0
+                        unique_headers.append(h_str)
+
+                if body:
+                    df_section = pd.DataFrame(body, columns=unique_headers)
+                    st.dataframe(df_section, use_container_width=True, hide_index=True)
+
+    except Exception as e:
+        st.error(f"解析財富藍圖時發生錯誤: {e}")
+        # 如果解析失敗，退回顯示原始表格
         st.dataframe(df_G, use_container_width=True)
 else:
     st.info("無財富藍圖資料")
