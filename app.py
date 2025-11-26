@@ -1,9 +1,9 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-import gspread 
 from datetime import datetime
 import yfinance as yf 
+import gspread 
 import time 
 import re 
 import numpy as np # 用於處理 NaN
@@ -15,45 +15,36 @@ st.set_page_config(layout="wide")
 st.markdown("""
 <style>
 /* 增加應用程式的基礎字體大小 */
-html, body, [class*="stApp"] {
-    font-size: 16px; 
-}
+html, body, [class*="stApp"] { font-size: 16px; }
 /* 增加標題 (Header) 的字體大小 */
 h1 { font-size: 2.5em; } 
-h2 { font-size: 1.8em; } /* 針對 st.header() */
-h3 { font-size: 1.5em; } /* 針對 st.subheader() */
+h2 { font-size: 1.8em; } 
+h3 { font-size: 1.5em; } 
 
 /* 增加 Streamlit 內建數據表格的文字大小 */
-.stDataFrame {
-    font-size: 1.0em; 
-}
+.stDataFrame { font-size: 1.0em; } 
 
 /* 針對 st.metric 的標籤和數值進行放大 */
-.stMetric > div:first-child {
-    font-size: 1.25em !important; /* Metric label 標籤 */
-}
-.stMetric > div:nth-child(2) > div:first-child {
-    font-size: 2.5em !important; /* Metric value 數值 */
-}
+.stMetric > div:first-child { font-size: 1.25em !important; }
+.stMetric > div:nth-child(2) > div:first-child { font-size: 2.5em !important; }
 
 /* 🎯 按鈕對齊修正 */
 /* 修正側邊欄按鈕，讓兩個按鈕上下緊密排列 */
-div[data-testid="stSidebar"] div[data-testid="stVerticalBlock"] > div[data-testid="stVerticalBlock"] .stButton:first-child {
-    margin-bottom: 5px; 
+div[data-testid="stSidebar"] div[data-testid="stVerticalBlock"] .stButton button {
+    width: 100%;
+    height: 40px; 
+    margin-bottom: 5px; /* 增加按鈕間距 */
 }
 
 /* 調整 Tabs 內按鈕的垂直對齊 */
 div[data-testid="stVerticalBlock"] > div[data-testid="stHorizontalBlock"] > div:nth-child(2) .stButton > button,
 div[data-testid="stVerticalBlock"] > div[data-testid="stHorizontalBlock"] > div:nth-child(3) .stButton > button {
-    margin-top: 25px; /* 僅對 Tabs 內的按鈕進行垂直對齊 */
+    margin-top: 25px; 
     height: 35px;
 }
 
 /* 隱藏 Multiselect 的標籤 */
-div[data-testid="stMultiSelect"] > label {
-    display: none; 
-}
-
+div[data-testid="stMultiSelect"] > label { display: none; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -69,19 +60,19 @@ if 'live_prices' not in st.session_state:
     st.session_state['live_prices'] = {} 
 
 
-# 🎯 數值清潔函式 (僅用於移除 Sheets 格式化符號)
-def clean_sheets_string(s):
-    """移除 Sheets 輸出中常見的逗號和貨幣符號。"""
-    if s is None or not isinstance(s, str):
-        return s 
+# 🎯 數值清潔函式 (修正：改為處理單一字串，避免 Series 錯誤)
+def clean_sheets_value(value):
+    """清理單一字串中的格式化符號 (逗號, 萬, % 等)"""
+    if value is None or not isinstance(value, str):
+        return value
         
-    s = s.strip()
+    s = value.strip()
     
     # 移除千分位逗號, 貨幣符號, 百分號, 中文計量單位
     s = s.replace(',', '').replace('$', '').replace('¥', '').replace('%', '').replace('萬', '0000')
     s = s.replace('(', '-').replace(')', '') # 處理負數格式 (括號)
     
-    return s if s else None
+    return s if s else np.nan
 
 # 🎯 新增連線工具函式
 def get_gsheet_connection():
@@ -123,19 +114,16 @@ def load_data(sheet_name):
             data = worksheet.get_all_values() 
             df = pd.DataFrame(data[1:], columns=data[0])
             
-            # 🎯 關鍵修正：確保只對字串欄位進行清理，避免對 Series 產生衝突
-            for col in df.columns:
-                # 僅對非 '股票' 類的欄位進行清理
-                if col not in ['股票', '股票名稱', '用途／股票', '動作', '備註']:
-                    # 修正：確保應用程式只在字串列上調用清理函式
-                    df[col] = df[col].astype(str).apply(clean_sheets_string) 
+            # 🎯 關鍵修正：底層的、更安全的數據清理 (使用 applymap 處理每個儲存格)
+            # 這能保證傳遞給清理函式的永遠是單一值，避免 ValueError
+            df = df.applymap(clean_sheets_value) 
 
             # 修正重複欄位名稱
             if len(df.columns) != len(set(df.columns)):
                 new_cols = []
                 seen = {}
                 for col in df.columns:
-                    clean_col = "Unnamed" if col == "" else col
+                    clean_col = "Unnamed" if col is None or col == "" else col
                     if clean_col in seen:
                         seen[clean_col] += 1
                         new_cols.append(f"{clean_col}_{seen[clean_col]}")
