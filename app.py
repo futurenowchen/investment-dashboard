@@ -60,7 +60,7 @@ if 'live_prices' not in st.session_state:
     st.session_state['live_prices'] = {} 
 
 
-# 🎯 數值清潔函式 (僅用於移除 Sheets 格式化符號)
+# 🎯 數值清潔函式 (最安全、不依賴 Pandas 結構)
 def clean_sheets_value(value):
     """清理單一字串中的格式化符號 (逗號, 萬, % 等)"""
     if value is None or not isinstance(value, str):
@@ -73,10 +73,6 @@ def clean_sheets_value(value):
     s = s.replace('(', '-').replace(')', '') # 處理負數格式 (括號)
     
     return s if s else np.nan
-
-# 🎯 向量化清理函式 (使用 numpy.vectorize 實現對整個 DataFrame 的安全操作)
-# 我們需要它來在 app 主體中安全地處理 Series
-vectorized_cleaner = np.vectorize(clean_sheets_value)
 
 # 🎯 新增連線工具函式
 def get_gsheet_connection():
@@ -118,7 +114,8 @@ def load_data(sheet_name):
             data = worksheet.get_all_values() 
             df = pd.DataFrame(data[1:], columns=data[0])
             
-            # 🎯 最終修正：只進行欄位重命名，所有清理在應用程序主體中執行
+            # 🎯 關鍵修正：只進行欄位重命名，不進行任何清理
+            # 避免對 '表G_財富藍圖' 中的文字欄位造成 ValueError
             
             # 修正重複欄位名稱
             if len(df.columns) != len(set(df.columns)):
