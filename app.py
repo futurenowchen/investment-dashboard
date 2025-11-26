@@ -3,8 +3,9 @@ import pandas as pd
 import plotly.express as px
 import gspread 
 from datetime import datetime
-import yfinance as yf # 🎯 用於獲取股票價格
-import time # 用於處理 yfinance 的限速
+import yfinance as yf 
+import time 
+import re # 用於字串清理
 
 # 設置頁面配置，使用寬佈局以容納更多數據
 st.set_page_config(layout="wide")
@@ -37,7 +38,9 @@ h3 { font-size: 1.5em; } /* 針對 st.subheader() */
 /* 🎯 按鈕與 Multiselect 緊湊對齊 */
 .stButton>button {
     width: 100%;
-    margin-top: 0px; 
+    /* 關鍵 CSS 修正 */
+    margin-top: 25px; 
+    height: 35px;
 }
 
 /* 隱藏 Multiselect 的標籤 (在 HTML 級別隱藏，配合 label_visibility="collapsed" 使用) */
@@ -57,12 +60,26 @@ SHEET_URL = "https://docs.google.com/spreadsheets/d/1_JBI1pKWv9aw8dGCj89y9yNgoWG
 
 # 初始化 Session State 來儲存即時價格
 if 'live_prices' not in st.session_state:
-    st.session_state['live_prices'] = {} # {ticker: price}
+    st.session_state['live_prices'] = {} 
 
+# 🎯 數值清潔函式 (修正: 移除所有非數字和非小數點的字元)
+def clean_numeric_string(s):
+    """移除所有可能干擾轉換的非數字符號 (e.g., , $ % 萬)"""
+    if pd.isna(s) or s is None or s == '':
+        return None
+        
+    s = str(s).strip()
+    
+    # 移除千分位逗號, 貨幣符號, 百分號, 中文計量單位
+    s = s.replace(',', '').replace('$', '').replace('¥', '').replace('%', '').replace('萬', '0000')
+    s = s.replace('(', '-').replace(')', '') # 處理負數格式 (括號)
+    
+    return s if s else None
 
 # 🎯 新增連線工具函式
 def get_gsheet_connection():
     """建立並返回 gspread 客戶端和試算表物件。"""
+    # 這裡的邏輯與之前保持一致
     try:
         if "gsheets" not in st.secrets.get("connections", {}):
             st.error("Secrets 錯誤：找不到 [connections.gsheets] 區塊。請檢查您的 Streamlit Cloud Secrets 配置。")
@@ -100,6 +117,12 @@ def load_data(sheet_name):
             data = worksheet.get_all_values() 
             df = pd.DataFrame(data[1:], columns=data[0])
             
+            # 🎯 關鍵修正：對所有欄位進行預先清理 (解決 ValueError: 逗號/符號問題)
+            for col in df.columns:
+                # 僅對非 '股票' 類的數值/日期欄位進行清理
+                if col not in ['股票', '股票名稱', '用途／股票', '動作', '備註']:
+                    df[col] = df[col].apply(clean_numeric_string) 
+
             # 修正重複欄位名稱
             if len(df.columns) != len(set(df.columns)):
                 new_cols = []
@@ -114,7 +137,7 @@ def load_data(sheet_name):
                         new_cols.append(clean_col)
                 df.columns = new_cols
 
-            df = df.fillna(0)
+            df = df.fillna('') # 填充空字串，防止 NaN 混淆
             return df
         
         # --- 錯誤處理 ---
@@ -122,7 +145,6 @@ def load_data(sheet_name):
             st.error(f"GSheets 連線失敗：找不到工作表 '{sheet_name}'。請檢查名稱是否完全正確。")
             return pd.DataFrame()
         except Exception as e:
-            # 已經在 get_gsheet_connection 處理了連線錯誤，這裡主要處理工作表錯誤
             st.error(f"⚠️ 讀取工作表 '{sheet_name}' 發生未知錯誤。")
             st.exception(e) 
             return pd.DataFrame() 
@@ -134,7 +156,7 @@ def fetch_current_prices(valid_tickers):
     
     st.info(f"正在從 yfinance 獲取 {len(valid_tickers)} 支股票的最新收盤價...")
     price_updates = {}
-    time.sleep(1) # 增加延遲，避免 yfinance 拒絕請求
+    time.sleep(1) 
 
     try:
         data = yf.download(valid_tickers, period='1d', interval='1d', progress=False)
@@ -186,9 +208,10 @@ def write_prices_to_sheet(df_A, price_updates):
 
         # 🎯 寫入邏輯：如果找到價格，則使用價格，否則寫入空字串或 0
         if price is not None:
-            write_values.append([f"{price:,.2f}"]) # 格式化為字串，保留兩位小數並加上千分位
+            # 寫入 Sheet 時，使用字串，讓 Sheet 執行自己的格式化
+            write_values.append([f"{price}"]) 
         else:
-            write_values.append(['']) # 未找到價格則留空
+            write_values.append(['']) 
 
     # --- 步驟 2: 執行寫入 ---
     
@@ -205,25 +228,6 @@ def write_prices_to_sheet(df_A, price_updates):
     
     return True
 
-# 🎯 數值清潔函式 (修正: 移除所有非數字和非小數點的字元)
-def clean_numeric_string(s):
-    """移除所有非數字、非小數點、非負號的字元，以便於轉換為 float。"""
-    if pd.isna(s) or s is None:
-        return None
-        
-    s = str(s).strip()
-    
-    # 將所有非 (數字, 負號, 小數點) 的字元替換為空字串
-    import re
-    cleaned_s = re.sub(r'[^\d.-]', '', s) 
-
-    # 處理多個負號或多個小數點的情況
-    if cleaned_s.count('-') > 1 or cleaned_s.count('.') > 1:
-        # 如果格式異常，則返回 None 讓 pd.to_numeric 處理
-        return None
-    
-    return cleaned_s if cleaned_s else None
-
 # --- 應用程式主體開始 ---
 
 st.title('💰 投資組合儀表板')
@@ -237,6 +241,10 @@ df_E = load_data('表E_已實現損益')
 df_F = load_data('表F_每日淨值')
 df_G = load_data('表G_財富藍圖') 
 
+# 🎯 金額和日期格式化樣式 (確保在全域或主體開始前被定義)
+DATE_FORMAT = lambda x: x.strftime('%Y-%m-%d') if pd.notnull(x) and isinstance(x, datetime) else str(x)
+CURRENCY_FORMAT = lambda x: f"{x:,.2f}" if pd.notnull(x) and pd.to_numeric(x, errors='coerce') is not None else str(x)
+
 # ---------------------------------------------------
 # 0. 股價即時更新區塊 (位於側邊欄)
 # ---------------------------------------------------
@@ -244,8 +252,8 @@ st.sidebar.header("🎯 股價數據管理")
 
 # 🎯 新增：手動清除快取並重新載入 Sheets 數據的功能
 if st.sidebar.button("🔄 立即重新載入 Sheets 數據"):
-    load_data.clear() # 清除所有 Sheets 數據的快取
-    st.session_state['live_prices'] = {} # 清除即時價格，下次股價按鈕會重新獲取
+    load_data.clear() 
+    st.session_state['live_prices'] = {} 
     st.sidebar.success("✅ 所有 Sheets 快取已清除，正在重新載入數據...")
     st.rerun() 
     
@@ -258,22 +266,18 @@ if st.sidebar.button("💾 獲取即時價格並寫入 Sheets", type="primary"):
     if df_A.empty or '股票' not in df_A.columns:
         st.sidebar.error("❌ '表A_持股總表' 數據不完整或沒有 '股票' 欄位。")
     else:
-        # 獲取所有唯一的股票代碼，並過濾掉空值
         tickers = df_A['股票'].astype(str).str.strip().unique()
         valid_tickers = [t for t in tickers if t]
         
         if not valid_tickers:
             st.sidebar.warning("工作表中沒有找到有效的股票代碼。")
         else:
-            # 步驟 1: 呼叫新的獲取價格函式
             price_updates = fetch_current_prices(valid_tickers)
-            st.session_state['live_prices'] = price_updates # 更新 session state 供儀表板即時顯示
+            st.session_state['live_prices'] = price_updates 
             
             if price_updates:
-                # 步驟 2: 將價格寫回 Google Sheets
                 if write_prices_to_sheet(df_A, price_updates):
                     st.sidebar.success(f"🎉 成功寫入 {len(price_updates)} 筆最新價格到 Sheets！")
-                    # 步驟 3: 清除 load_data 快取並重新載入頁面
                     load_data.clear()
                     st.rerun() 
                 else:
@@ -304,29 +308,28 @@ if not df_C.empty:
         series_C = df_C_display.iloc[:, 0]
 
     # 提取關鍵值
-    # 🎯 修正 1: 確保從 Sheets 讀取的字串先去頭尾空白，再進行判斷
     risk_level_raw = str(series_C.get('β風險燈號', 'N/A'))
-    risk_level = risk_level_raw.strip() 
+    import re
+    risk_level = re.sub(r'\s+', '', risk_level_raw) 
     leverage = str(series_C.get('槓桿倍數β', 'N/A'))
 
-    # 🎯 修正 2: 風險等級顏色判斷邏輯，使用更強烈的顏色代碼
+    # 風險等級顏色判斷邏輯
     color_mapping = {
-        '安全': {'color': 'green', 'emoji': '✅', 'bg': '#28a745', 'text': 'white'}, # 綠色
-        '警示': {'color': 'yellow', 'emoji': '⚠️', 'bg': '#ffc107', 'text': 'black'}, # 黃色 (文字黑)
-        '危險': {'color': 'red', 'emoji': '🚨', 'bg': '#dc3545', 'text': 'white'}, # 紅色
+        '安全': {'emoji': '✅', 'bg': '#28a745', 'text': 'white'}, 
+        '警戒': {'emoji': '⚠️', 'bg': '#ffc107', 'text': 'black'}, 
+        '危險': {'emoji': '🚨', 'bg': '#dc3545', 'text': 'white'}, 
     }
-
+    
     if '安全' in risk_level:
         style = color_mapping['安全']
-    elif '警示' in risk_level:
-        style = color_mapping['警示']
+    elif '警戒' in risk_level:
+        style = color_mapping['警戒']
     elif '危險' in risk_level:
         style = color_mapping['危險']
     else:
-        # 未知狀態使用預設灰色
         style = {'color': 'gray', 'emoji': '❓', 'bg': '#6c757d', 'text': 'white'}
         
-    final_risk_level_text = risk_level if risk_level != 'N/A' else '未知'
+    final_risk_level_text = risk_level_raw if risk_level != 'N/A' else '未知'
     
     col_summary, col_indicators = st.columns([2, 1])
     
@@ -334,11 +337,9 @@ if not df_C.empty:
     with col_summary:
         st.subheader('核心資產數據')
         
-        # 排除掉單獨作為指標顯示的行，以及用於目標追蹤的行
         exclude_cols = ['β風險燈號', '槓桿倍數β', '短期財務目標', '短期財務目標差距', '達成進度']
         df_display = df_C_display[~df_C_display.index.isin(exclude_cols)].reset_index()
         
-        # 確保最終欄位名稱是 ['項目', '數值']
         df_display.columns = ['項目', '數值']
 
         st.dataframe(
@@ -383,12 +384,9 @@ if not df_C.empty:
         target_value_raw = series_C.get(target_name_key)
         gap_value_raw = series_C.get(gap_name_key)
         
-        # 🎯 步驟 2: 清潔字串並轉換為數字 (解決Sheets公式格式化問題)
-        cleaned_target_raw = clean_numeric_string(target_value_raw)
-        cleaned_gap_raw = clean_numeric_string(gap_value_raw)
-        
-        target = pd.to_numeric(cleaned_target_raw, errors='coerce')
-        gap = pd.to_numeric(cleaned_gap_raw, errors='coerce')
+        # 🎯 步驟 2: 轉換為數字 (已在 load_data 中清理字串)
+        target = pd.to_numeric(target_value_raw, errors='coerce')
+        gap = pd.to_numeric(gap_value_raw, errors='coerce')
         
         # 僅在兩個值都是有效數字且目標大於0時顯示進度條
         if not pd.isna(target) and not pd.isna(gap) and target > 0:
@@ -400,21 +398,19 @@ if not df_C.empty:
             st.progress(min(1.0, percent_achieved)) # st.progress 接受 0.0 到 1.0
             st.caption(f"目前累積: {current:,.0f} / 目標: {target:,.0f} (差距: {gap:,.0f})")
             
-            # 顯示達成進度的數值（如果存在於 C 表中）
             progress_val = series_C.get('達成進度')
             if progress_val:
                 st.caption(f"Sheets 中計算的達成進度: {progress_val}")
                 
         else:
-            # 增強錯誤提示：確認實際存在哪些 key
             missing_info = []
             if pd.isna(target) or target <= 0:
-                missing_info.append(f"'{target_name_key}' (Target Value: {target_value_raw} -> Cleaned: {cleaned_target_raw})")
+                missing_info.append(f"'{target_name_key}'")
             if pd.isna(gap):
-                missing_info.append(f"'{gap_name_key}' (Gap Value: {gap_value_raw} -> Cleaned: {cleaned_gap_raw})")
+                missing_info.append(f"'{gap_name_key}'")
                 
             if missing_info:
-                st.caption(f"⚠️ **無法計算進度：** 請檢查 '表C_總覽' 中以下項目的原始數值是否正確（例如有無中文符號或千分位符號未被正確清除）。")
+                st.caption(f"⚠️ **無法計算進度：** 請檢查 '表C_總覽' 中以下項目的原始數值是否正確。")
             else:
                  st.caption(f"請在 '表C_總覽' 中定義 '{target_name_key}' 和 '{gap_name_key}' 欄位及其數值。")
         
@@ -432,12 +428,9 @@ with col_data:
     if not df_A.empty:
         df_display = df_A.copy()
         
-        # 🎯 檢查 Session State 中是否有最新的即時價格
-        # 如果使用者點擊了寫入按鈕，live_prices 會被更新，並在此顯示
         if st.session_state['live_prices']:
             df_display['即時收盤價'] = df_display['股票'].astype(str).str.strip().map(st.session_state['live_prices']).fillna('')
             
-            # 將新的欄位移到前面，提高可見度
             cols = ['即時收盤價'] + [col for col in df_display.columns if col != '即時收盤價']
             df_display = df_display[cols]
             
@@ -447,6 +440,7 @@ with col_data:
 with col_chart:
     if not df_B.empty and '市值（元）' in df_B.columns and '股票' in df_B.columns:
         try:
+            # 必須先清理和轉換為數字才能計算
             df_B['市值（元）'] = pd.to_numeric(df_B['市值（元）'], errors='coerce')
             
             # 排除 '總資產' 或類似的總結行
@@ -476,9 +470,9 @@ with col_chart:
 # ---------------------------------------------------
 st.header('3. 交易紀錄與淨值追蹤')
 
-# 🎯 金額和日期格式化樣式 (確保在全域或主體開始前被定義)
-DATE_FORMAT = lambda x: x.strftime('%Y-%m-%d') if pd.notnull(x) else ""
-CURRENCY_FORMAT = lambda x: f"{x:,.2f}" if pd.notnull(x) and pd.to_numeric(x, errors='coerce') is not None else str(x)
+# 🎯 金額和日期格式化樣式 (因為 load_data 已經清理字串，這裡可以直接用)
+DATE_FORMAT = lambda x: x.strftime('%Y-%m-%d') if pd.notnull(x) and isinstance(x, datetime) else str(x)
+CURRENCY_FORMAT = lambda x: f"{pd.to_numeric(x, errors='coerce'):,.2f}" if pd.notnull(x) and pd.to_numeric(x, errors='coerce') is not None else str(x)
 
 
 # 步驟：定義分頁 Tab
@@ -491,9 +485,12 @@ with tab1:
         
         df_D_clean = df_D.copy()
         
+        # 🎯 檢查必要欄位
         if '淨收／支出' in df_D_clean.columns and '動作' in df_D_clean.columns and '日期' in df_D_clean.columns:
             try:
+                # 數據轉換：淨收／支出可以轉換為數字
                 df_D_clean['淨收／支出'] = pd.to_numeric(df_D_clean['淨收／支出'], errors='coerce').fillna(0)
+                # 處理日期欄位並排序
                 df_D_clean['日期'] = pd.to_datetime(df_D_clean['日期'], errors='coerce')
                 df_D_clean = df_D_clean.sort_values(by='日期', ascending=False)
                 
@@ -528,8 +525,9 @@ with tab1:
                         '日期': DATE_FORMAT,
                         '淨收／支出': CURRENCY_FORMAT,
                         '累積現金': CURRENCY_FORMAT,
-                        '數量': lambda x: f"{x:,.0f}" if pd.notnull(x) and pd.to_numeric(x, errors='coerce') is not None else str(x),
-                        '成交價': lambda x: f"{x:,.2f}" if pd.notnull(x) and pd.to_numeric(x, errors='coerce') is not None else str(x),
+                        # 數量和成交價使用一般數值格式，避免過度清理的字串無法轉換
+                        '數量': lambda x: f"{pd.to_numeric(x, errors='coerce'):,.0f}" if pd.notnull(x) and pd.to_numeric(x, errors='coerce') is not None else str(x),
+                        '成交價': lambda x: f"{pd.to_numeric(x, errors='coerce'):,.2f}" if pd.notnull(x) and pd.to_numeric(x, errors='coerce') is not None else str(x),
                     }), 
                     use_container_width=True, 
                     hide_index=True,
@@ -538,7 +536,9 @@ with tab1:
                 
                 # 🎯 底部標註
                 if not df_D_filtered.empty:
-                    st.caption(f"📝 數據範圍：**{df_D_filtered['日期'].min().strftime('%Y-%m-%d')}** ~ **{df_D_filtered['日期'].max().strftime('%Y-%m-%d')}**，總筆數 **{len(df_D_filtered)}** 筆。")
+                    date_min = df_D_filtered['日期'].min()
+                    date_max = df_D_filtered['日期'].max()
+                    st.caption(f"📝 數據範圍：**{date_min.strftime('%Y-%m-%d')}** ~ **{date_max.strftime('%Y-%m-%d')}**，總筆數 **{len(df_D_filtered)}** 筆。")
                 else:
                      st.caption("📝 數據範圍：無交易紀錄符合篩選條件。")
 
@@ -560,8 +560,10 @@ with tab2:
         
         df_E_clean = df_E.copy()
         
+        # 檢查必要欄位
         if '已實現損益' in df_E_clean.columns and '股票' in df_E_clean.columns:
             try:
+                # 數據轉換：將損益欄位轉換為數字
                 df_E_clean['已實現損益'] = pd.to_numeric(df_E_clean['已實現損益'], errors='coerce').fillna(0)
                 
                 date_col_name = None
@@ -595,7 +597,7 @@ with tab2:
                     )
                     
                 with col_btn_all:
-                    # 🎯 調整按鈕的 CSS 確保垂直對齊
+                    # 🎯 關鍵修正：確保 CSS 樣式作用於 Multiselect 後的按鈕
                     st.markdown('<style>div.stButton button { margin-top: 25px; height: 35px; }</style>', unsafe_allow_html=True)
                     if st.button("全選", key='btn_pnl_all'):
                         st.session_state['pnl_filter'] = all_stocks
@@ -610,7 +612,7 @@ with tab2:
                     
                 total_pnl = df_E_filtered['已實現損益'].sum()
                 
-                # 顯示統計數據 (略) ... 保持不變
+                # 顯示統計數據
                 pnl_col1, pnl_col2 = st.columns(2)
                 with pnl_col1:
                     st.metric(
@@ -630,8 +632,8 @@ with tab2:
                         '已實現損益': CURRENCY_FORMAT,
                         '投資成本': CURRENCY_FORMAT,
                         '帳面收入': CURRENCY_FORMAT,
-                        '成交均價': lambda x: f"{x:,.2f}" if pd.notnull(x) and pd.to_numeric(x, errors='coerce') is not None else str(x),
-                        '成交股數': lambda x: f"{x:,.0f}" if pd.notnull(x) and pd.to_numeric(x, errors='coerce') is not None else str(x),
+                        '成交均價': lambda x: f"{pd.to_numeric(x, errors='coerce'):,.2f}" if pd.notnull(x) and pd.to_numeric(x, errors='coerce') is not None else str(x),
+                        '成交股數': lambda x: f"{pd.to_numeric(x, errors='coerce'):,.0f}" if pd.notnull(x) and pd.to_numeric(x, errors='coerce') is not None else str(x),
                     }), 
                     use_container_width=True, 
                     hide_index=True,
@@ -640,7 +642,9 @@ with tab2:
                 
                 # 🎯 底部標註
                 if not df_E_filtered.empty:
-                    st.caption(f"📝 數據範圍：**{df_E_filtered[date_col_name].min().strftime('%Y-%m-%d')}** ~ **{df_E_filtered[date_col_name].max().strftime('%Y-%m-%d')}**，總筆數 **{len(df_E_filtered)}** 筆。")
+                    date_min = df_E_filtered[date_col_name].min()
+                    date_max = df_E_filtered[date_col_name].max()
+                    st.caption(f"📝 數據範圍：**{date_min.strftime('%Y-%m-%d')}** ~ **{date_max.strftime('%Y-%m-%d')}**，總筆數 **{len(df_E_filtered)}** 筆。")
                 else:
                     st.caption("📝 數據範圍：無交易紀錄符合篩選條件。")
 
@@ -691,7 +695,7 @@ with tab3:
                         '實質NAV': CURRENCY_FORMAT,
                         '股票市值': CURRENCY_FORMAT,
                         '現金': CURRENCY_FORMAT,
-                        '槓桿倍數β': lambda x: f"{x:.2f}" if pd.notnull(x) and pd.to_numeric(x, errors='coerce') is not None else str(x),
+                        '槓桿倍數β': lambda x: f"{pd.to_numeric(x, errors='coerce'):.2f}" if pd.notnull(x) and pd.to_numeric(x, errors='coerce') is not None else str(x),
                     }), 
                     use_container_width=True,
                     height=300 # 增加表格高度
@@ -699,31 +703,17 @@ with tab3:
                 
                 # 🎯 底部標註
                 if not df_subset.empty:
-                    st.caption(f"📝 數據範圍：**{df_subset['日期'].min().strftime('%Y-%m-%d')}** ~ **{df_subset['日期'].max().strftime('%Y-%m-%d')}**，共 **{len(df_subset)}** 筆歷史紀錄。")
+                    date_min = df_subset['日期'].min()
+                    date_max = df_subset['日期'].max()
+                    st.caption(f"📝 數據範圍：**{date_min.strftime('%Y-%m-%d')}** ~ **{date_max.strftime('%Y-%m-%d')}**，共 **{len(df_subset)}** 筆歷史紀錄。")
                 else:
                     st.caption("📝 數據範圍：無歷史淨值紀錄。")
 
             
-        except Exception:
-            st.warning('無法繪製每日淨值圖，請檢查 "表F_每日淨值" 數據格式。')
+        except Exception as e:
+            # 🎯 關鍵修正：將錯誤輸出，幫助您診斷是哪個欄位轉換失敗
+            st.warning(f'無法繪製每日淨值圖或顯示表格，請檢查 "表F_每日淨值" 數據格式。錯誤: {e}')
+            st.dataframe(df_F, use_container_width=True)
+            st.caption("⚠️ 表F 原始資料如下，請檢查是否有非數字或非日期的內容。")
     else:
         st.warning('每日淨值數據載入失敗，請檢查 "表F_每日淨值"。')
-        
-# ---------------------------------------------------
-# 4. 資料輸入與管理 (僅保留財富藍圖的展示)
-# ---------------------------------------------------
-st.header('4. 資料管理')
-
-# 使用 Tab 來分開不同的輸入類型
-tab_blueprint = st.tabs(['財富藍圖 (表G)'])[0] 
-
-with tab_blueprint:
-    if not df_G.empty:
-        st.subheader('財富藍圖 (表G_財富藍圖)')
-        st.caption('此表格數據來自 Google Sheets "表G_財富藍圖"。')
-        st.dataframe(df_G, use_container_width=True)
-        st.caption('💡 **注意:** 目標進度條目前是使用 **表C_總覽** 的數據來計算。')
-    else:
-        st.warning('財富藍圖數據載入失敗，請檢查 "表G_財富藍圖"。')
-
-
