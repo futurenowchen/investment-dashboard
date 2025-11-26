@@ -60,7 +60,7 @@ if 'live_prices' not in st.session_state:
     st.session_state['live_prices'] = {} 
 
 
-# 🎯 數值清潔函式 (修正：改為處理單一字串，避免 Series 錯誤)
+# 🎯 數值清潔函式 (最原始、最安全，不依賴 Pandas 結構)
 def clean_sheets_value(value):
     """清理單一字串中的格式化符號 (逗號, 萬, % 等)"""
     if value is None or not isinstance(value, str):
@@ -73,9 +73,6 @@ def clean_sheets_value(value):
     s = s.replace('(', '-').replace(')', '') # 處理負數格式 (括號)
     
     return s if s else np.nan
-
-# 🎯 向量化清理函式 (使用 numpy.vectorize 實現對整個 DataFrame 的安全操作)
-vectorized_cleaner = np.vectorize(clean_sheets_value)
 
 # 🎯 新增連線工具函式
 def get_gsheet_connection():
@@ -117,10 +114,7 @@ def load_data(sheet_name):
             data = worksheet.get_all_values() 
             df = pd.DataFrame(data[1:], columns=data[0])
             
-            # 🎯 關鍵修正：只對特定的數值相關欄位進行清理 (繞過表G的錯誤)
-            
-            # 確定需要清理的數值相關欄位 (排除明顯的非數值欄位)
-            # 這比之前安全得多，不會嘗試清理像 '一、財富階層對照表...' 這種文字
+            # 🎯 關鍵修正：智能逐欄清理 (只清理數值相關欄位) - 解決 ValueError
             numeric_cols = [
                 '持有數量（股）', '平均成本', '收盤價', '市值（元）', '浮動損益', '淨收／支出', 
                 '累積現金', '實質NAV', '股票市值', '現金', '借款餘額', '總資產市值', 
@@ -130,8 +124,8 @@ def load_data(sheet_name):
             
             for col in df.columns:
                 if col in numeric_cols:
-                    # 應用向量化清理器到字串格式的欄位
-                    df[col] = df[col].astype(str).apply(vectorized_cleaner)
+                    # 🎯 最終修正：對整欄應用字串處理，然後替換 NaN
+                    df[col] = df[col].astype(str).apply(clean_sheets_value)
                 
             # 修正重複欄位名稱
             if len(df.columns) != len(set(df.columns)):
