@@ -69,11 +69,11 @@ if 'live_prices' not in st.session_state:
     st.session_state['live_prices'] = {} 
 
 
-# 🎯 數值清潔函式 (僅用於移除 Sheets 格式化符號)
+# 🎯 數值清潔函式 (已修正 pd.isna 對 Series 的衝突)
 def clean_sheets_string(s):
     """移除 Sheets 輸出中常見的逗號和貨幣符號。"""
-    # 關鍵修正：確保 s 是一個字串
-    if pd.isna(s) or s is None or not isinstance(s, str):
+    # 🎯 關鍵修正：確保 s 是一個字串，避免對整個 Series 進行判斷
+    if s is None or not isinstance(s, str):
         return s 
         
     s = s.strip()
@@ -124,11 +124,12 @@ def load_data(sheet_name):
             data = worksheet.get_all_values() 
             df = pd.DataFrame(data[1:], columns=data[0])
             
-            # 🎯 關鍵修正：確保只在需要時清理字串，不進行全域 apply(clean_sheets_string)
+            # 🎯 關鍵修正：確保只對字串欄位進行清理，避免對 Series 產生衝突
             for col in df.columns:
-                # 僅對非 '股票' 類的欄位進行清理，因為股票欄位可能包含特殊字元
+                # 僅對非 '股票' 類的欄位進行清理
                 if col not in ['股票', '股票名稱', '用途／股票', '動作', '備註']:
-                    df[col] = df[col].apply(clean_sheets_string) 
+                    # 修正：確保應用程式只在字串列上調用清理函式
+                    df[col] = df[col].astype(str).apply(clean_sheets_string) 
 
             # 修正重複欄位名稱
             if len(df.columns) != len(set(df.columns)):
