@@ -479,6 +479,11 @@ st.header('3. 交易紀錄與淨值追蹤')
 # 步驟：定義分頁 Tab
 tab1, tab2, tab3 = st.tabs(['現金流', '已實現損益', '每日淨值'])
 
+# 🎯 金額和日期格式化樣式
+DATE_FORMAT = lambda x: x.strftime('%Y-%m-%d') if pd.notnull(x) else ""
+CURRENCY_FORMAT = lambda x: f"{x:,.2f}" if pd.notnull(x) else "-"
+
+
 with tab1:
     # 🎯 現金流表格篩選與統計 - 預設為全選
     if not df_D.empty:
@@ -488,31 +493,20 @@ with tab1:
         
         if '淨收／支出' in df_D_clean.columns and '動作' in df_D_clean.columns and '日期' in df_D_clean.columns:
             try:
-                # 數據清洗：將金額轉換為數字
                 df_D_clean['淨收／支出'] = pd.to_numeric(df_D_clean['淨收／支出'], errors='coerce').fillna(0)
-                # 🎯 處理日期欄位並排序
                 df_D_clean['日期'] = pd.to_datetime(df_D_clean['日期'], errors='coerce')
-                # 排序：依日期由新到舊
                 df_D_clean = df_D_clean.sort_values(by='日期', ascending=False)
                 
-                # 篩選器
                 available_categories = df_D_clean['動作'].astype(str).unique().tolist()
-                
-                # 修正: 將預設選項設為所有類別 (全選)
                 selected_categories = st.multiselect(
                     '篩選動作 (預設全選)', 
                     options=available_categories, 
-                    default=available_categories, # 預設為全選
+                    default=available_categories, 
                     key='cashflow_filter'
                 )
                 
-                # 執行篩選
-                if selected_categories:
-                    df_D_filtered = df_D_clean[df_D_clean['動作'].isin(selected_categories)] 
-                else:
-                    df_D_filtered = pd.DataFrame() 
+                df_D_filtered = df_D_clean[df_D_clean['動作'].isin(selected_categories)] if selected_categories else pd.DataFrame()
                     
-                # 總計計算
                 total_cash_flow = df_D_filtered['淨收／支出'].sum()
                 
                 # 顯示統計數據
@@ -528,8 +522,21 @@ with tab1:
                 with cash_col2:
                     st.markdown(f"**總交易筆數：** {len(df_D_filtered)}")
                 
-                # 顯示篩選後的表格 (包含 用途／股票 欄位)
-                st.dataframe(df_D_filtered, use_container_width=True, hide_index=True)
+                # 🎯 表格顯示與格式化
+                st.dataframe(
+                    df_D_filtered.style.format({
+                        '日期': DATE_FORMAT,
+                        '淨收／支出': CURRENCY_FORMAT,
+                        '累積現金': CURRENCY_FORMAT,
+                        # 假設成交價是數字
+                        '成交價': lambda x: f"{x:,.2f}" if pd.notnull(x) and pd.to_numeric(x, errors='coerce') is not None else str(x),
+                    }), 
+                    use_container_width=True, 
+                    hide_index=True,
+                    height=300 # 增加表格高度
+                )
+                st.caption(f"📝 數據範圍：{df_D_filtered['日期'].min().strftime('%Y-%m-%d')} ~ {df_D_filtered['日期'].max().strftime('%Y-%m-%d')}，總筆數 {len(df_D_filtered)} 筆。")
+
 
             except Exception as e:
                 st.error(f"現金流篩選發生錯誤：{e}")
@@ -548,50 +555,44 @@ with tab2:
         
         df_E_clean = df_E.copy()
         
-        # 🎯 修正 1: 移除對 '平倉日期' 的依賴。如果 Sheets 中沒有日期欄位，則無法排序。
         if '已實現損益' in df_E_clean.columns and '股票' in df_E_clean.columns:
             try:
-                # 數據清洗：將損益欄位轉換為數字
                 df_E_clean['已實現損益'] = pd.to_numeric(df_E_clean['已實現損益'], errors='coerce').fillna(0)
                 
-                # 檢查是否有日期欄位，並進行排序
                 date_col_name = None
                 for col in df_E_clean.columns:
-                    # 寬鬆檢查，只要欄位名稱包含 '日期' 即可
                     if '日期' in col: 
                         date_col_name = col
                         break
 
                 if date_col_name:
-                    # 處理日期欄位並排序 (由新到舊)
                     df_E_clean[date_col_name] = pd.to_datetime(df_E_clean[date_col_name], errors='coerce')
                     df_E_clean = df_E_clean.sort_values(by=date_col_name, ascending=False)
-                # 否則，保持原始順序
+                
+                # 篩選器配置 (略) ... 保持不變
 
-                # 篩選器
                 all_stocks = df_E_clean['股票'].astype(str).unique().tolist()
                 
-                # 🎯 步驟 1: 初始化 session state，確保預設為全選
                 if 'pnl_filter' not in st.session_state:
                     st.session_state['pnl_filter'] = all_stocks 
 
-                # 🎯 步驟 2: 配置 multiselect 及其快速控制按鈕 
+                # 🎯 按鈕與 Multiselect 布局
                 col_multiselect, col_btn_all, col_btn_none = st.columns([4, 1, 1])
                 
-                # 使用 markdown 作為標籤
                 with col_multiselect:
                     st.markdown("##### 篩選股票 (可多選，支援搜尋)")
                 
-                # Multiselect 放在標籤欄位下方，並使用 label_visibility="collapsed" 確保緊湊
                 with col_multiselect:
                     selected_stocks = st.multiselect(
                         'Pnl Filter',
                         options=all_stocks, 
                         key='pnl_filter',
-                        label_visibility="collapsed" # 關鍵修正：隱藏標籤，避免佔用垂直空間
+                        label_visibility="collapsed"
                     )
                     
                 with col_btn_all:
+                    # 🎯 調整按鈕的 CSS 確保垂直對齊
+                    st.markdown('<style>div.stButton button { margin-top: 25px; }</style>', unsafe_allow_html=True)
                     if st.button("全選", key='btn_pnl_all'):
                         st.session_state['pnl_filter'] = all_stocks
                         st.rerun()
@@ -601,16 +602,11 @@ with tab2:
                         st.session_state['pnl_filter'] = [] 
                         st.rerun()
 
-                # 執行篩選
-                if selected_stocks:
-                    df_E_filtered = df_E_clean[df_E_clean['股票'].isin(selected_stocks)]
-                else:
-                    df_E_filtered = pd.DataFrame()
+                df_E_filtered = df_E_clean[df_E_clean['股票'].isin(st.session_state['pnl_filter'])] if st.session_state['pnl_filter'] else pd.DataFrame()
                     
-                # 總報酬計算
                 total_pnl = df_E_filtered['已實現損益'].sum()
                 
-                # 顯示統計數據
+                # 顯示統計數據 (略) ... 保持不變
                 pnl_col1, pnl_col2 = st.columns(2)
                 with pnl_col1:
                     st.metric(
@@ -623,13 +619,24 @@ with tab2:
                 with pnl_col2:
                     st.markdown(f"**總交易筆數：** {len(df_E_filtered)}")
 
+                # 🎯 表格顯示與格式化
+                st.dataframe(
+                    df_E_filtered.style.format({
+                        date_col_name: DATE_FORMAT,
+                        '已實現損益': CURRENCY_FORMAT,
+                        '投資成本': CURRENCY_FORMAT,
+                        '帳面收入': CURRENCY_FORMAT,
+                        # 假設成交均價是數字
+                        '成交均價': lambda x: f"{x:,.2f}" if pd.notnull(x) and pd.to_numeric(x, errors='coerce') is not None else str(x),
+                    }), 
+                    use_container_width=True, 
+                    hide_index=True,
+                    height=300 # 增加表格高度
+                )
+                st.caption(f"📝 數據範圍：共有 {len(df_E_filtered)} 筆已實現交易。")
 
-                # 顯示篩選後的表格
-                # 🎯 保持排序或原始順序
-                st.dataframe(df_E_filtered, use_container_width=True, hide_index=True)
 
             except Exception as e:
-                # 🎯 將錯誤輸出到控制台，以便於調試
                 st.error(f"已實現損益篩選發生錯誤：{e}")
                 st.dataframe(df_E, use_container_width=True)
         else:
@@ -660,27 +667,35 @@ with tab3:
             )
             st.plotly_chart(fig_nav, use_container_width=True)
             
-            # 在圖表下方新增數據表格
+            # 🎯 在圖表下方新增數據表格
             with st.expander('查看每日淨值詳細數據', expanded=False):
-                # 僅顯示需要的欄位，避免過多欄位擠壓顯示空間
                 cols_to_display = ['日期', '實質NAV', '股票市值', '現金', '槓桿倍數β']
                 
-                # 過濾並確保欄位存在，否則顯示全部
                 df_subset = df_F_cleaned.loc[:, df_F_cleaned.columns.isin(cols_to_display)]
                 if df_subset.empty:
                      df_subset = df_F
-                     
-                # 🎯 已排序過的表格 (新到舊)
-                st.dataframe(df_subset, use_container_width=True)
+                
+                # 🎯 表格顯示與格式化
+                st.dataframe(
+                    df_subset.style.format({
+                        '日期': DATE_FORMAT,
+                        '實質NAV': CURRENCY_FORMAT,
+                        '股票市值': CURRENCY_FORMAT,
+                        '現金': CURRENCY_FORMAT,
+                        # 槓桿倍數通常是比例，保留兩位小數即可
+                        '槓桿倍數β': lambda x: f"{x:.2f}" if pd.notnull(x) and pd.to_numeric(x, errors='coerce') is not None else str(x),
+                    }), 
+                    use_container_width=True,
+                    height=300 # 增加表格高度
+                )
+                st.caption(f"📝 數據範圍：共 {len(df_subset)} 筆歷史紀錄。")
+
             
         except Exception:
             st.warning('無法繪製每日淨值圖，請檢查 "表F_每日淨值" 數據格式。')
     else:
         st.warning('每日淨值數據載入失敗，請檢查 "表F_每日淨值"。')
-
-
-st.markdown('---')
-
+        
 # ---------------------------------------------------
 # 4. 資料輸入與管理 (僅保留財富藍圖的展示)
 # ---------------------------------------------------
@@ -697,3 +712,4 @@ with tab_blueprint:
         st.caption('💡 **注意:** 目標進度條目前是使用 **表C_總覽** 的數據來計算。')
     else:
         st.warning('財富藍圖數據載入失敗，請檢查 "表G_財富藍圖"。')
+
