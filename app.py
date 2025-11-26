@@ -476,13 +476,13 @@ with col_chart:
 # ---------------------------------------------------
 st.header('3. 交易紀錄與淨值追蹤')
 
+# 🎯 金額和日期格式化樣式 (確保在全域或主體開始前被定義)
+DATE_FORMAT = lambda x: x.strftime('%Y-%m-%d') if pd.notnull(x) else ""
+CURRENCY_FORMAT = lambda x: f"{x:,.2f}" if pd.notnull(x) and pd.to_numeric(x, errors='coerce') is not None else str(x)
+
+
 # 步驟：定義分頁 Tab
 tab1, tab2, tab3 = st.tabs(['現金流', '已實現損益', '每日淨值'])
-
-# 🎯 金額和日期格式化樣式
-DATE_FORMAT = lambda x: x.strftime('%Y-%m-%d') if pd.notnull(x) else ""
-CURRENCY_FORMAT = lambda x: f"{x:,.2f}" if pd.notnull(x) else "-"
-
 
 with tab1:
     # 🎯 現金流表格篩選與統計 - 預設為全選
@@ -528,14 +528,19 @@ with tab1:
                         '日期': DATE_FORMAT,
                         '淨收／支出': CURRENCY_FORMAT,
                         '累積現金': CURRENCY_FORMAT,
-                        # 假設成交價是數字
+                        '數量': lambda x: f"{x:,.0f}" if pd.notnull(x) and pd.to_numeric(x, errors='coerce') is not None else str(x),
                         '成交價': lambda x: f"{x:,.2f}" if pd.notnull(x) and pd.to_numeric(x, errors='coerce') is not None else str(x),
                     }), 
                     use_container_width=True, 
                     hide_index=True,
                     height=300 # 增加表格高度
                 )
-                st.caption(f"📝 數據範圍：{df_D_filtered['日期'].min().strftime('%Y-%m-%d')} ~ {df_D_filtered['日期'].max().strftime('%Y-%m-%d')}，總筆數 {len(df_D_filtered)} 筆。")
+                
+                # 🎯 底部標註
+                if not df_D_filtered.empty:
+                    st.caption(f"📝 數據範圍：**{df_D_filtered['日期'].min().strftime('%Y-%m-%d')}** ~ **{df_D_filtered['日期'].max().strftime('%Y-%m-%d')}**，總筆數 **{len(df_D_filtered)}** 筆。")
+                else:
+                     st.caption("📝 數據範圍：無交易紀錄符合篩選條件。")
 
 
             except Exception as e:
@@ -569,8 +574,7 @@ with tab2:
                     df_E_clean[date_col_name] = pd.to_datetime(df_E_clean[date_col_name], errors='coerce')
                     df_E_clean = df_E_clean.sort_values(by=date_col_name, ascending=False)
                 
-                # 篩選器配置 (略) ... 保持不變
-
+                # 篩選器
                 all_stocks = df_E_clean['股票'].astype(str).unique().tolist()
                 
                 if 'pnl_filter' not in st.session_state:
@@ -592,7 +596,7 @@ with tab2:
                     
                 with col_btn_all:
                     # 🎯 調整按鈕的 CSS 確保垂直對齊
-                    st.markdown('<style>div.stButton button { margin-top: 25px; }</style>', unsafe_allow_html=True)
+                    st.markdown('<style>div.stButton button { margin-top: 25px; height: 35px; }</style>', unsafe_allow_html=True)
                     if st.button("全選", key='btn_pnl_all'):
                         st.session_state['pnl_filter'] = all_stocks
                         st.rerun()
@@ -626,14 +630,19 @@ with tab2:
                         '已實現損益': CURRENCY_FORMAT,
                         '投資成本': CURRENCY_FORMAT,
                         '帳面收入': CURRENCY_FORMAT,
-                        # 假設成交均價是數字
                         '成交均價': lambda x: f"{x:,.2f}" if pd.notnull(x) and pd.to_numeric(x, errors='coerce') is not None else str(x),
+                        '成交股數': lambda x: f"{x:,.0f}" if pd.notnull(x) and pd.to_numeric(x, errors='coerce') is not None else str(x),
                     }), 
                     use_container_width=True, 
                     hide_index=True,
                     height=300 # 增加表格高度
                 )
-                st.caption(f"📝 數據範圍：共有 {len(df_E_filtered)} 筆已實現交易。")
+                
+                # 🎯 底部標註
+                if not df_E_filtered.empty:
+                    st.caption(f"📝 數據範圍：**{df_E_filtered[date_col_name].min().strftime('%Y-%m-%d')}** ~ **{df_E_filtered[date_col_name].max().strftime('%Y-%m-%d')}**，總筆數 **{len(df_E_filtered)}** 筆。")
+                else:
+                    st.caption("📝 數據範圍：無交易紀錄符合篩選條件。")
 
 
             except Exception as e:
@@ -674,7 +683,7 @@ with tab3:
                 df_subset = df_F_cleaned.loc[:, df_F_cleaned.columns.isin(cols_to_display)]
                 if df_subset.empty:
                      df_subset = df_F
-                
+                     
                 # 🎯 表格顯示與格式化
                 st.dataframe(
                     df_subset.style.format({
@@ -682,13 +691,17 @@ with tab3:
                         '實質NAV': CURRENCY_FORMAT,
                         '股票市值': CURRENCY_FORMAT,
                         '現金': CURRENCY_FORMAT,
-                        # 槓桿倍數通常是比例，保留兩位小數即可
                         '槓桿倍數β': lambda x: f"{x:.2f}" if pd.notnull(x) and pd.to_numeric(x, errors='coerce') is not None else str(x),
                     }), 
                     use_container_width=True,
                     height=300 # 增加表格高度
                 )
-                st.caption(f"📝 數據範圍：共 {len(df_subset)} 筆歷史紀錄。")
+                
+                # 🎯 底部標註
+                if not df_subset.empty:
+                    st.caption(f"📝 數據範圍：**{df_subset['日期'].min().strftime('%Y-%m-%d')}** ~ **{df_subset['日期'].max().strftime('%Y-%m-%d')}**，共 **{len(df_subset)}** 筆歷史紀錄。")
+                else:
+                    st.caption("📝 數據範圍：無歷史淨值紀錄。")
 
             
         except Exception:
@@ -712,4 +725,5 @@ with tab_blueprint:
         st.caption('💡 **注意:** 目標進度條目前是使用 **表C_總覽** 的數據來計算。')
     else:
         st.warning('財富藍圖數據載入失敗，請檢查 "表G_財富藍圖"。')
+
 
