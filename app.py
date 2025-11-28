@@ -89,11 +89,20 @@ def generate_daily_report(df_A, df_C, df_D, df_E, df_F):
             
             for key, label in items.items():
                 val = df_c.loc[key, col] if key in df_c.index else "N/A"
+                
                 if key == '達成進度':
                     v_float = safe_float(val)
-                    val_str = f"{v_float*100:.2f}%"
+                    # 修正：智能判斷百分比
+                    # 如果原始值含有 %，或數值 > 1.0 (且不是極小的小數誤差)，通常代表已經是百分比數值 (如 74.5)
+                    # 如果是小數 (如 0.745)，則 x 100
+                    if isinstance(val, str) and '%' in val:
+                         val_str = f"{v_float:.2f}%"
+                    elif v_float <= 1.0:
+                         val_str = f"{v_float*100:.2f}%"
+                    else:
+                         val_str = f"{v_float:.2f}%"
+
                 elif key == '槓桿倍數β':
-                     # 如果您的β是倍數(例如1.12)，這裡直接顯示；如果是百分比則調整
                      val_str = f"{safe_float(val):.2f}" 
                 elif key in ['股票市值', '現金', '借款餘額', '總資產市值', '實質NAV', '短期財務目標']:
                      val_str = fmt_int(val)
@@ -110,11 +119,10 @@ def generate_daily_report(df_A, df_C, df_D, df_E, df_F):
     if not df_A.empty:
         for _, row in df_A.iterrows():
             ticker = str(row.get('股票', '')).strip()
-            name = str(row.get('股票名稱', '')) # 如果沒有股票名稱欄位，則留空
+            name = str(row.get('股票名稱', '')) 
             qty = fmt_int(row.get('持有數量（股）', 0))
             avg = fmt_money(row.get('平均成本', 0))
             
-            # 優先使用即時收盤價 (如果有的話)
             live_p = st.session_state['live_prices'].get(ticker)
             close = f"{live_p:.2f}" if live_p else fmt_money(row.get('收盤價', 0))
             
@@ -130,22 +138,24 @@ def generate_daily_report(df_A, df_C, df_D, df_E, df_F):
         try:
             df_f = df_F.copy()
             df_f['dt'] = pd.to_datetime(df_f['日期'], errors='coerce')
-            # 排序：日期大到小 (最新的在上面) -> 取前3 -> 再轉回小到大顯示 (符合人類閱讀習慣 25->26->27)
             last_3 = df_f.sort_values('dt', ascending=False).head(3).sort_values('dt', ascending=True)
             
             for _, row in last_3.iterrows():
                 d = fmt_date(row['日期'])
                 stk_v = fmt_int(row.get('股票市值', 0))
-                tot = fmt_int(row.get('總資產', 0)) # 或 總資產市值
+                tot = fmt_int(row.get('總資產', 0)) 
                 cash = fmt_int(row.get('現金', 0))
                 chg = fmt_int(row.get('當日淨變動', 0))
                 nav = fmt_int(row.get('實質NAV', 0))
                 
-                # 處理 Beta (如果是小數轉百分比)
                 beta_val = safe_float(row.get('槓桿倍數β', 0))
-                # 假設原始數據是 1.12 這種倍數，顯示為 112%? 或是直接顯示倍數
-                # 依照您的範例是 112.50%，所以假設原始是 1.125
-                beta = f"{beta_val*100:.2f}%" 
+                # Beta 通常顯示為倍數 (如 1.12)，若要百分比則 x100
+                # 這裡假設您想要倍數顯示，如圖例 112.21% 則是百分比
+                # 依照您的範例 "β112.21%"
+                if beta_val <= 2.0: # 假設小於2是倍數 (例如 1.12)
+                     beta = f"{beta_val*100:.2f}%"
+                else: # 已經是百分比數值 (例如 112)
+                     beta = f"{beta_val:.2f}%"
                 
                 lines.append(f"{d} 股票市值{stk_v} 總資產{tot} 現金{cash} 當日淨變動{chg} NAV{nav} β{beta}")
         except: lines.append("表F解析錯誤")
@@ -156,28 +166,22 @@ def generate_daily_report(df_A, df_C, df_D, df_E, df_F):
         try:
             df_d = df_D.copy()
             df_d['dt'] = pd.to_datetime(df_d['日期'], errors='coerce')
-            # 取最新的3筆，並按時間正序排列 (或倒序，看您習慣)
-            # 這裡依照您的範例，似乎是混和的，我們先按時間正序顯示最近的
             last_d = df_d.sort_values('dt', ascending=False).head(3).sort_values('dt', ascending=True)
             
             for _, row in last_d.iterrows():
                 d = fmt_date(row['日期'])
                 item = str(row.get('用途／股票', ''))
                 act = str(row.get('動作', ''))
-                # 格式化金額 (+/-)
                 amt_raw = safe_float(row.get('淨收／支出', 0))
                 amt_sign = f"+{fmt_int(amt_raw)}" if amt_raw > 0 else fmt_int(amt_raw)
                 
-                # 只有買賣有股數和價格
                 qty = f"{fmt_int(row.get('數量', 0))}股" if safe_float(row.get('數量',0)) > 0 else ""
                 price = fmt_money(row.get('成交價', 0)) if safe_float(row.get('成交價',0)) > 0 else ""
                 
                 note = str(row.get('備註', '')).strip()
                 note_str = f"備註：{note}" if note else ""
                 
-                # 組合字串
                 line = f"{d} {item} {act} {qty} {price} 金額{amt_sign} {note_str}"
-                # 清理多餘空格
                 lines.append(re.sub(' +', ' ', line).strip())
         except: lines.append("表D解析錯誤")
 
@@ -186,7 +190,6 @@ def generate_daily_report(df_A, df_C, df_D, df_E, df_F):
     if not df_E.empty:
         try:
             df_e = df_E.copy()
-            # 尋找日期欄位
             d_col = next((c for c in df_e.columns if '日期' in c), None)
             if d_col:
                 df_e['dt'] = pd.to_datetime(df_e[d_col], errors='coerce')
