@@ -43,7 +43,7 @@ SHEET_URL = "https://docs.google.com/spreadsheets/d/1_JBI1pKWv9aw8dGCj89y9yNgoWG
 if 'live_prices' not in st.session_state:
     st.session_state['live_prices'] = {} 
 
-# --- 核心工具函式：安全數值轉換 ---
+# --- 核心工具函式 ---
 def safe_float(value):
     """將各種髒亂的資料轉為浮點數 (計算用)"""
     if pd.isna(value) or value == '' or value is None: return 0.0
@@ -54,23 +54,158 @@ def safe_float(value):
         return float(s)
     except: return 0.0
 
-# --- 顯示格式化函式 (轉為字串) ---
 def fmt_money(value):
-    """轉為 '1,234.56'"""
     val = safe_float(value)
     return f"{val:,.2f}" if val != 0 else "0.00"
 
 def fmt_int(value):
-    """轉為 '1,234'"""
     val = safe_float(value)
     return f"{val:,.0f}" if val != 0 else "0"
 
 def fmt_date(value):
-    """轉為 'YYYY-MM-DD'"""
-    try:
-        return pd.to_datetime(value).strftime('%Y-%m-%d')
-    except:
-        return str(value)
+    try: return pd.to_datetime(value).strftime('%Y-%m-%d')
+    except: return str(value)
+
+# --- 文字日報生成函式 ---
+def generate_daily_report(df_A, df_C, df_D, df_E, df_F):
+    lines = []
+    today = datetime.now().strftime('%Y/%m/%d')
+    lines.append(f"[日期] {today}\n")
+
+    # --- 表C 總覽 ---
+    lines.append("[表C]")
+    if not df_C.empty:
+        try:
+            df_c = df_C.copy()
+            df_c.set_index(df_c.columns[0], inplace=True)
+            col = df_c.columns[0]
+            
+            # 提取關鍵欄位
+            items = {
+                '股票市值': '股票市值', '現金': '現金', '借款餘額': '借款餘額', 
+                '總資產市值': '總資產市值', '實質NAV': '實質NAV', '槓桿倍數β': '槓桿倍數β',
+                '短期財務目標': '短期財務目標', '達成進度': '達成進度'
+            }
+            
+            for key, label in items.items():
+                val = df_c.loc[key, col] if key in df_c.index else "N/A"
+                if key == '達成進度':
+                    v_float = safe_float(val)
+                    val_str = f"{v_float*100:.2f}%"
+                elif key == '槓桿倍數β':
+                     # 如果您的β是倍數(例如1.12)，這裡直接顯示；如果是百分比則調整
+                     val_str = f"{safe_float(val):.2f}" 
+                elif key in ['股票市值', '現金', '借款餘額', '總資產市值', '實質NAV', '短期財務目標']:
+                     val_str = fmt_int(val)
+                else:
+                     val_str = str(val)
+                lines.append(f"{label}：{val_str}")
+        except Exception as e:
+            lines.append(f"讀取表C錯誤: {e}")
+    else:
+        lines.append("無數據")
+
+    # --- 表A 持股 ---
+    lines.append("\n[表A]")
+    if not df_A.empty:
+        for _, row in df_A.iterrows():
+            ticker = str(row.get('股票', '')).strip()
+            name = str(row.get('股票名稱', '')) # 如果沒有股票名稱欄位，則留空
+            qty = fmt_int(row.get('持有數量（股）', 0))
+            avg = fmt_money(row.get('平均成本', 0))
+            
+            # 優先使用即時收盤價 (如果有的話)
+            live_p = st.session_state['live_prices'].get(ticker)
+            close = f"{live_p:.2f}" if live_p else fmt_money(row.get('收盤價', 0))
+            
+            mkt = fmt_int(row.get('市值（元）', 0))
+            note = str(row.get('備註', '')).strip()
+            
+            line = f"{ticker} {name} {qty}股 均價{avg} 收盤{close} 市值{mkt} {note}"
+            lines.append(line.strip())
+
+    # --- 表F 最近3日 (每日淨值) ---
+    lines.append("\n[表F_最近3日]")
+    if not df_F.empty and '日期' in df_F.columns:
+        try:
+            df_f = df_F.copy()
+            df_f['dt'] = pd.to_datetime(df_f['日期'], errors='coerce')
+            # 排序：日期大到小 (最新的在上面) -> 取前3 -> 再轉回小到大顯示 (符合人類閱讀習慣 25->26->27)
+            last_3 = df_f.sort_values('dt', ascending=False).head(3).sort_values('dt', ascending=True)
+            
+            for _, row in last_3.iterrows():
+                d = fmt_date(row['日期'])
+                stk_v = fmt_int(row.get('股票市值', 0))
+                tot = fmt_int(row.get('總資產', 0)) # 或 總資產市值
+                cash = fmt_int(row.get('現金', 0))
+                chg = fmt_int(row.get('當日淨變動', 0))
+                nav = fmt_int(row.get('實質NAV', 0))
+                
+                # 處理 Beta (如果是小數轉百分比)
+                beta_val = safe_float(row.get('槓桿倍數β', 0))
+                # 假設原始數據是 1.12 這種倍數，顯示為 112%? 或是直接顯示倍數
+                # 依照您的範例是 112.50%，所以假設原始是 1.125
+                beta = f"{beta_val*100:.2f}%" 
+                
+                lines.append(f"{d} 股票市值{stk_v} 總資產{tot} 現金{cash} 當日淨變動{chg} NAV{nav} β{beta}")
+        except: lines.append("表F解析錯誤")
+
+    # --- 表D 近3日交易 ---
+    lines.append("\n[表D_近3日交易]")
+    if not df_D.empty and '日期' in df_D.columns:
+        try:
+            df_d = df_D.copy()
+            df_d['dt'] = pd.to_datetime(df_d['日期'], errors='coerce')
+            # 取最新的3筆，並按時間正序排列 (或倒序，看您習慣)
+            # 這裡依照您的範例，似乎是混和的，我們先按時間正序顯示最近的
+            last_d = df_d.sort_values('dt', ascending=False).head(3).sort_values('dt', ascending=True)
+            
+            for _, row in last_d.iterrows():
+                d = fmt_date(row['日期'])
+                item = str(row.get('用途／股票', ''))
+                act = str(row.get('動作', ''))
+                # 格式化金額 (+/-)
+                amt_raw = safe_float(row.get('淨收／支出', 0))
+                amt_sign = f"+{fmt_int(amt_raw)}" if amt_raw > 0 else fmt_int(amt_raw)
+                
+                # 只有買賣有股數和價格
+                qty = f"{fmt_int(row.get('數量', 0))}股" if safe_float(row.get('數量',0)) > 0 else ""
+                price = fmt_money(row.get('成交價', 0)) if safe_float(row.get('成交價',0)) > 0 else ""
+                
+                note = str(row.get('備註', '')).strip()
+                note_str = f"備註：{note}" if note else ""
+                
+                # 組合字串
+                line = f"{d} {item} {act} {qty} {price} 金額{amt_sign} {note_str}"
+                # 清理多餘空格
+                lines.append(re.sub(' +', ' ', line).strip())
+        except: lines.append("表D解析錯誤")
+
+    # --- 表E 近3日已實現損益 ---
+    lines.append("\n[表E_近3日已實現損益]")
+    if not df_E.empty:
+        try:
+            df_e = df_E.copy()
+            # 尋找日期欄位
+            d_col = next((c for c in df_e.columns if '日期' in c), None)
+            if d_col:
+                df_e['dt'] = pd.to_datetime(df_e[d_col], errors='coerce')
+                last_e = df_e.sort_values('dt', ascending=False).head(3).sort_values('dt', ascending=True)
+                
+                for _, row in last_e.iterrows():
+                    d = fmt_date(row[d_col])
+                    stk = str(row.get('股票', ''))
+                    pnl_raw = safe_float(row.get('已實現損益', 0))
+                    pnl_sign = f"+{fmt_int(pnl_raw)}" if pnl_raw > 0 else fmt_int(pnl_raw)
+                    qty = fmt_int(row.get('成交股數', 0))
+                    note = str(row.get('備註', '')).strip()
+                    
+                    lines.append(f"{d} {stk} {qty}股 損益{pnl_sign} {note}")
+            else:
+                lines.append("無日期欄位可排序")
+        except: lines.append("表E解析錯誤")
+
+    return "\n".join(lines)
 
 # 連線工具
 def get_gsheet_connection():
@@ -183,6 +318,15 @@ if st.sidebar.button("💾 更新股價至 Google Sheets", type="primary"):
             st.sidebar.success("更新成功")
             load_data.clear()
             st.rerun()
+
+# 新增日報按鈕
+st.sidebar.markdown("---")
+st.sidebar.subheader("📋 匯出功能")
+if st.sidebar.button("產生文字日報"):
+    report_text = generate_daily_report(df_A, df_C, df_D, df_E, df_F)
+    # 使用 code block 方便複製，或 text_area
+    st.sidebar.code(report_text, language="text")
+
 st.sidebar.markdown("---")
 
 # 1. 總覽
@@ -279,7 +423,6 @@ t1, t2, t3 = st.tabs(['現金流', '已實現損益', '每日淨值'])
 with t1:
     if not df_D.empty:
         df_calc = df_D.copy()
-        # 排序
         if '日期' in df_calc.columns:
             df_calc['dt'] = pd.to_datetime(df_calc['日期'], errors='coerce')
             df_calc.sort_values('dt', ascending=False, inplace=True)
@@ -293,7 +436,6 @@ with t1:
         c_a.metric("篩選淨額", fmt_money(total))
         c_b.markdown(f"**筆數：** {len(df_calc)}")
         
-        # 顯示用 (轉字串)
         df_view = df_calc.drop(columns=['dt'], errors='ignore').copy()
         if '日期' in df_view.columns: df_view['日期'] = df_view['日期'].apply(fmt_date)
         for c in ['淨收／支出', '累積現金', '成交價']:
@@ -361,88 +503,59 @@ with t3:
                 if not df_calc.empty:
                     st.caption(f"📅 紀錄: {df_calc['dt'].min().date()} ~ {df_calc['dt'].max().date()}")
 
-
-# 4. 財富藍圖
 st.markdown('---')
+# 4. 財富藍圖
 st.header('4. 財富藍圖')
 if not df_G.empty:
     try:
         # 將 DataFrame 還原為列表，以便重新解析結構 (解決標題混在內文的問題)
-        # 包含欄位名稱的一整份資料表
         all_rows = [df_G.columns.tolist()] + df_G.values.tolist()
-        
         current_title = None
         current_data = []
         
         for row in all_rows:
-            # 確保第一個儲存格是字串並去除空白
             first_cell = str(row[0]).strip()
-            
-            # 判斷是否為章節標題 (一、二、三、...)
             if first_cell.startswith(('一、', '二、', '三、', '四、', '五、')):
-                # 如果已有累積的數據，先渲染上一個區塊的表格
                 if current_title:
                     st.subheader(current_title)
                     if len(current_data) > 0:
-                        # 第一列通常是該區塊的欄位名稱
                         headers = current_data[0]
                         body = current_data[1:] if len(current_data) > 1 else []
-                        
-                        # 處理可能的重複欄位名 (如有多個空欄位)
-                        unique_headers = []
+                        # 重複欄位處理
+                        u_heads = []
                         seen = {}
                         for h in headers:
                             h_str = str(h).strip()
-                            # 如果標題是空的，給它一個名字以免顯示怪異
                             if not h_str: h_str = "-" 
-                            if h_str in seen:
-                                seen[h_str] += 1
-                                unique_headers.append(f"{h_str}_{seen[h_str]}")
-                            else:
-                                seen[h_str] = 0
-                                unique_headers.append(h_str)
+                            if h_str in seen: seen[h_str] += 1; u_heads.append(f"{h_str}_{seen[h_str]}")
+                            else: seen[h_str] = 0; u_heads.append(h_str)
                         
                         if body:
-                            df_section = pd.DataFrame(body, columns=unique_headers)
-                            st.dataframe(df_section, use_container_width=True, hide_index=True)
+                            st.dataframe(pd.DataFrame(body, columns=u_heads), use_container_width=True, hide_index=True)
                         else:
-                            st.info("此章節暫無詳細數據")
-                
-                # 開始新區塊：更新標題，清空數據暫存
+                            st.info("無詳細數據")
                 current_title = first_cell
                 current_data = []
-            
-            # 如果不是標題，且該行不是全空，則加入當前區塊的數據
             elif any(str(c).strip() for c in row):
                 if current_title is not None:
                     current_data.append(row)
         
-        # 渲染最後一個區塊 (迴圈結束後)
+        # Render last
         if current_title:
             st.subheader(current_title)
             if len(current_data) > 0:
                 headers = current_data[0]
                 body = current_data[1:] if len(current_data) > 1 else []
-                
-                unique_headers = []
+                u_heads = []
                 seen = {}
                 for h in headers:
                     h_str = str(h).strip()
-                    if not h_str: h_str = "-"
-                    if h_str in seen:
-                        seen[h_str] += 1
-                        unique_headers.append(f"{h_str}_{seen[h_str]}")
-                    else:
-                        seen[h_str] = 0
-                        unique_headers.append(h_str)
-
+                    if not h_str: h_str = "-" 
+                    if h_str in seen: seen[h_str] += 1; u_heads.append(f"{h_str}_{seen[h_str]}")
+                    else: seen[h_str] = 0; u_heads.append(h_str)
                 if body:
-                    df_section = pd.DataFrame(body, columns=unique_headers)
-                    st.dataframe(df_section, use_container_width=True, hide_index=True)
-
-    except Exception as e:
-        st.error(f"解析財富藍圖時發生錯誤: {e}")
-        # 如果解析失敗，退回顯示原始表格
+                    st.dataframe(pd.DataFrame(body, columns=u_heads), use_container_width=True, hide_index=True)
+    except:
         st.dataframe(df_G, use_container_width=True)
 else:
     st.info("無財富藍圖資料")
