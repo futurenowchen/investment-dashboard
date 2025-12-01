@@ -34,7 +34,7 @@ div[data-testid="stSidebar"] .stButton button {
 /* 隱藏 Multiselect 的標籤 */
 div[data-testid="stMultiSelect"] > label { display: none; }
 
-/* 🎯 風險燈號與指令 CSS */
+/* 🎯 風險燈號專用 CSS */
 .risk-indicator {
     padding: 15px;
     border-radius: 8px;
@@ -43,14 +43,6 @@ div[data-testid="stMultiSelect"] > label { display: none; }
     font-weight: bold;
     margin-bottom: 10px;
     border: 2px solid;
-}
-.instruction-box {
-    background-color: #e8f4f8;
-    border-left: 5px solid #007bff;
-    padding: 15px;
-    border-radius: 5px;
-    margin-top: 10px;
-    color: #0f5132;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -132,7 +124,7 @@ def generate_daily_report(df_A, df_C, df_D, df_E, df_F, df_H):
     else:
         lines.append("無數據")
     
-    # --- 表H 每日判斷 (修正：確保日報也有此欄位) ---
+    # --- 表H 每日判斷 ---
     lines.append("\n[表H_每日判斷]")
     if not df_H.empty:
         try:
@@ -221,7 +213,6 @@ def generate_daily_report(df_A, df_C, df_D, df_E, df_F, df_H):
                     price = fmt_money(price_val) if price_val > 0 else ""
                     note = str(row.get('備註', '')).strip()
                     note_str = f"備註：{note}" if note else ""
-                    
                     line = f"{d} {item} {act} {qty} {price} {amt_str} {note_str}"
                     lines.append(re.sub(' +', ' ', line).strip())
             else:
@@ -246,7 +237,6 @@ def generate_daily_report(df_A, df_C, df_D, df_E, df_F, df_H):
                     pnl_str = f"損益{pnl_sign}"
                     qty = fmt_int(row.get('成交股數', 0)) + "股"
                     note = str(row.get('備註', '')).strip()
-                    
                     lines.append(f"{d} {stk} {qty} {pnl_str} {note}")
             else:
                 lines.append("無日期欄位可排序")
@@ -285,7 +275,6 @@ def load_data(sheet_name):
             if not data: return pd.DataFrame()
             
             df = pd.DataFrame(data[1:], columns=data[0])
-            # 處理重複欄位名
             if len(df.columns) != len(set(df.columns)):
                 cols = []
                 count = {}
@@ -349,7 +338,7 @@ df_D = load_data('表D_現金流')
 df_E = load_data('表E_已實現損益')
 df_F = load_data('表F_每日淨值')
 df_G = load_data('表G_財富藍圖') 
-df_H = load_data('表H_每日判斷') # 🎯 確保這裡讀取表H
+df_H = load_data('表H_每日判斷')
 
 # 側邊欄
 st.sidebar.header("🎯 數據管理")
@@ -367,11 +356,9 @@ if st.sidebar.button("💾 更新股價至 Google Sheets", type="primary"):
             load_data.clear()
             st.rerun()
 
-# 新增日報按鈕
 st.sidebar.markdown("---")
 st.sidebar.subheader("📋 匯出功能")
 if st.sidebar.button("產生文字日報"):
-    # 🎯 修正：傳遞 df_H 給函式
     report_text = generate_daily_report(df_A, df_C, df_D, df_E, df_F, df_H)
     st.sidebar.text_area("複製下方內容：", value=report_text, height=400)
 
@@ -407,24 +394,21 @@ if not df_C.empty:
         st.markdown(f"<div class='risk-indicator' style='background:{style['bg']};color:{style['t']};border-color:{style['bg']}'>{style['e']} {risk}</div>", unsafe_allow_html=True)
         st.metric("槓桿倍數", f"{lev:.2f}")
 
-        # 🎯 修正：顯示表H 每日判斷
+        # 顯示表H 每日判斷 (移至風險指標下方)
         if not df_H.empty:
             try:
                 df_h = df_H.copy()
                 date_col = next((c for c in df_h.columns if '日期' in c), None)
                 if date_col:
-                    # 排序找最新
                     df_h['dt'] = pd.to_datetime(df_h[date_col], errors='coerce')
                     latest = df_h.sort_values('dt', ascending=False).iloc[0]
                     
                     st.markdown("---")
                     st.subheader("📅 今日判斷")
                     
-                    # LDR
-                    ldr = latest.get('LDR', 'N/A')
-                    st.metric("LDR (槓桿密度比)", str(ldr))
+                    ldr = str(latest.get('LDR', 'N/A'))
+                    st.metric("LDR (槓桿密度比)", ldr)
                     
-                    # 風險等級
                     risk_today = str(latest.get('今日風險等級', 'N/A'))
                     risk_color = "black"
                     if "紅" in risk_today: risk_color = "#dc3545"
@@ -433,7 +417,6 @@ if not df_C.empty:
                     
                     st.markdown(f"**今日風險等級:** <span style='color:{risk_color};font-weight:bold;font-size:1.2em'>{risk_today}</span>", unsafe_allow_html=True)
                     
-                    # 指令
                     cmd = str(latest.get('今日指令', 'N/A'))
                     st.info(f"📣 **指令：** {cmd}")
             except: pass
@@ -467,6 +450,9 @@ if not df_C.empty:
             else:
                 st.caption("無法計算進度")
         except: pass
+
+else:
+    st.warning('總覽數據載入失敗。')
 
 # 2. 持股
 st.header('2. 持股分析')
@@ -584,24 +570,51 @@ st.markdown('---')
 st.header('4. 財富藍圖')
 if not df_G.empty:
     try:
-        for i, row in df_G.iterrows():
-            level = row.get('階層') or row.iloc[0]
-            money = row.get('美金金額範圍') or row.iloc[1]
-            twd = row.get('約當台幣') or row.iloc[2]
-            desc = row.get('財富階層意義') or row.iloc[3]
-            time_est = row.get('以年報酬率18–20%推估所需時間') or (row.iloc[4] if len(row)>4 else "")
-            
-            with st.container():
-                st.markdown(f"#### {level}")
-                c1, c2, c3 = st.columns([2, 2, 3])
-                c1.caption("資金範圍 (USD)")
-                c1.write(f"**{money}**")
-                c2.caption("約當台幣 (TWD)")
-                c2.write(f"**{twd}**")
-                c3.caption("階段意義")
-                c3.info(desc)
-                if time_est: st.success(f"🚀 推估時間: {time_est}")
-                st.divider()
+        # 恢復表格樣式
+        all_rows = [df_G.columns.tolist()] + df_G.values.tolist()
+        current_title = None
+        current_data = []
+        
+        for row in all_rows:
+            first_cell = str(row[0]).strip()
+            if first_cell.startswith(('一、', '二、', '三、', '四、', '五、')):
+                if current_title:
+                    st.subheader(current_title)
+                    if len(current_data) > 0:
+                        headers = current_data[0]
+                        body = current_data[1:] if len(current_data) > 1 else []
+                        u_heads = []
+                        seen = {}
+                        for h in headers:
+                            h_str = str(h).strip()
+                            if not h_str: h_str = "-" 
+                            if h_str in seen: seen[h_str] += 1; u_heads.append(f"{h_str}_{seen[h_str]}")
+                            else: seen[h_str] = 0; u_heads.append(h_str)
+                        
+                        if body:
+                            st.dataframe(pd.DataFrame(body, columns=u_heads), use_container_width=True, hide_index=True)
+                        else:
+                            st.info("無詳細數據")
+                current_title = first_cell
+                current_data = []
+            elif any(str(c).strip() for c in row):
+                if current_title is not None:
+                    current_data.append(row)
+        
+        if current_title:
+            st.subheader(current_title)
+            if len(current_data) > 0:
+                headers = current_data[0]
+                body = current_data[1:] if len(current_data) > 1 else []
+                u_heads = []
+                seen = {}
+                for h in headers:
+                    h_str = str(h).strip()
+                    if not h_str: h_str = "-" 
+                    if h_str in seen: seen[h_str] += 1; u_heads.append(f"{h_str}_{seen[h_str]}")
+                    else: seen[h_str] = 0; u_heads.append(h_str)
+                if body:
+                    st.dataframe(pd.DataFrame(body, columns=u_heads), use_container_width=True, hide_index=True)
     except:
         st.dataframe(df_G, use_container_width=True)
 else:
