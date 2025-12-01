@@ -132,12 +132,11 @@ def generate_daily_report(df_A, df_C, df_D, df_E, df_F, df_H):
     else:
         lines.append("無數據")
     
-    # --- 表H 每日判斷 (新增到日報) ---
+    # --- 表H 每日判斷 (修正：確保日報也有此欄位) ---
     lines.append("\n[表H_每日判斷]")
     if not df_H.empty:
         try:
             df_h = df_H.copy()
-            # 嘗試找日期欄位排序
             date_col = next((c for c in df_h.columns if '日期' in c), None)
             if date_col:
                 df_h['dt'] = pd.to_datetime(df_h[date_col], errors='coerce')
@@ -273,7 +272,7 @@ def get_gsheet_connection():
         st.error(f"連線錯誤: {e}")
         return None, None
 
-# 數據載入
+# 數據載入 (純搬運，不做任何轉換)
 @st.cache_data(ttl=None) 
 def load_data(sheet_name): 
     with st.spinner(f"讀取: {sheet_name}"):
@@ -286,6 +285,7 @@ def load_data(sheet_name):
             if not data: return pd.DataFrame()
             
             df = pd.DataFrame(data[1:], columns=data[0])
+            # 處理重複欄位名
             if len(df.columns) != len(set(df.columns)):
                 cols = []
                 count = {}
@@ -349,7 +349,7 @@ df_D = load_data('表D_現金流')
 df_E = load_data('表E_已實現損益')
 df_F = load_data('表F_每日淨值')
 df_G = load_data('表G_財富藍圖') 
-df_H = load_data('表H_每日判斷') # 🎯 載入新表
+df_H = load_data('表H_每日判斷') # 🎯 確保這裡讀取表H
 
 # 側邊欄
 st.sidebar.header("🎯 數據管理")
@@ -371,7 +371,7 @@ if st.sidebar.button("💾 更新股價至 Google Sheets", type="primary"):
 st.sidebar.markdown("---")
 st.sidebar.subheader("📋 匯出功能")
 if st.sidebar.button("產生文字日報"):
-    # 🎯 傳遞 df_H
+    # 🎯 修正：傳遞 df_H 給函式
     report_text = generate_daily_report(df_A, df_C, df_D, df_E, df_F, df_H)
     st.sidebar.text_area("複製下方內容：", value=report_text, height=400)
 
@@ -407,7 +407,7 @@ if not df_C.empty:
         st.markdown(f"<div class='risk-indicator' style='background:{style['bg']};color:{style['t']};border-color:{style['bg']}'>{style['e']} {risk}</div>", unsafe_allow_html=True)
         st.metric("槓桿倍數", f"{lev:.2f}")
 
-        # 🎯 顯示表H 每日判斷
+        # 🎯 修正：顯示表H 每日判斷
         if not df_H.empty:
             try:
                 df_h = df_H.copy()
