@@ -2,10 +2,10 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 from datetime import datetime
-import yfinance as yf 
-import gspread 
-import time 
-import re 
+import yfinance as yf
+import gspread
+import time
+import re
 import numpy as np
 
 # 設置頁面配置
@@ -15,10 +15,10 @@ st.set_page_config(layout="wide", page_title="投資組合儀表板")
 st.markdown("""
 <style>
 html, body, [class*="stApp"] { font-size: 16px; }
-h1 { font-size: 2.5em; } 
-h2 { font-size: 1.8em; } 
-h3 { font-size: 1.5em; } 
-.stDataFrame { font-size: 1.0em; } 
+h1 { font-size: 2.5em; }
+h2 { font-size: 1.8em; }
+h3 { font-size: 1.5em; }
+.stDataFrame { font-size: 1.0em; }
 .stMetric > div:first-child { font-size: 1.25em !important; }
 .stMetric > div:nth-child(2) > div:first-child { font-size: 2.5em !important; }
 
@@ -46,20 +46,20 @@ div[data-testid="stMultiSelect"] > label { display: none; }
 }
 /* 🎯 今日判斷專用 CSS (灰色風格) */
 .daily-judgment-box {
-    background-color: #f8f9fa; 
-    border-radius: 10px; 
-    border: 1px solid #dee2e6; 
+    background-color: #f8f9fa;
+    border-radius: 10px;
+    border: 1px solid #dee2e6;
     margin-top: 20px;
 }
 </style>
 """, unsafe_allow_html=True)
 
 # ==============================================================================
-SHEET_URL = "https://docs.google.com/spreadsheets/d/1_JBI1pKWv9aw8dGCj89y9yNgoWG4YKllSMnPLpU_CCM/edit" 
+SHEET_URL = "https://docs.google.com/spreadsheets/d/1_JBI1pKWv9aw8dGCj89y9yNgoWG4YKllSMnPLpU_CCM/edit"
 # ==============================================================================
 
 if 'live_prices' not in st.session_state:
-    st.session_state['live_prices'] = {} 
+    st.session_state['live_prices'] = {}
 
 # --- 核心工具函式 ---
 def safe_float(value):
@@ -179,7 +179,9 @@ def generate_daily_report(df_A, df_C, df_D, df_E, df_F, df_H):
             date_col = next((c for c in df_f.columns if '日期' in c), None)
             if date_col:
                 df_f['dt'] = pd.to_datetime(df_f[date_col], errors='coerce')
-                last_3 = df_f.sort_values('dt', ascending=False).head(3).sort_values('dt', ascending=True)
+                # 修正：改為取最近 3 個「不重複日期」的所有資料
+                unique_dates = sorted(df_f['dt'].dt.date.dropna().unique(), reverse=True)[:3]
+                last_3 = df_f[df_f['dt'].dt.date.isin(unique_dates)].sort_values('dt', ascending=True)
                 
                 for _, row in last_3.iterrows():
                     d = fmt_date(row[date_col])
@@ -205,7 +207,9 @@ def generate_daily_report(df_A, df_C, df_D, df_E, df_F, df_H):
             date_col = next((c for c in df_d.columns if '日期' in c), None)
             if date_col:
                 df_d['dt'] = pd.to_datetime(df_d[date_col], errors='coerce')
-                last_d = df_d.sort_values('dt', ascending=False).head(3).sort_values('dt', ascending=True)
+                # 修正：改為取最近 3 個「不重複日期」的所有資料
+                unique_dates = sorted(df_d['dt'].dt.date.dropna().unique(), reverse=True)[:3]
+                last_d = df_d[df_d['dt'].dt.date.isin(unique_dates)].sort_values('dt', ascending=True)
                 
                 for _, row in last_d.iterrows():
                     d = fmt_date(row[date_col])
@@ -234,7 +238,9 @@ def generate_daily_report(df_A, df_C, df_D, df_E, df_F, df_H):
             d_col = next((c for c in df_e.columns if '日期' in c), None)
             if d_col:
                 df_e['dt'] = pd.to_datetime(df_e[d_col], errors='coerce')
-                last_e = df_e.sort_values('dt', ascending=False).head(3).sort_values('dt', ascending=True)
+                # 修正：改為取最近 3 個「不重複日期」的所有資料
+                unique_dates = sorted(df_e['dt'].dt.date.dropna().unique(), reverse=True)[:3]
+                last_e = df_e[df_e['dt'].dt.date.isin(unique_dates)].sort_values('dt', ascending=True)
                 
                 for _, row in last_e.iterrows():
                     d = fmt_date(row[d_col])
@@ -638,7 +644,3 @@ if not df_G.empty:
         st.dataframe(df_G, use_container_width=True)
 else:
     st.info("無財富藍圖資料")
-
-
-
-
