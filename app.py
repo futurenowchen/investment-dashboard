@@ -394,7 +394,7 @@ if not df_C.empty:
         st.markdown(f"<div class='risk-indicator' style='background:{style['bg']};color:{style['t']};border-color:{style['bg']}'>{style['e']} {risk}</div>", unsafe_allow_html=True)
         st.metric("槓桿倍數", f"{lev:.2f}")
 
-        # 顯示表H 每日判斷 (移至風險指標下方)
+        # 🎯 移動表H 今日判斷至此
         if not df_H.empty:
             try:
                 df_h = df_H.copy()
@@ -566,56 +566,10 @@ with t3:
                     st.caption(f"📅 紀錄: {df_calc['dt'].min().date()} ~ {df_calc['dt'].max().date()}")
 
 st.markdown('---')
-# 4. 財富藍圖
+# 4. 財富藍圖 (恢復為表格格式)
 st.header('4. 財富藍圖')
 if not df_G.empty:
-    try:
-        # 恢復表格樣式
-        all_rows = [df_G.columns.tolist()] + df_G.values.tolist()
-        current_title = None
-        current_data = []
-        
-        for row in all_rows:
-            first_cell = str(row[0]).strip()
-            if first_cell.startswith(('一、', '二、', '三、', '四、', '五、')):
-                if current_title:
-                    st.subheader(current_title)
-                    if len(current_data) > 0:
-                        headers = current_data[0]
-                        body = current_data[1:] if len(current_data) > 1 else []
-                        u_heads = []
-                        seen = {}
-                        for h in headers:
-                            h_str = str(h).strip()
-                            if not h_str: h_str = "-" 
-                            if h_str in seen: seen[h_str] += 1; u_heads.append(f"{h_str}_{seen[h_str]}")
-                            else: seen[h_str] = 0; u_heads.append(h_str)
-                        
-                        if body:
-                            st.dataframe(pd.DataFrame(body, columns=u_heads), use_container_width=True, hide_index=True)
-                        else:
-                            st.info("無詳細數據")
-                current_title = first_cell
-                current_data = []
-            elif any(str(c).strip() for c in row):
-                if current_title is not None:
-                    current_data.append(row)
-        
-        if current_title:
-            st.subheader(current_title)
-            if len(current_data) > 0:
-                headers = current_data[0]
-                body = current_data[1:] if len(current_data) > 1 else []
-                u_heads = []
-                seen = {}
-                for h in headers:
-                    h_str = str(h).strip()
-                    if not h_str: h_str = "-" 
-                    if h_str in seen: seen[h_str] += 1; u_heads.append(f"{h_str}_{seen[h_str]}")
-                    else: seen[h_str] = 0; u_heads.append(h_str)
-                if body:
-                    st.dataframe(pd.DataFrame(body, columns=u_heads), use_container_width=True, hide_index=True)
-    except:
+    with st.expander('查看財富藍圖詳細表格', expanded=True):
         st.dataframe(df_G, use_container_width=True)
 else:
     st.info("無財富藍圖資料")
