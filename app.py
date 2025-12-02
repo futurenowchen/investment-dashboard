@@ -363,11 +363,9 @@ if st.sidebar.button("💾 更新股價至 Google Sheets", type="primary"):
             load_data.clear()
             st.rerun()
 
-# 新增日報按鈕
 st.sidebar.markdown("---")
 st.sidebar.subheader("📋 匯出功能")
 if st.sidebar.button("產生文字日報"):
-    # 🎯 傳遞 df_H
     report_text = generate_daily_report(df_A, df_C, df_D, df_E, df_F, df_H)
     st.sidebar.text_area("複製下方內容：", value=report_text, height=400)
 
@@ -407,7 +405,6 @@ if not df_C.empty:
                     df_h['dt'] = pd.to_datetime(df_h[date_col], errors='coerce')
                     latest = df_h.sort_values('dt', ascending=False).iloc[0]
                     
-                    # 使用 Markdown + HTML 來創建淺色背景框
                     st.markdown("""
                     <div class='daily-judgment-box'>
                         <h3 style="margin-top:0; margin-bottom:15px;">📅 今日判斷</h3>
