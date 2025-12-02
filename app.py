@@ -408,10 +408,7 @@ if not df_C.empty:
                     latest = df_h.sort_values('dt', ascending=False).iloc[0]
                     
                     # 使用 HTML 區塊包覆，使其像一個卡片
-                    st.markdown("""
-                    <div class='daily-judgment-box'>
-                        <h3 style="margin-top:0; margin-bottom:15px; font-size:1.2em; color: #495057;">📅 今日判斷</h3>
-                    """, unsafe_allow_html=True)
+                    st.subheader('📅 今日判斷')
                     
                     # 建立三欄顯示
                     h1, h2, h3 = st.columns(3)
@@ -641,6 +638,7 @@ if not df_G.empty:
         st.dataframe(df_G, use_container_width=True)
 else:
     st.info("無財富藍圖資料")
+
 
 
 
