@@ -34,7 +34,7 @@ div[data-testid="stSidebar"] .stButton button {
 /* 隱藏 Multiselect 的標籤 */
 div[data-testid="stMultiSelect"] > label { display: none; }
 
-/* 🎯 風險燈號與指令 CSS */
+/* 🎯 風險燈號 CSS */
 .risk-indicator {
     padding: 15px;
     border-radius: 8px;
@@ -43,14 +43,6 @@ div[data-testid="stMultiSelect"] > label { display: none; }
     font-weight: bold;
     margin-bottom: 10px;
     border: 2px solid;
-}
-.instruction-box {
-    background-color: #e8f4f8;
-    border-left: 5px solid #007bff;
-    padding: 15px;
-    border-radius: 5px;
-    margin-top: 10px;
-    color: #0f5132;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -396,8 +388,8 @@ if not df_C.empty:
         st.subheader('核心資產')
         mask = ~df_c.index.isin(['β風險燈號', '槓桿倍數β', '短期財務目標', '短期財務目標差距', '達成進度', 'LDR', 'LDR燈號'])
         st.dataframe(df_c[mask], use_container_width=True)
-
-        # 🎯 修正：將「今日判斷」移至左側「核心資產」下方
+        
+        # 🎯 修正：將「今日判斷」移至左側「核心資產」下方，並加上區塊樣式
         if not df_H.empty:
             try:
                 df_h = df_H.copy()
@@ -406,8 +398,11 @@ if not df_C.empty:
                     df_h['dt'] = pd.to_datetime(df_h[date_col], errors='coerce')
                     latest = df_h.sort_values('dt', ascending=False).iloc[0]
                     
-                    st.markdown("---")
-                    st.subheader("📅 今日判斷")
+                    # 使用 HTML 區塊包覆，使其像一個卡片
+                    st.markdown("""
+                    <div style="background-color:#f0f2f6; padding:15px; border-radius:10px; border:1px solid #e9ecef; margin-top:10px;">
+                        <h3 style="margin-top:0; margin-bottom:15px;">📅 今日判斷</h3>
+                    """, unsafe_allow_html=True)
                     
                     # 建立三欄顯示，更緊湊美觀
                     h1, h2, h3 = st.columns(3)
@@ -419,12 +414,14 @@ if not df_C.empty:
                         if "紅" in risk_today: risk_color = "#dc3545"
                         elif "黃" in risk_today: risk_color = "#ffc107"
                         elif "綠" in risk_today: risk_color = "#28a745"
-                        st.markdown(f"**風險等級:**")
-                        st.markdown(f"<span style='color:{risk_color};font-weight:bold;font-size:1.2em'>{risk_today}</span>", unsafe_allow_html=True)
+                        st.markdown(f"<div style='font-size:0.8em;color:gray'>風險等級</div>", unsafe_allow_html=True)
+                        st.markdown(f"<span style='color:{risk_color};font-weight:bold;font-size:1.5em'>{risk_today}</span>", unsafe_allow_html=True)
                     with h3:
                         cmd = str(latest.get('今日指令', 'N/A'))
-                        st.markdown("**指令:**")
+                        st.markdown(f"<div style='font-size:0.8em;color:gray'>指令</div>", unsafe_allow_html=True)
                         st.info(f"{cmd}")
+                    
+                    st.markdown("</div>", unsafe_allow_html=True) # 關閉 div
             except: pass
     
     with c2:
