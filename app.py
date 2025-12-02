@@ -587,11 +587,59 @@ with t3:
                     st.caption(f"📅 紀錄: {df_calc['dt'].min().date()} ~ {df_calc['dt'].max().date()}")
 
 st.markdown('---')
-# 4. 財富藍圖 (恢復為表格格式)
+# 4. 財富藍圖
 st.header('4. 財富藍圖')
 if not df_G.empty:
-    # 🎯 恢復表格樣式
-    with st.expander('查看財富藍圖詳細表格', expanded=True):
+    try:
+        # 將 DataFrame 還原為列表，以便重新解析結構 (解決標題混在內文的問題)
+        all_rows = [df_G.columns.tolist()] + df_G.values.tolist()
+        current_title = None
+        current_data = []
+        
+        for row in all_rows:
+            first_cell = str(row[0]).strip()
+            if first_cell.startswith(('一、', '二、', '三、', '四、', '五、')):
+                if current_title:
+                    st.subheader(current_title)
+                    if len(current_data) > 0:
+                        headers = current_data[0]
+                        body = current_data[1:] if len(current_data) > 1 else []
+                        # 重複欄位處理
+                        u_heads = []
+                        seen = {}
+                        for h in headers:
+                            h_str = str(h).strip()
+                            if not h_str: h_str = "-" 
+                            if h_str in seen: seen[h_str] += 1; u_heads.append(f"{h_str}_{seen[h_str]}")
+                            else: seen[h_str] = 0; u_heads.append(h_str)
+                        
+                        if body:
+                            st.dataframe(pd.DataFrame(body, columns=u_heads), use_container_width=True, hide_index=True)
+                        else:
+                            st.info("無詳細數據")
+                current_title = first_cell
+                current_data = []
+            elif any(str(c).strip() for c in row):
+                if current_title is not None:
+                    current_data.append(row)
+        
+        # Render last
+        if current_title:
+            st.subheader(current_title)
+            if len(current_data) > 0:
+                headers = current_data[0]
+                body = current_data[1:] if len(current_data) > 1 else []
+                u_heads = []
+                seen = {}
+                for h in headers:
+                    h_str = str(h).strip()
+                    if not h_str: h_str = "-" 
+                    if h_str in seen: seen[h_str] += 1; u_heads.append(f"{h_str}_{seen[h_str]}")
+                    else: seen[h_str] = 0; u_heads.append(h_str)
+                if body:
+                    st.dataframe(pd.DataFrame(body, columns=u_heads), use_container_width=True, hide_index=True)
+    except:
         st.dataframe(df_G, use_container_width=True)
 else:
     st.info("無財富藍圖資料")
+
