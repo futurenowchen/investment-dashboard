@@ -33,6 +33,25 @@ div[data-testid="stSidebar"] .stButton button {
 }
 /* 隱藏 Multiselect 的標籤 */
 div[data-testid="stMultiSelect"] > label { display: none; }
+
+/* 🎯 風險燈號與指令 CSS */
+.risk-indicator {
+    padding: 15px;
+    border-radius: 8px;
+    text-align: center;
+    font-size: 1.5em;
+    font-weight: bold;
+    margin-bottom: 10px;
+    border: 2px solid;
+}
+/* 🎯 確保今日判斷區塊有淺色背景 */
+.daily-judgment-box {
+    background-color: #f0f2f6; 
+    padding: 15px; 
+    border-radius: 10px; 
+    border: 1px solid #e9ecef; 
+    margin-top: 20px; /* 增加上方間距 */
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -67,7 +86,7 @@ def fmt_date(value):
     except: return str(value)
 
 # --- 文字日報生成函式 ---
-def generate_daily_report(df_A, df_C, df_D, df_E, df_F):
+def generate_daily_report(df_A, df_C, df_D, df_E, df_F, df_H):
     lines = []
     today = datetime.now().strftime('%Y/%m/%d')
     lines.append(f"[日期] {today}\n")
@@ -80,7 +99,6 @@ def generate_daily_report(df_A, df_C, df_D, df_E, df_F):
             df_c.set_index(df_c.columns[0], inplace=True)
             col = df_c.columns[0]
             
-            # 提取關鍵欄位
             items = {
                 '股票市值': '股票市值', '現金': '現金', '借款餘額': '借款餘額', 
                 '總資產市值': '總資產市值', '實質NAV': '實質NAV', '槓桿倍數β': '槓桿倍數β',
@@ -92,9 +110,6 @@ def generate_daily_report(df_A, df_C, df_D, df_E, df_F):
                 
                 if key == '達成進度':
                     v_float = safe_float(val)
-                    # 修正：智能判斷百分比
-                    # 如果原始值含有 %，或數值 > 1.0 (且不是極小的小數誤差)，通常代表已經是百分比數值 (如 74.5)
-                    # 如果是小數 (如 0.745)，則 x 100
                     if isinstance(val, str) and '%' in val:
                          val_str = f"{v_float:.2f}%"
                     elif v_float <= 1.0:
@@ -103,7 +118,10 @@ def generate_daily_report(df_A, df_C, df_D, df_E, df_F):
                          val_str = f"{v_float:.2f}%"
 
                 elif key == '槓桿倍數β':
-                     val_str = f"{safe_float(val):.2f}" 
+                     if isinstance(val, str) and '%' in val:
+                         val_str = val
+                     else:
+                         val_str = f"{safe_float(val)*100:.2f}%" 
                 elif key in ['股票市值', '現金', '借款餘額', '總資產市值', '實質NAV', '短期財務目標']:
                      val_str = fmt_int(val)
                 else:
@@ -113,6 +131,27 @@ def generate_daily_report(df_A, df_C, df_D, df_E, df_F):
             lines.append(f"讀取表C錯誤: {e}")
     else:
         lines.append("無數據")
+    
+    # --- 表H 每日判斷 ---
+    lines.append("\n[表H_每日判斷]")
+    if not df_H.empty:
+        try:
+            df_h = df_H.copy()
+            date_col = next((c for c in df_h.columns if '日期' in c), None)
+            if date_col:
+                df_h['dt'] = pd.to_datetime(df_h[date_col], errors='coerce')
+                latest = df_h.sort_values('dt', ascending=False).iloc[0]
+                
+                ldr = str(latest.get('LDR', 'N/A'))
+                risk = str(latest.get('今日風險等級', 'N/A'))
+                cmd = str(latest.get('今日指令', 'N/A'))
+                
+                lines.append(f"LDR：{ldr}")
+                lines.append(f"風險等級：{risk}")
+                lines.append(f"指令：{cmd}")
+            else:
+                 lines.append("表H無日期欄位")
+        except: lines.append("表H解析錯誤")
 
     # --- 表A 持股 ---
     lines.append("\n[表A]")
@@ -120,69 +159,72 @@ def generate_daily_report(df_A, df_C, df_D, df_E, df_F):
         for _, row in df_A.iterrows():
             ticker = str(row.get('股票', '')).strip()
             name = str(row.get('股票名稱', '')) 
-            qty = fmt_int(row.get('持有數量（股）', 0))
-            avg = fmt_money(row.get('平均成本', 0))
+            qty = fmt_int(row.get('持有數量（股）', 0)) + "股"
+            avg = "均價" + fmt_money(row.get('平均成本', 0))
             
             live_p = st.session_state['live_prices'].get(ticker)
-            close = f"{live_p:.2f}" if live_p else fmt_money(row.get('收盤價', 0))
-            
-            mkt = fmt_int(row.get('市值（元）', 0))
+            close_val = live_p if live_p else safe_float(row.get('收盤價', 0))
+            close = "收盤" + f"{close_val:,.2f}"
+            mkt_val = safe_float(row.get('持有數量（股）', 0)) * close_val
+            mkt = "市值" + f"{mkt_val:,.0f}"
             note = str(row.get('備註', '')).strip()
             
-            line = f"{ticker} {name} {qty}股 均價{avg} 收盤{close} 市值{mkt} {note}"
+            line = f"{ticker} {name}  {qty}  {avg}  {close}  {mkt}  {note}"
             lines.append(line.strip())
 
-    # --- 表F 最近3日 (每日淨值) ---
+    # --- 表F 最近3日 ---
     lines.append("\n[表F_最近3日]")
-    if not df_F.empty and '日期' in df_F.columns:
+    if not df_F.empty:
         try:
             df_f = df_F.copy()
-            df_f['dt'] = pd.to_datetime(df_f['日期'], errors='coerce')
-            last_3 = df_f.sort_values('dt', ascending=False).head(3).sort_values('dt', ascending=True)
-            
-            for _, row in last_3.iterrows():
-                d = fmt_date(row['日期'])
-                stk_v = fmt_int(row.get('股票市值', 0))
-                tot = fmt_int(row.get('總資產', 0)) 
-                cash = fmt_int(row.get('現金', 0))
-                chg = fmt_int(row.get('當日淨變動', 0))
-                nav = fmt_int(row.get('實質NAV', 0))
+            date_col = next((c for c in df_f.columns if '日期' in c), None)
+            if date_col:
+                df_f['dt'] = pd.to_datetime(df_f[date_col], errors='coerce')
+                last_3 = df_f.sort_values('dt', ascending=False).head(3).sort_values('dt', ascending=True)
                 
-                beta_val = safe_float(row.get('槓桿倍數β', 0))
-                # Beta 通常顯示為倍數 (如 1.12)，若要百分比則 x100
-                # 這裡假設您想要倍數顯示，如圖例 112.21% 則是百分比
-                # 依照您的範例 "β112.21%"
-                if beta_val <= 2.0: # 假設小於2是倍數 (例如 1.12)
-                     beta = f"{beta_val*100:.2f}%"
-                else: # 已經是百分比數值 (例如 112)
-                     beta = f"{beta_val:.2f}%"
-                
-                lines.append(f"{d} 股票市值{stk_v} 總資產{tot} 現金{cash} 當日淨變動{chg} NAV{nav} β{beta}")
+                for _, row in last_3.iterrows():
+                    d = fmt_date(row[date_col])
+                    stk_v = "股票市值" + fmt_int(row.get('股票市值', 0))
+                    tot = "總資產" + fmt_int(row.get('總資產', 0)) 
+                    cash = "現金" + fmt_int(row.get('現金', 0))
+                    chg_val = safe_float(row.get('當日淨變動', 0))
+                    chg = "當日淨變動" + fmt_int(chg_val)
+                    nav = "NAV" + fmt_int(row.get('實質NAV', 0))
+                    beta_val = safe_float(row.get('槓桿倍數β', 0))
+                    if beta_val <= 5.0: beta = f"β{beta_val*100:.2f}%"
+                    else: beta = f"β{beta_val:.2f}%"
+                    lines.append(f"{d} {stk_v} {tot} {cash} {chg} {nav} {beta}")
+            else:
+                lines.append("表F無日期欄位")
         except: lines.append("表F解析錯誤")
 
     # --- 表D 近3日交易 ---
     lines.append("\n[表D_近3日交易]")
-    if not df_D.empty and '日期' in df_D.columns:
+    if not df_D.empty:
         try:
             df_d = df_D.copy()
-            df_d['dt'] = pd.to_datetime(df_d['日期'], errors='coerce')
-            last_d = df_d.sort_values('dt', ascending=False).head(3).sort_values('dt', ascending=True)
-            
-            for _, row in last_d.iterrows():
-                d = fmt_date(row['日期'])
-                item = str(row.get('用途／股票', ''))
-                act = str(row.get('動作', ''))
-                amt_raw = safe_float(row.get('淨收／支出', 0))
-                amt_sign = f"+{fmt_int(amt_raw)}" if amt_raw > 0 else fmt_int(amt_raw)
+            date_col = next((c for c in df_d.columns if '日期' in c), None)
+            if date_col:
+                df_d['dt'] = pd.to_datetime(df_d[date_col], errors='coerce')
+                last_d = df_d.sort_values('dt', ascending=False).head(3).sort_values('dt', ascending=True)
                 
-                qty = f"{fmt_int(row.get('數量', 0))}股" if safe_float(row.get('數量',0)) > 0 else ""
-                price = fmt_money(row.get('成交價', 0)) if safe_float(row.get('成交價',0)) > 0 else ""
-                
-                note = str(row.get('備註', '')).strip()
-                note_str = f"備註：{note}" if note else ""
-                
-                line = f"{d} {item} {act} {qty} {price} 金額{amt_sign} {note_str}"
-                lines.append(re.sub(' +', ' ', line).strip())
+                for _, row in last_d.iterrows():
+                    d = fmt_date(row[date_col])
+                    item = str(row.get('用途／股票', ''))
+                    act = str(row.get('動作', ''))
+                    amt_raw = safe_float(row.get('淨收／支出', 0))
+                    amt_sign = f"+{fmt_int(amt_raw)}" if amt_raw > 0 else fmt_int(amt_raw)
+                    amt_str = f"金額{amt_sign}"
+                    qty_val = safe_float(row.get('數量', 0))
+                    qty = f"{fmt_int(qty_val)}股" if qty_val > 0 else ""
+                    price_val = safe_float(row.get('成交價', 0))
+                    price = fmt_money(price_val) if price_val > 0 else ""
+                    note = str(row.get('備註', '')).strip()
+                    note_str = f"備註：{note}" if note else ""
+                    line = f"{d} {item} {act} {qty} {price} {amt_str} {note_str}"
+                    lines.append(re.sub(' +', ' ', line).strip())
+            else:
+                lines.append("表D無日期欄位")
         except: lines.append("表D解析錯誤")
 
     # --- 表E 近3日已實現損益 ---
@@ -200,10 +242,10 @@ def generate_daily_report(df_A, df_C, df_D, df_E, df_F):
                     stk = str(row.get('股票', ''))
                     pnl_raw = safe_float(row.get('已實現損益', 0))
                     pnl_sign = f"+{fmt_int(pnl_raw)}" if pnl_raw > 0 else fmt_int(pnl_raw)
-                    qty = fmt_int(row.get('成交股數', 0))
+                    pnl_str = f"損益{pnl_sign}"
+                    qty = fmt_int(row.get('成交股數', 0)) + "股"
                     note = str(row.get('備註', '')).strip()
-                    
-                    lines.append(f"{d} {stk} {qty}股 損益{pnl_sign} {note}")
+                    lines.append(f"{d} {stk} {qty} {pnl_str} {note}")
             else:
                 lines.append("無日期欄位可排序")
         except: lines.append("表E解析錯誤")
@@ -241,7 +283,6 @@ def load_data(sheet_name):
             if not data: return pd.DataFrame()
             
             df = pd.DataFrame(data[1:], columns=data[0])
-            # 處理重複欄位名
             if len(df.columns) != len(set(df.columns)):
                 cols = []
                 count = {}
@@ -305,6 +346,7 @@ df_D = load_data('表D_現金流')
 df_E = load_data('表E_已實現損益')
 df_F = load_data('表F_每日淨值')
 df_G = load_data('表G_財富藍圖') 
+df_H = load_data('表H_每日判斷')
 
 # 側邊欄
 st.sidebar.header("🎯 數據管理")
@@ -322,13 +364,11 @@ if st.sidebar.button("💾 更新股價至 Google Sheets", type="primary"):
             load_data.clear()
             st.rerun()
 
-# 新增日報按鈕
 st.sidebar.markdown("---")
 st.sidebar.subheader("📋 匯出功能")
 if st.sidebar.button("產生文字日報"):
-    report_text = generate_daily_report(df_A, df_C, df_D, df_E, df_F)
-    # 使用 code block 方便複製，或 text_area
-    st.sidebar.code(report_text, language="text")
+    report_text = generate_daily_report(df_A, df_C, df_D, df_E, df_F, df_H)
+    st.sidebar.text_area("複製下方內容：", value=report_text, height=400)
 
 st.sidebar.markdown("---")
 
@@ -343,7 +383,6 @@ if not df_C.empty:
     risk_txt = re.sub(r'\s+', '', risk)
     lev = safe_float(df_c.loc['槓桿倍數β', col_val]) if '槓桿倍數β' in df_c.index else 0
 
-    # 🎯 風險燈號顏色邏輯 (綠黃紅)
     style = {'e':'❓', 'bg':'#6c757d', 't':'white'}
     if '安全' in risk_txt: 
         style = {'e':'✅', 'bg':'#28a745', 't':'white'} # 綠
@@ -355,17 +394,54 @@ if not df_C.empty:
     c1, c2 = st.columns([2, 1])
     with c1:
         st.subheader('核心資產')
-        mask = ~df_c.index.isin(['β風險燈號', '槓桿倍數β', '短期財務目標', '短期財務目標差距', '達成進度'])
-        # 純字串顯示，不用 style.format
+        mask = ~df_c.index.isin(['β風險燈號', '槓桿倍數β', '短期財務目標', '短期財務目標差距', '達成進度', 'LDR', 'LDR燈號'])
         st.dataframe(df_c[mask], use_container_width=True)
+
+        # 🎯 修正：將「今日判斷」移至左側「核心資產」下方，並使用 CSS 類別 daily-judgment-box 包覆
+        if not df_H.empty:
+            try:
+                df_h = df_H.copy()
+                date_col = next((c for c in df_h.columns if '日期' in c), None)
+                if date_col:
+                    df_h['dt'] = pd.to_datetime(df_h[date_col], errors='coerce')
+                    latest = df_h.sort_values('dt', ascending=False).iloc[0]
+                    
+                    # 開始 HTML div 區塊
+                    st.markdown("""
+                    <div class='daily-judgment-box'>
+                        <h3 style="margin-top:0; margin-bottom:15px; font-size:1.2em;">📅 今日判斷</h3>
+                    """, unsafe_allow_html=True)
+                    
+                    # 在 div 內部使用 st.columns 佈局指標
+                    h1, h2, h3 = st.columns(3)
+                    with h1:
+                        ldr_val = str(latest.get('LDR', 'N/A'))
+                        st.metric("LDR (槓桿密度比)", ldr_val)
+                    with h2:
+                        risk_today = str(latest.get('今日風險等級', 'N/A'))
+                        risk_color = "black"
+                        if "紅" in risk_today: risk_color = "#dc3545"
+                        elif "黃" in risk_today: risk_color = "#ffc107"
+                        elif "綠" in risk_today: risk_color = "#28a745"
+                        
+                        st.markdown(f"<div style='font-size:0.8em;color:gray'>風險等級</div>", unsafe_allow_html=True)
+                        st.markdown(f"<span style='color:{risk_color};font-weight:bold;font-size:1.5em'>{risk_today}</span>", unsafe_allow_html=True)
+                    with h3:
+                        cmd = str(latest.get('今日指令', 'N/A'))
+                        st.markdown(f"<div style='font-size:0.8em;color:gray'>指令</div>", unsafe_allow_html=True)
+                        st.info(f"{cmd}")
+                    
+                    # 結束 HTML div 區塊
+                    st.markdown("</div>", unsafe_allow_html=True)
+            except: pass
     
     with c2:
         st.subheader('風險指標')
-        st.markdown(f"<div style='background:{style['bg']};color:{style['t']};padding:15px;border-radius:10px;text-align:center;font-size:1.5em;font-weight:bold;margin-bottom:10px;'>{style['e']} {risk}</div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='risk-indicator' style='background:{style['bg']};color:{style['t']};border-color:{style['bg']}'>{style['e']} {risk}</div>", unsafe_allow_html=True)
         st.metric("槓桿倍數", f"{lev:.2f}")
         
         st.markdown("---")
-        # 🎯 財務目標視覺強化 (大字體 + 藍色進度條)
+        # 財務目標
         try:
             target = safe_float(df_c.loc['短期財務目標', col_val]) if '短期財務目標' in df_c.index else 0
             gap = safe_float(df_c.loc['短期財務目標差距', col_val]) if '短期財務目標差距' in df_c.index else 0
@@ -394,6 +470,9 @@ if not df_C.empty:
                 st.caption("無法計算進度")
         except: pass
 
+else:
+    st.warning('總覽數據載入失敗。')
+
 # 2. 持股
 st.header('2. 持股分析')
 c1, c2 = st.columns([1, 1])
@@ -403,7 +482,6 @@ with c1:
         if st.session_state['live_prices']:
             df_show['即時價'] = df_show['股票'].map(st.session_state['live_prices']).fillna('')
         
-        # 預先格式化為字串 (絕對不會崩潰)
         for c in ['持有數量（股）', '市值（元）', '浮動損益']: 
             if c in df_show.columns: df_show[c] = df_show[c].apply(fmt_int)
         for c in ['平均成本', '收盤價', '即時價']:
@@ -507,58 +585,11 @@ with t3:
                     st.caption(f"📅 紀錄: {df_calc['dt'].min().date()} ~ {df_calc['dt'].max().date()}")
 
 st.markdown('---')
-# 4. 財富藍圖
+# 4. 財富藍圖 (恢復為表格格式)
 st.header('4. 財富藍圖')
 if not df_G.empty:
-    try:
-        # 將 DataFrame 還原為列表，以便重新解析結構 (解決標題混在內文的問題)
-        all_rows = [df_G.columns.tolist()] + df_G.values.tolist()
-        current_title = None
-        current_data = []
-        
-        for row in all_rows:
-            first_cell = str(row[0]).strip()
-            if first_cell.startswith(('一、', '二、', '三、', '四、', '五、')):
-                if current_title:
-                    st.subheader(current_title)
-                    if len(current_data) > 0:
-                        headers = current_data[0]
-                        body = current_data[1:] if len(current_data) > 1 else []
-                        # 重複欄位處理
-                        u_heads = []
-                        seen = {}
-                        for h in headers:
-                            h_str = str(h).strip()
-                            if not h_str: h_str = "-" 
-                            if h_str in seen: seen[h_str] += 1; u_heads.append(f"{h_str}_{seen[h_str]}")
-                            else: seen[h_str] = 0; u_heads.append(h_str)
-                        
-                        if body:
-                            st.dataframe(pd.DataFrame(body, columns=u_heads), use_container_width=True, hide_index=True)
-                        else:
-                            st.info("無詳細數據")
-                current_title = first_cell
-                current_data = []
-            elif any(str(c).strip() for c in row):
-                if current_title is not None:
-                    current_data.append(row)
-        
-        # Render last
-        if current_title:
-            st.subheader(current_title)
-            if len(current_data) > 0:
-                headers = current_data[0]
-                body = current_data[1:] if len(current_data) > 1 else []
-                u_heads = []
-                seen = {}
-                for h in headers:
-                    h_str = str(h).strip()
-                    if not h_str: h_str = "-" 
-                    if h_str in seen: seen[h_str] += 1; u_heads.append(f"{h_str}_{seen[h_str]}")
-                    else: seen[h_str] = 0; u_heads.append(h_str)
-                if body:
-                    st.dataframe(pd.DataFrame(body, columns=u_heads), use_container_width=True, hide_index=True)
-    except:
+    # 🎯 恢復表格樣式
+    with st.expander('查看財富藍圖詳細表格', expanded=True):
         st.dataframe(df_G, use_container_width=True)
 else:
     st.info("無財富藍圖資料")
