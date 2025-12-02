@@ -34,7 +34,7 @@ div[data-testid="stSidebar"] .stButton button {
 /* 隱藏 Multiselect 的標籤 */
 div[data-testid="stMultiSelect"] > label { display: none; }
 
-/* 🎯 風險燈號與指令 CSS */
+/* 🎯 風險燈號 CSS */
 .risk-indicator {
     padding: 15px;
     border-radius: 8px;
@@ -44,12 +44,13 @@ div[data-testid="stMultiSelect"] > label { display: none; }
     margin-bottom: 10px;
     border: 2px solid;
 }
+/* 🎯 今日判斷專用 CSS (灰色風格) */
 .daily-judgment-box {
-    background-color: #f0f2f6; 
-    padding: 15px; 
+    background-color: #f8f9fa; 
+    padding: 20px; 
     border-radius: 10px; 
-    border: 1px solid #e9ecef; 
-    margin-top: 10px;
+    border: 1px solid #dee2e6; 
+    margin-top: 20px;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -405,30 +406,35 @@ if not df_C.empty:
                     df_h['dt'] = pd.to_datetime(df_h[date_col], errors='coerce')
                     latest = df_h.sort_values('dt', ascending=False).iloc[0]
                     
-                    st.markdown("""
+                    # 使用 HTML 構建灰色卡片區塊
+                    # 使用 f-string 插入變數
+                    ldr_val = str(latest.get('LDR', 'N/A'))
+                    risk_today = str(latest.get('今日風險等級', 'N/A'))
+                    risk_color = "black"
+                    if "紅" in risk_today: risk_color = "#dc3545"
+                    elif "黃" in risk_today: risk_color = "#ffc107"
+                    elif "綠" in risk_today: risk_color = "#28a745"
+                    cmd = str(latest.get('今日指令', 'N/A'))
+
+                    st.markdown(f"""
                     <div class='daily-judgment-box'>
-                        <h3 style="margin-top:0; margin-bottom:15px;">📅 今日判斷</h3>
+                        <h3 style="margin-top:0; margin-bottom:15px; font-size:1.2em; color:#495057;">📅 今日判斷</h3>
+                        <div style="display:flex; justify-content:space-between; text-align:center; gap:10px;">
+                            <div style="flex:1;">
+                                <div style="font-size:0.9em; color:gray;">LDR</div>
+                                <div style="font-size:1.2em; font-weight:bold;">{ldr_val}</div>
+                            </div>
+                            <div style="flex:1;">
+                                <div style="font-size:0.9em; color:gray;">風險等級</div>
+                                <div style="font-size:1.2em; font-weight:bold; color:{risk_color};">{risk_today}</div>
+                            </div>
+                            <div style="flex:2; text-align:left; background:#fff; padding:8px; border-radius:5px; border:1px solid #dee2e6;">
+                                <div style="font-size:0.85em; color:gray; margin-bottom:3px;">指令</div>
+                                <div style="font-size:1.0em; color:#0f5132;">{cmd}</div>
+                            </div>
+                        </div>
+                    </div>
                     """, unsafe_allow_html=True)
-                    
-                    h1, h2, h3 = st.columns(3)
-                    with h1:
-                        ldr_val = str(latest.get('LDR', 'N/A'))
-                        st.metric("LDR (槓桿密度比)", ldr_val)
-                    with h2:
-                        risk_today = str(latest.get('今日風險等級', 'N/A'))
-                        risk_color = "black"
-                        if "紅" in risk_today: risk_color = "#dc3545"
-                        elif "黃" in risk_today: risk_color = "#ffc107"
-                        elif "綠" in risk_today: risk_color = "#28a745"
-                        
-                        st.markdown(f"<div style='font-size:0.8em;color:gray'>風險等級</div>", unsafe_allow_html=True)
-                        st.markdown(f"<span style='color:{risk_color};font-weight:bold;font-size:1.5em'>{risk_today}</span>", unsafe_allow_html=True)
-                    with h3:
-                        cmd = str(latest.get('今日指令', 'N/A'))
-                        st.markdown(f"<div style='font-size:0.8em;color:gray'>指令</div>", unsafe_allow_html=True)
-                        st.info(f"{cmd}")
-                    
-                    st.markdown("</div>", unsafe_allow_html=True) 
             except: pass
     
     with c2:
