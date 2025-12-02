@@ -334,7 +334,9 @@ def write_prices_to_sheet(df_A, updates):
         
         ws.update(f'E2:E{2+len(vals)-1}', vals, value_input_option='USER_ENTERED')
         return True
-    except: return False
+    except Exception as e:
+        st.error(f"寫入失敗: {e}")
+        return False
 
 # === 主程式 ===
 st.title('💰 投資組合儀表板')
@@ -406,35 +408,33 @@ if not df_C.empty:
                     df_h['dt'] = pd.to_datetime(df_h[date_col], errors='coerce')
                     latest = df_h.sort_values('dt', ascending=False).iloc[0]
                     
-                    # 使用 HTML 構建灰色卡片區塊
-                    # 使用 f-string 插入變數
-                    ldr_val = str(latest.get('LDR', 'N/A'))
-                    risk_today = str(latest.get('今日風險等級', 'N/A'))
-                    risk_color = "black"
-                    if "紅" in risk_today: risk_color = "#dc3545"
-                    elif "黃" in risk_today: risk_color = "#ffc107"
-                    elif "綠" in risk_today: risk_color = "#28a745"
-                    cmd = str(latest.get('今日指令', 'N/A'))
-
-                    st.markdown(f"""
+                    # 使用 HTML 區塊包覆，使其像一個卡片
+                    st.markdown("""
                     <div class='daily-judgment-box'>
-                        <h3 style="margin-top:0; margin-bottom:15px; font-size:1.2em; color:#495057;">📅 今日判斷</h3>
-                        <div style="display:flex; justify-content:space-between; text-align:center; gap:10px;">
-                            <div style="flex:1;">
-                                <div style="font-size:0.9em; color:gray;">LDR</div>
-                                <div style="font-size:1.2em; font-weight:bold;">{ldr_val}</div>
-                            </div>
-                            <div style="flex:1;">
-                                <div style="font-size:0.9em; color:gray;">風險等級</div>
-                                <div style="font-size:1.2em; font-weight:bold; color:{risk_color};">{risk_today}</div>
-                            </div>
-                            <div style="flex:2; text-align:left; background:#fff; padding:8px; border-radius:5px; border:1px solid #dee2e6;">
-                                <div style="font-size:0.85em; color:gray; margin-bottom:3px;">指令</div>
-                                <div style="font-size:1.0em; color:#0f5132;">{cmd}</div>
-                            </div>
-                        </div>
-                    </div>
+                        <h3 style="margin-top:0; margin-bottom:15px; font-size:1.2em; color: #495057;">📅 今日判斷</h3>
                     """, unsafe_allow_html=True)
+                    
+                    # 建立三欄顯示
+                    h1, h2, h3 = st.columns(3)
+                    with h1:
+                        ldr_val = str(latest.get('LDR', 'N/A'))
+                        st.metric("LDR (槓桿密度比)", ldr_val)
+                    with h2:
+                        risk_today = str(latest.get('今日風險等級', 'N/A'))
+                        risk_color = "black"
+                        if "紅" in risk_today: risk_color = "#dc3545"
+                        elif "黃" in risk_today: risk_color = "#ffc107"
+                        elif "綠" in risk_today: risk_color = "#28a745"
+                        
+                        st.markdown(f"<div style='font-size:0.8em;color:gray'>風險等級</div>", unsafe_allow_html=True)
+                        st.markdown(f"<span style='color:{risk_color};font-weight:bold;font-size:1.5em'>{risk_today}</span>", unsafe_allow_html=True)
+                    with h3:
+                        cmd = str(latest.get('今日指令', 'N/A'))
+                        st.markdown(f"<div style='font-size:0.8em;color:gray'>指令</div>", unsafe_allow_html=True)
+                        st.info(f"{cmd}")
+                    
+                    # 結束 HTML div 區塊
+                    st.markdown("</div>", unsafe_allow_html=True)
             except: pass
     
     with c2:
