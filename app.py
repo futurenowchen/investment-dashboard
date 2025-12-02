@@ -34,7 +34,7 @@ div[data-testid="stSidebar"] .stButton button {
 /* 隱藏 Multiselect 的標籤 */
 div[data-testid="stMultiSelect"] > label { display: none; }
 
-/* 🎯 風險燈號專用 CSS */
+/* 🎯 風險燈號與指令 CSS */
 .risk-indicator {
     padding: 15px;
     border-radius: 8px;
@@ -43,6 +43,14 @@ div[data-testid="stMultiSelect"] > label { display: none; }
     font-weight: bold;
     margin-bottom: 10px;
     border: 2px solid;
+}
+.instruction-box {
+    background-color: #e8f4f8;
+    border-left: 5px solid #007bff;
+    padding: 15px;
+    border-radius: 5px;
+    margin-top: 10px;
+    color: #0f5132;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -388,13 +396,8 @@ if not df_C.empty:
         st.subheader('核心資產')
         mask = ~df_c.index.isin(['β風險燈號', '槓桿倍數β', '短期財務目標', '短期財務目標差距', '達成進度', 'LDR', 'LDR燈號'])
         st.dataframe(df_c[mask], use_container_width=True)
-    
-    with c2:
-        st.subheader('風險指標')
-        st.markdown(f"<div class='risk-indicator' style='background:{style['bg']};color:{style['t']};border-color:{style['bg']}'>{style['e']} {risk}</div>", unsafe_allow_html=True)
-        st.metric("槓桿倍數", f"{lev:.2f}")
 
-        # 🎯 移動表H 今日判斷至此
+        # 🎯 修正：將「今日判斷」移至左側「核心資產」下方
         if not df_H.empty:
             try:
                 df_h = df_H.copy()
@@ -406,20 +409,28 @@ if not df_C.empty:
                     st.markdown("---")
                     st.subheader("📅 今日判斷")
                     
-                    ldr = str(latest.get('LDR', 'N/A'))
-                    st.metric("LDR (槓桿密度比)", ldr)
-                    
-                    risk_today = str(latest.get('今日風險等級', 'N/A'))
-                    risk_color = "black"
-                    if "紅" in risk_today: risk_color = "#dc3545"
-                    elif "黃" in risk_today: risk_color = "#ffc107"
-                    elif "綠" in risk_today: risk_color = "#28a745"
-                    
-                    st.markdown(f"**今日風險等級:** <span style='color:{risk_color};font-weight:bold;font-size:1.2em'>{risk_today}</span>", unsafe_allow_html=True)
-                    
-                    cmd = str(latest.get('今日指令', 'N/A'))
-                    st.info(f"📣 **指令：** {cmd}")
+                    # 建立三欄顯示，更緊湊美觀
+                    h1, h2, h3 = st.columns(3)
+                    with h1:
+                        st.metric("LDR", str(latest.get('LDR', 'N/A')))
+                    with h2:
+                        risk_today = str(latest.get('今日風險等級', 'N/A'))
+                        risk_color = "black"
+                        if "紅" in risk_today: risk_color = "#dc3545"
+                        elif "黃" in risk_today: risk_color = "#ffc107"
+                        elif "綠" in risk_today: risk_color = "#28a745"
+                        st.markdown(f"**風險等級:**")
+                        st.markdown(f"<span style='color:{risk_color};font-weight:bold;font-size:1.2em'>{risk_today}</span>", unsafe_allow_html=True)
+                    with h3:
+                        cmd = str(latest.get('今日指令', 'N/A'))
+                        st.markdown("**指令:**")
+                        st.info(f"{cmd}")
             except: pass
+    
+    with c2:
+        st.subheader('風險指標')
+        st.markdown(f"<div class='risk-indicator' style='background:{style['bg']};color:{style['t']};border-color:{style['bg']}'>{style['e']} {risk}</div>", unsafe_allow_html=True)
+        st.metric("槓桿倍數", f"{lev:.2f}")
         
         st.markdown("---")
         # 財務目標
@@ -569,6 +580,7 @@ st.markdown('---')
 # 4. 財富藍圖 (恢復為表格格式)
 st.header('4. 財富藍圖')
 if not df_G.empty:
+    # 🎯 恢復表格樣式
     with st.expander('查看財富藍圖詳細表格', expanded=True):
         st.dataframe(df_G, use_container_width=True)
 else:
