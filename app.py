@@ -44,13 +44,12 @@ div[data-testid="stMultiSelect"] > label { display: none; }
     margin-bottom: 10px;
     border: 2px solid;
 }
-/* 🎯 確保今日判斷區塊有淺色背景 */
 .daily-judgment-box {
     background-color: #f0f2f6; 
     padding: 15px; 
     border-radius: 10px; 
     border: 1px solid #e9ecef; 
-    margin-top: 20px; /* 增加上方間距 */
+    margin-top: 10px;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -406,13 +405,11 @@ if not df_C.empty:
                     df_h['dt'] = pd.to_datetime(df_h[date_col], errors='coerce')
                     latest = df_h.sort_values('dt', ascending=False).iloc[0]
                     
-                    # 開始 HTML div 區塊
                     st.markdown("""
                     <div class='daily-judgment-box'>
-                        <h3 style="margin-top:0; margin-bottom:15px; font-size:1.2em;">📅 今日判斷</h3>
+                        <h3 style="margin-top:0; margin-bottom:15px;">📅 今日判斷</h3>
                     """, unsafe_allow_html=True)
                     
-                    # 在 div 內部使用 st.columns 佈局指標
                     h1, h2, h3 = st.columns(3)
                     with h1:
                         ldr_val = str(latest.get('LDR', 'N/A'))
@@ -431,8 +428,7 @@ if not df_C.empty:
                         st.markdown(f"<div style='font-size:0.8em;color:gray'>指令</div>", unsafe_allow_html=True)
                         st.info(f"{cmd}")
                     
-                    # 結束 HTML div 區塊
-                    st.markdown("</div>", unsafe_allow_html=True)
+                    st.markdown("</div>", unsafe_allow_html=True) 
             except: pass
     
     with c2:
