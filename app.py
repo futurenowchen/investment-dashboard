@@ -47,7 +47,6 @@ div[data-testid="stMultiSelect"] > label { display: none; }
 /* 🎯 今日判斷專用 CSS (灰色風格) */
 .daily-judgment-box {
     background-color: #f8f9fa; 
-    padding: 10px; 
     border-radius: 10px; 
     border: 1px solid #dee2e6; 
     margin-top: 20px;
@@ -642,5 +641,6 @@ if not df_G.empty:
         st.dataframe(df_G, use_container_width=True)
 else:
     st.info("無財富藍圖資料")
+
 
 
