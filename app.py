@@ -34,7 +34,7 @@ div[data-testid="stSidebar"] .stButton button {
 /* 隱藏 Multiselect 的標籤 */
 div[data-testid="stMultiSelect"] > label { display: none; }
 
-/* 🎯 風險燈號 CSS */
+/* 🎯 風險燈號與指令 CSS */
 .risk-indicator {
     padding: 15px;
     border-radius: 8px;
@@ -43,6 +43,13 @@ div[data-testid="stMultiSelect"] > label { display: none; }
     font-weight: bold;
     margin-bottom: 10px;
     border: 2px solid;
+}
+.daily-judgment-box {
+    background-color: #f0f2f6; 
+    padding: 15px; 
+    border-radius: 10px; 
+    border: 1px solid #e9ecef; 
+    margin-top: 10px;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -356,9 +363,11 @@ if st.sidebar.button("💾 更新股價至 Google Sheets", type="primary"):
             load_data.clear()
             st.rerun()
 
+# 新增日報按鈕
 st.sidebar.markdown("---")
 st.sidebar.subheader("📋 匯出功能")
 if st.sidebar.button("產生文字日報"):
+    # 🎯 傳遞 df_H
     report_text = generate_daily_report(df_A, df_C, df_D, df_E, df_F, df_H)
     st.sidebar.text_area("複製下方內容：", value=report_text, height=400)
 
@@ -388,8 +397,8 @@ if not df_C.empty:
         st.subheader('核心資產')
         mask = ~df_c.index.isin(['β風險燈號', '槓桿倍數β', '短期財務目標', '短期財務目標差距', '達成進度', 'LDR', 'LDR燈號'])
         st.dataframe(df_c[mask], use_container_width=True)
-        
-        # 🎯 修正：將「今日判斷」移至左側「核心資產」下方，並加上區塊樣式
+
+        # 🎯 移動表H 今日判斷至此，並使用淺色框框包住
         if not df_H.empty:
             try:
                 df_h = df_H.copy()
@@ -398,22 +407,24 @@ if not df_C.empty:
                     df_h['dt'] = pd.to_datetime(df_h[date_col], errors='coerce')
                     latest = df_h.sort_values('dt', ascending=False).iloc[0]
                     
-                    # 使用 HTML 區塊包覆，使其像一個卡片
+                    # 使用 Markdown + HTML 來創建淺色背景框
                     st.markdown("""
-                    <div style="background-color:#f0f2f6; padding:15px; border-radius:10px; border:1px solid #e9ecef; margin-top:10px;">
+                    <div class='daily-judgment-box'>
                         <h3 style="margin-top:0; margin-bottom:15px;">📅 今日判斷</h3>
                     """, unsafe_allow_html=True)
                     
-                    # 建立三欄顯示，更緊湊美觀
+                    # 建立三欄顯示
                     h1, h2, h3 = st.columns(3)
                     with h1:
-                        st.metric("LDR", str(latest.get('LDR', 'N/A')))
+                        ldr_val = str(latest.get('LDR', 'N/A'))
+                        st.metric("LDR (槓桿密度比)", ldr_val)
                     with h2:
                         risk_today = str(latest.get('今日風險等級', 'N/A'))
                         risk_color = "black"
                         if "紅" in risk_today: risk_color = "#dc3545"
                         elif "黃" in risk_today: risk_color = "#ffc107"
                         elif "綠" in risk_today: risk_color = "#28a745"
+                        
                         st.markdown(f"<div style='font-size:0.8em;color:gray'>風險等級</div>", unsafe_allow_html=True)
                         st.markdown(f"<span style='color:{risk_color};font-weight:bold;font-size:1.5em'>{risk_today}</span>", unsafe_allow_html=True)
                     with h3:
