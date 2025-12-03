@@ -8,6 +8,11 @@ import time
 import re
 import numpy as np
 
+# ==============================================================================
+# ⚙️ 設定區：請將您的 Google Sheet 網址填入下方
+SHEET_URL = "https://docs.google.com/spreadsheets/d/1_JBI1pKWv9aw8dGCj89y9yNgoWG4YKllSMnPLpU_CCM/edit"
+# ==============================================================================
+
 # 設置頁面配置
 st.set_page_config(layout="wide", page_title="投資組合儀表板")
 
@@ -46,10 +51,6 @@ div[data-testid="stMultiSelect"] > label { display: none; }
 }
 </style>
 """, unsafe_allow_html=True)
-
-# ==============================================================================
-SHEET_URL = "https://docs.google.com/spreadsheets/d/1_JBI1pKWv9aw8dGCj89y9yNgoWG4YKllSMnPLpU_CCM/edit"
-# ==============================================================================
 
 if 'live_prices' not in st.session_state:
     st.session_state['live_prices'] = {}
@@ -172,7 +173,6 @@ def generate_daily_report(df_A, df_C, df_D, df_E, df_F, df_H):
             date_col = next((c for c in df_f.columns if '日期' in c), None)
             if date_col:
                 df_f['dt'] = pd.to_datetime(df_f[date_col], errors='coerce')
-                # 修正：改為取最近 3 個「不重複日期」的所有資料
                 unique_dates = sorted(df_f['dt'].dt.date.dropna().unique(), reverse=True)[:3]
                 last_3 = df_f[df_f['dt'].dt.date.isin(unique_dates)].sort_values('dt', ascending=True)
                 
@@ -200,7 +200,6 @@ def generate_daily_report(df_A, df_C, df_D, df_E, df_F, df_H):
             date_col = next((c for c in df_d.columns if '日期' in c), None)
             if date_col:
                 df_d['dt'] = pd.to_datetime(df_d[date_col], errors='coerce')
-                # 修正：改為取最近 3 個「不重複日期」的所有資料
                 unique_dates = sorted(df_d['dt'].dt.date.dropna().unique(), reverse=True)[:3]
                 last_d = df_d[df_d['dt'].dt.date.isin(unique_dates)].sort_values('dt', ascending=True)
                 
@@ -231,7 +230,6 @@ def generate_daily_report(df_A, df_C, df_D, df_E, df_F, df_H):
             d_col = next((c for c in df_e.columns if '日期' in c), None)
             if d_col:
                 df_e['dt'] = pd.to_datetime(df_e[d_col], errors='coerce')
-                # 修正：改為取最近 3 個「不重複日期」的所有資料
                 unique_dates = sorted(df_e['dt'].dt.date.dropna().unique(), reverse=True)[:3]
                 last_e = df_e[df_e['dt'].dt.date.isin(unique_dates)].sort_values('dt', ascending=True)
                 
@@ -250,22 +248,32 @@ def generate_daily_report(df_A, df_C, df_D, df_E, df_F, df_H):
 
     return "\n".join(lines)
 
-# 連線工具
+# --- 連線工具 (強化版) ---
 def get_gsheet_connection():
+    """建立 Google Sheets 連線，包含錯誤處理"""
     try:
-        if "gsheets" not in st.secrets.get("connections", {}):
-            st.error("Secrets 錯誤")
+        # 檢查 Secrets 結構
+        if "connections" not in st.secrets or "gsheets" not in st.secrets["connections"]:
+            st.error("❌ Secrets 設定錯誤：找不到 [connections.gsheets]。請檢查 .streamlit/secrets.toml")
             return None, None
-        if SHEET_URL == "YOUR_SPREADSHEET_URL_HERE":
-            st.error("❌ 請先設定 SHEET_URL")
-            return None, None
-        
+            
         secrets = dict(st.secrets["connections"]["gsheets"])
-        secrets["private_key"] = secrets["private_key"].replace('\\n', '\n')
+        # 處理 Private Key 換行問題
+        if "private_key" in secrets:
+            secrets["private_key"] = secrets["private_key"].replace('\\n', '\n')
+            
         gc = gspread.service_account_from_dict(secrets)
-        return gc, gc.open_by_url(SHEET_URL)
+        
+        try:
+            sh = gc.open_by_url(SHEET_URL)
+            return gc, sh
+        except gspread.exceptions.APIError as api_err:
+            st.error(f"❌ Google API 權限錯誤：{api_err}")
+            st.info(f"請確認您已將試算表分享給機器人 Email: {secrets.get('client_email', '未知')}")
+            return None, None
+            
     except Exception as e:
-        st.error(f"連線錯誤: {e}")
+        st.error(f"❌ 連線發生未預期的錯誤: {e}")
         return None, None
 
 # 數據載入 (純搬運，不做任何轉換)
@@ -276,11 +284,18 @@ def load_data(sheet_name):
             _, sh = get_gsheet_connection()
             if not sh: return pd.DataFrame()
             
-            ws = sh.worksheet(sheet_name) 
-            data = ws.get_all_values()
+            try:
+                ws = sh.worksheet(sheet_name) 
+                data = ws.get_all_values()
+            except gspread.exceptions.WorksheetNotFound:
+                # 靜默失敗，回傳空表即可
+                return pd.DataFrame()
+                
             if not data: return pd.DataFrame()
             
             df = pd.DataFrame(data[1:], columns=data[0])
+            
+            # 處理重複欄位名稱
             if len(df.columns) != len(set(df.columns)):
                 cols = []
                 count = {}
@@ -290,33 +305,88 @@ def load_data(sheet_name):
                     else: count[n]=0; cols.append(n)
                 df.columns = cols
             return df
-        except gspread.exceptions.WorksheetNotFound:
-            return pd.DataFrame()
+            
         except Exception as e:
-            st.error(f"讀取失敗: {e}")
+            st.error(f"讀取 {sheet_name} 失敗: {e}")
             return pd.DataFrame() 
 
-# 股價 API
+# --- 股價 API (修復版：自動加 .TW) ---
 @st.cache_data(ttl="60s") 
 def fetch_current_prices(tickers):
-    st.info(f"更新 {len(tickers)} 支股票價格...")
-    res = {}
-    time.sleep(1)
-    try:
-        data = yf.download(tickers, period='1d', interval='1d', progress=False)
-        if data.empty: return {}
+    """
+    抓取即時股價，針對純數字代碼自動加上 .TW
+    """
+    if not tickers: return {}
+    
+    st.toast(f"正在更新 {len(tickers)} 檔股價...", icon="⏳")
+    
+    # 1. 建立代碼映射表 (原始代碼 -> Yahoo代碼)
+    ticker_map = {}
+    query_tickers = []
+    
+    for t in tickers:
+        raw_t = str(t).strip()
+        if not raw_t: continue
         
-        if len(tickers) == 1:
-            val = data['Close'].iloc[-1]
-            if hasattr(val, 'item'): val = val.item()
-            res[tickers[0]] = round(val, 2)
+        # 簡單判斷：如果是純數字，假設為台股，加上 .TW
+        # 如果您有上櫃股票，需自行調整邏輯或在 Sheet 裡直接寫 .TWO
+        if raw_t.isdigit():
+            y_t = f"{raw_t}.TW"
         else:
-            closes = data['Close'].iloc[-1]
-            for t in tickers:
-                val = closes.get(t)
-                if pd.notna(val): res[t] = round(val, 2)
+            y_t = raw_t
+            
+        ticker_map[y_t] = raw_t
+        query_tickers.append(y_t)
+    
+    res = {}
+    if not query_tickers: return {}
+
+    try:
+        # 2. 下載資料
+        # progress=False 隱藏進度條
+        data = yf.download(query_tickers, period='1d', interval='1d', progress=False)
+        
+        if data.empty:
+            st.warning("Yahoo Finance 未回傳數據")
+            return {}
+
+        # 3. 解析資料 (處理單檔與多檔的差異)
+        # yfinance 新版多檔時會回傳 MultiIndex Columns
+        
+        # 取得最後一筆 Close
+        try:
+            closes = data['Close']
+        except KeyError:
+            return {}
+            
+        if closes.empty: return {}
+        
+        # 取最後一列 (最新的收盤價)
+        last_row = closes.iloc[-1]
+        
+        if len(query_tickers) == 1:
+            # 單檔股票，last_row 是一個 float
+            val = last_row
+            # 有時會是 Series (取決於版本)，轉為 float
+            if hasattr(val, 'item'): val = val.item()
+            
+            original_ticker = ticker_map[query_tickers[0]]
+            res[original_ticker] = round(float(val), 2)
+        else:
+            # 多檔股票，last_row 是一個 Series，index 是 Yahoo 代碼
+            for y_t, original_t in ticker_map.items():
+                try:
+                    val = last_row.get(y_t)
+                    if pd.notna(val):
+                         if hasattr(val, 'item'): val = val.item()
+                         res[original_t] = round(float(val), 2)
+                except:
+                    pass
+        
         return res
-    except: return {}
+    except Exception as e:
+        st.error(f"股價更新發生錯誤: {e}")
+        return {}
 
 # 寫入 API
 def write_prices_to_sheet(df_A, updates):
@@ -324,21 +394,37 @@ def write_prices_to_sheet(df_A, updates):
     if not sh: return False
     try:
         ws = sh.worksheet('表A_持股總表')
+        # 準備要寫入的資料列表
         vals = []
         for _, row in df_A.iterrows():
             t = str(row.get('股票','')).strip()
+            # 從 updates 字典找價格
             p = updates.get(t)
-            vals.append([f"{p}"]) if p else vals.append([''])
+            if p:
+                vals.append([p]) 
+            else:
+                vals.append(['']) # 如果沒抓到價格，填空或保留原值? 這裡先填空
         
-        ws.update(f'E2:E{2+len(vals)-1}', vals, value_input_option='USER_ENTERED')
+        # 批次更新 E 欄 (從 E2 開始)
+        if vals:
+            ws.update(f'E2:E{2+len(vals)-1}', vals, value_input_option='USER_ENTERED')
         return True
     except Exception as e:
-        st.error(f"寫入失敗: {e}")
+        st.error(f"寫入 Google Sheets 失敗: {e}")
         return False
 
 # === 主程式 ===
 st.title('💰 投資組合儀表板')
 
+# --- 診斷區塊 (除錯用) ---
+with st.expander("🛠️ 連線狀態檢查 (若資料跑不出來請點此)", expanded=False):
+    st.write(f"目前設定的 Sheet URL: `{SHEET_URL}`")
+    if "connections" in st.secrets:
+        st.success("✅ Secrets 設定已偵測到")
+    else:
+        st.error("❌ 找不到 Secrets 設定")
+
+# 載入所有資料
 df_A = load_data('表A_持股總表')
 df_B = load_data('表B_持股比例')
 df_C = load_data('表C_總覽')
@@ -358,13 +444,22 @@ if st.sidebar.button("🔄 重新載入資料"):
 
 if st.sidebar.button("💾 更新股價至 Google Sheets", type="primary"):
     if not df_A.empty and '股票' in df_A.columns:
-        tickers = [t for t in df_A['股票'].unique() if t]
+        # 取得不重複的股票代碼列表
+        tickers = [t for t in df_A['股票'].unique() if str(t).strip()]
+        
+        # 呼叫修復後的函式
         updates = fetch_current_prices(tickers)
         st.session_state['live_prices'] = updates
-        if updates and write_prices_to_sheet(df_A, updates):
-            st.sidebar.success("更新成功")
-            load_data.clear()
-            st.rerun()
+        
+        if updates:
+            success = write_prices_to_sheet(df_A, updates)
+            if success:
+                st.sidebar.success(f"成功更新 {len(updates)} 檔股價！")
+                time.sleep(1)
+                load_data.clear()
+                st.rerun()
+        else:
+            st.sidebar.warning("未能取得任何股價，請檢查代碼或網路。")
 
 st.sidebar.markdown("---")
 st.sidebar.subheader("📋 匯出功能")
@@ -507,7 +602,7 @@ if not df_C.empty:
         except: pass
 
 else:
-    st.warning('總覽數據載入失敗。')
+    st.warning('總覽數據載入失敗。請檢查 Secrets 設定或試算表網址。')
 
 # 2. 持股
 st.header('2. 持股分析')
