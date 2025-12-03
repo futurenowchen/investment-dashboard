@@ -415,7 +415,7 @@ def write_prices_to_sheet(df_A, updates):
 
 # === 主程式 ===
 # ⚠️ 強制更新標題以確認版本
-st.title('💰 投資組合儀表板 (v2025-Update)')
+st.title('💰 投資組合儀表板 (Final Fix)')
 
 # --- 診斷區塊 (除錯用) ---
 with st.expander("🛠️ 連線狀態檢查 (若資料跑不出來請點此)", expanded=False):
@@ -607,7 +607,8 @@ else:
 
 # 2. 持股
 st.header('2. 持股分析')
-c1, c2 = st.columns([1, 1])
+# 調整比例：左(表格) 2.5 : 右(圖) 1，讓表格有更多寬度
+c1, c2 = st.columns([2.5, 1])
 with c1:
     # 改用 markdown 確保字體大小控制權
     st.markdown("### 📝 持股明細") 
@@ -627,8 +628,8 @@ with c1:
         st.dataframe(df_show, use_container_width=True, height=height_val, hide_index=True)
 
 with c2:
-    # 改用 markdown
-    st.markdown("### 🍰 資產配置") 
+    # 改用 HTML 並設定置中樣式，讓標題與圓餅圖對齊
+    st.markdown("<h3 style='text-align: center;'>🍰 資產配置</h3>", unsafe_allow_html=True) 
     if not df_B.empty and '市值（元）' in df_B.columns:
         df_B['num'] = df_B['市值（元）'].apply(safe_float)
         chart_data = df_B[(df_B['num'] > 0) & (~df_B['股票'].str.contains('總資產|Total', na=False))]
