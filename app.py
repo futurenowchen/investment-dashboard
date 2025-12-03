@@ -414,7 +414,8 @@ def write_prices_to_sheet(df_A, updates):
         return False
 
 # === 主程式 ===
-st.title('💰 投資組合儀表板')
+# ⚠️ 強制更新標題以確認版本
+st.title('💰 投資組合儀表板 (v2025-Update)')
 
 # --- 診斷區塊 (除錯用) ---
 with st.expander("🛠️ 連線狀態檢查 (若資料跑不出來請點此)", expanded=False):
@@ -608,7 +609,8 @@ else:
 st.header('2. 持股分析')
 c1, c2 = st.columns([1, 1])
 with c1:
-    st.subheader("📝 持股明細") # 加入圖示以確認更新
+    # 改用 markdown 確保字體大小控制權
+    st.markdown("### 📝 持股明細") 
     if not df_A.empty:
         df_show = df_A.copy()
         if st.session_state['live_prices']:
@@ -619,12 +621,14 @@ with c1:
         for c in ['平均成本', '收盤價', '即時價']:
             if c in df_show.columns: df_show[c] = df_show[c].apply(fmt_money)
             
-        # ⚠️ 強制隱藏 Index 並增加高度，確保看起來是完整的表格
-        height_val = (len(df_show) + 1) * 38 + 10
+        # ⚠️ 強制隱藏 Index 並增加高度
+        # 公式調整：每一列約 35px，Header 35px，加上 20px 緩衝
+        height_val = (len(df_show) + 1) * 35 + 20
         st.dataframe(df_show, use_container_width=True, height=height_val, hide_index=True)
 
 with c2:
-    st.subheader("🍰 資產配置") # 加入圖示以確認更新
+    # 改用 markdown
+    st.markdown("### 🍰 資產配置") 
     if not df_B.empty and '市值（元）' in df_B.columns:
         df_B['num'] = df_B['市值（元）'].apply(safe_float)
         chart_data = df_B[(df_B['num'] > 0) & (~df_B['股票'].str.contains('總資產|Total', na=False))]
