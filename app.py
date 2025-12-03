@@ -628,8 +628,7 @@ with c1:
         st.dataframe(df_show, use_container_width=True, height=height_val, hide_index=True)
 
 with c2:
-    # 改用 HTML 並設定置中樣式，讓標題與圓餅圖對齊
-    st.markdown("<h3 style='text-align: center;'>🍰 資產配置</h3>", unsafe_allow_html=True) 
+    st.markdown("<h3>🍰 資產配置</h3>", unsafe_allow_html=True) 
     if not df_B.empty and '市值（元）' in df_B.columns:
         df_B['num'] = df_B['市值（元）'].apply(safe_float)
         chart_data = df_B[(df_B['num'] > 0) & (~df_B['股票'].str.contains('總資產|Total', na=False))]
@@ -782,3 +781,4 @@ if not df_G.empty:
         st.dataframe(df_G, use_container_width=True)
 else:
     st.info("無財富藍圖資料")
+
