@@ -608,7 +608,7 @@ else:
 st.header('2. 持股分析')
 c1, c2 = st.columns([1, 1])
 with c1:
-    st.subheader("持股明細")
+    st.subheader("📝 持股明細") # 加入圖示以確認更新
     if not df_A.empty:
         df_show = df_A.copy()
         if st.session_state['live_prices']:
@@ -619,15 +619,20 @@ with c1:
         for c in ['平均成本', '收盤價', '即時價']:
             if c in df_show.columns: df_show[c] = df_show[c].apply(fmt_money)
             
-        st.dataframe(df_show, use_container_width=True)
+        # ⚠️ 強制隱藏 Index 並增加高度，確保看起來是完整的表格
+        height_val = (len(df_show) + 1) * 38 + 10
+        st.dataframe(df_show, use_container_width=True, height=height_val, hide_index=True)
 
 with c2:
-    st.subheader("資產配置")
+    st.subheader("🍰 資產配置") # 加入圖示以確認更新
     if not df_B.empty and '市值（元）' in df_B.columns:
         df_B['num'] = df_B['市值（元）'].apply(safe_float)
         chart_data = df_B[(df_B['num'] > 0) & (~df_B['股票'].str.contains('總資產|Total', na=False))]
         if not chart_data.empty:
-            st.plotly_chart(px.pie(chart_data, values='num', names='股票'), use_container_width=True)
+            fig = px.pie(chart_data, values='num', names='股票')
+            # 移除所有邊距
+            fig.update_layout(margin=dict(t=10, b=10, l=10, r=10))
+            st.plotly_chart(fig, use_container_width=True)
 
 # 3. 交易紀錄
 st.header('3. 交易紀錄與淨值')
