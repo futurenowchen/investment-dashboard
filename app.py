@@ -44,13 +44,6 @@ div[data-testid="stMultiSelect"] > label { display: none; }
     margin-bottom: 10px;
     border: 2px solid;
 }
-/* 🎯 今日判斷專用 CSS (灰色風格) */
-.daily-judgment-box {
-    background-color: #f8f9fa;
-    border-radius: 10px;
-    border: 1px solid #dee2e6;
-    margin-top: 20px;
-}
 </style>
 """, unsafe_allow_html=True)
 
@@ -444,22 +437,30 @@ if not df_C.empty:
                     elif "黃" in risk_today: risk_color = "#ffc107"
                     elif "綠" in risk_today: risk_color = "#28a745"
 
-                    # 使用 HTML 區塊包覆
+                    # 標題
                     st.subheader('📅 今日判斷 & 市場狀態')
-                    st.markdown("""<div class='daily-judgment-box' style='padding: 15px;'>""", unsafe_allow_html=True)
                     
-                    # 第一列：LDR, Risk, Market, VIX
+                    # 建立四欄顯示 (移除外部灰底 box)
                     m1, m2, m3, m4 = st.columns(4)
+                    
+                    # 統一的樣式輔助函式 (確保字體大小一致)
+                    def make_metric(label, value, color="black"):
+                         return f"""
+                         <div style='margin-bottom:5px;'>
+                            <div style='font-size:0.9rem; color:gray; margin-bottom:0px;'>{label}</div>
+                            <div style='font-size:1.6rem; font-weight:bold; color:{color}; line-height:1.2;'>{value}</div>
+                         </div>
+                         """
+
                     with m1:
-                        st.metric("LDR (槓桿密度)", ldr_val)
+                        st.markdown(make_metric("LDR (槓桿密度)", ldr_val), unsafe_allow_html=True)
                     with m2:
-                        st.markdown(f"<div style='font-size:0.8em;color:gray'>風險等級</div>", unsafe_allow_html=True)
-                        st.markdown(f"<span style='color:{risk_color};font-weight:bold;font-size:1.5em'>{risk_today}</span>", unsafe_allow_html=True)
+                        st.markdown(make_metric("風險等級", risk_today, risk_color), unsafe_allow_html=True)
                     with m3:
-                        st.markdown(f"<div style='font-size:0.8em;color:gray'>盤勢 / 60日乖離</div>", unsafe_allow_html=True)
-                        st.markdown(f"<span style='font-weight:bold;font-size:1.2em'>{market_pos}</span> <span style='font-size:0.9em;color:#666'>({bias_val})</span>", unsafe_allow_html=True)
+                        val_str = f"{market_pos} ({bias_val})"
+                        st.markdown(make_metric("盤勢 / 60日乖離", val_str), unsafe_allow_html=True)
                     with m4:
-                        st.metric("VIX 恐慌指數", vix_display)
+                        st.markdown(make_metric("VIX 恐慌指數", vix_display), unsafe_allow_html=True)
                     
                     st.markdown("---")
                     
@@ -467,8 +468,6 @@ if not df_C.empty:
                     st.markdown(f"<div style='font-size:0.9em;color:gray;margin-bottom:5px'>📊 操作指令</div>", unsafe_allow_html=True)
                     st.info(f"{cmd}")
                     
-                    # 結束 HTML div 區塊
-                    st.markdown("</div>", unsafe_allow_html=True)
             except Exception as e:
                 st.error(f"解析判斷數據時發生錯誤: {e}")
     
