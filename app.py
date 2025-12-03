@@ -415,7 +415,7 @@ def write_prices_to_sheet(df_A, updates):
 
 # === 主程式 ===
 # ⚠️ 強制更新標題以確認版本
-st.title('💰 投資組合儀表板 (Final Fix)')
+st.title('💰 投資組合儀表板')
 
 # --- 診斷區塊 (除錯用) ---
 with st.expander("🛠️ 連線狀態檢查 (若資料跑不出來請點此)", expanded=False):
@@ -781,4 +781,5 @@ if not df_G.empty:
         st.dataframe(df_G, use_container_width=True)
 else:
     st.info("無財富藍圖資料")
+
 
