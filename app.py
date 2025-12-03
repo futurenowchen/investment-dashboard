@@ -608,7 +608,7 @@ else:
 st.header('2. 持股分析')
 c1, c2 = st.columns([1, 1])
 with c1:
-    st.subheader("持股明細") # 新增標題
+    st.subheader("持股明細")
     if not df_A.empty:
         df_show = df_A.copy()
         if st.session_state['live_prices']:
@@ -619,16 +619,14 @@ with c1:
         for c in ['平均成本', '收盤價', '即時價']:
             if c in df_show.columns: df_show[c] = df_show[c].apply(fmt_money)
             
-        # 移除 expander，直接顯示
         st.dataframe(df_show, use_container_width=True)
 
 with c2:
-    st.subheader("資產配置") # 新增標題至上方
+    st.subheader("資產配置")
     if not df_B.empty and '市值（元）' in df_B.columns:
         df_B['num'] = df_B['市值（元）'].apply(safe_float)
         chart_data = df_B[(df_B['num'] > 0) & (~df_B['股票'].str.contains('總資產|Total', na=False))]
         if not chart_data.empty:
-            # 移除圖表內部標題
             st.plotly_chart(px.pie(chart_data, values='num', names='股票'), use_container_width=True)
 
 # 3. 交易紀錄
