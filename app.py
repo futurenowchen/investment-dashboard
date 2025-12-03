@@ -354,6 +354,8 @@ df_E = load_data('表E_已實現損益')
 df_F = load_data('表F_每日淨值')
 df_G = load_data('表G_財富藍圖') 
 df_H = load_data('表H_每日判斷')
+df_Market = load_data('Market')
+df_Global = load_data('Global')
 
 # 側邊欄
 st.sidebar.header("🎯 數據管理")
@@ -375,7 +377,8 @@ st.sidebar.markdown("---")
 st.sidebar.subheader("📋 匯出功能")
 if st.sidebar.button("產生文字日報"):
     report_text = generate_daily_report(df_A, df_C, df_D, df_E, df_F, df_H)
-    st.sidebar.text_area("複製下方內容：", value=report_text, height=400)
+    st.sidebar.markdown("請點擊下方代碼區塊右上角的 **複製按鈕**：")
+    st.sidebar.code(report_text, language='text')
 
 st.sidebar.markdown("---")
 
@@ -404,7 +407,7 @@ if not df_C.empty:
         mask = ~df_c.index.isin(['β風險燈號', '槓桿倍數β', '短期財務目標', '短期財務目標差距', '達成進度', 'LDR', 'LDR燈號'])
         st.dataframe(df_c[mask], use_container_width=True)
 
-        # 🎯 修正：將「今日判斷」移至左側「核心資產」下方，並使用 CSS 類別 daily-judgment-box 包覆
+        # 🎯 今日判斷與市場資訊整合
         if not df_H.empty:
             try:
                 df_h = df_H.copy()
@@ -413,31 +416,61 @@ if not df_C.empty:
                     df_h['dt'] = pd.to_datetime(df_h[date_col], errors='coerce')
                     latest = df_h.sort_values('dt', ascending=False).iloc[0]
                     
-                    # 使用 HTML 區塊包覆，使其像一個卡片
-                    st.subheader('📅 今日判斷')
+                    # 取出各項數值
+                    ldr_val = str(latest.get('LDR', 'N/A'))
+                    risk_today = str(latest.get('今日風險等級', 'N/A'))
+                    cmd = str(latest.get('今日指令', 'N/A'))
+                    market_pos = str(latest.get('盤勢位置', 'N/A'))
                     
-                    # 建立三欄顯示
-                    h1, h2, h3 = st.columns(3)
-                    with h1:
-                        ldr_val = str(latest.get('LDR', 'N/A'))
-                        st.metric("LDR (槓桿密度比)", ldr_val)
-                    with h2:
-                        risk_today = str(latest.get('今日風險等級', 'N/A'))
-                        risk_color = "black"
-                        if "紅" in risk_today: risk_color = "#dc3545"
-                        elif "黃" in risk_today: risk_color = "#ffc107"
-                        elif "綠" in risk_today: risk_color = "#28a745"
-                        
+                    # 取得台股60日季線乖離
+                    bias_val = "N/A"
+                    if not df_Market.empty and '台股60日季線乖離' in df_Market.columns:
+                        valid_rows = df_Market[df_Market['台股60日季線乖離'].astype(str).str.strip() != '']
+                        if not valid_rows.empty:
+                            bias_val = valid_rows.iloc[-1]['台股60日季線乖離']
+                    
+                    # 取得 VIX 資訊
+                    vix_display = "N/A"
+                    if not df_Global.empty and '代碼' in df_Global.columns:
+                        vix_row = df_Global[df_Global['代碼'] == 'VIX']
+                        if not vix_row.empty:
+                            v_price = vix_row.iloc[0].get('價格', 'N/A')
+                            v_status = vix_row.iloc[0].get('狀態', '')
+                            vix_display = f"{v_price} ({v_status})"
+
+                    # 顏色邏輯
+                    risk_color = "black"
+                    if "紅" in risk_today: risk_color = "#dc3545"
+                    elif "黃" in risk_today: risk_color = "#ffc107"
+                    elif "綠" in risk_today: risk_color = "#28a745"
+
+                    # 使用 HTML 區塊包覆
+                    st.subheader('📅 今日判斷 & 市場狀態')
+                    st.markdown("""<div class='daily-judgment-box' style='padding: 15px;'>""", unsafe_allow_html=True)
+                    
+                    # 第一列：LDR, Risk, Market, VIX
+                    m1, m2, m3, m4 = st.columns(4)
+                    with m1:
+                        st.metric("LDR (槓桿密度)", ldr_val)
+                    with m2:
                         st.markdown(f"<div style='font-size:0.8em;color:gray'>風險等級</div>", unsafe_allow_html=True)
                         st.markdown(f"<span style='color:{risk_color};font-weight:bold;font-size:1.5em'>{risk_today}</span>", unsafe_allow_html=True)
-                    with h3:
-                        cmd = str(latest.get('今日指令', 'N/A'))
-                        st.markdown(f"<div style='font-size:0.8em;color:gray'>指令</div>", unsafe_allow_html=True)
-                        st.info(f"{cmd}")
+                    with m3:
+                        st.markdown(f"<div style='font-size:0.8em;color:gray'>盤勢 / 60日乖離</div>", unsafe_allow_html=True)
+                        st.markdown(f"<span style='font-weight:bold;font-size:1.2em'>{market_pos}</span> <span style='font-size:0.9em;color:#666'>({bias_val})</span>", unsafe_allow_html=True)
+                    with m4:
+                        st.metric("VIX 恐慌指數", vix_display)
+                    
+                    st.markdown("---")
+                    
+                    # 第二列：指令
+                    st.markdown(f"<div style='font-size:0.9em;color:gray;margin-bottom:5px'>📊 操作指令</div>", unsafe_allow_html=True)
+                    st.info(f"{cmd}")
                     
                     # 結束 HTML div 區塊
                     st.markdown("</div>", unsafe_allow_html=True)
-            except: pass
+            except Exception as e:
+                st.error(f"解析判斷數據時發生錯誤: {e}")
     
     with c2:
         st.subheader('風險指標')
