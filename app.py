@@ -534,8 +534,28 @@ if not df_C.empty:
                     cmd = str(latest.get('今日指令', 'N/A'))
                     market_pos = str(latest.get('盤勢位置', 'N/A'))
                     
-                    # 新增欄位
-                    pledge_rate = fmt_pct(latest.get('質押率', 0))
+                    # --- 新增邏輯：質押率狀態判斷 ---
+                    raw_pledge = safe_float(latest.get('質押率', 0))
+                    # 統一轉為百分比數值 (ex: 0.4631 -> 46.31)
+                    if abs(raw_pledge) <= 5.0:
+                        pledge_val = raw_pledge * 100
+                    else:
+                        pledge_val = raw_pledge
+                        
+                    # 判斷狀態：安全 <35%，警戒 35–45%，危險 >45%
+                    if pledge_val > 45:
+                        p_status = "危險"
+                        p_color = "#dc3545" # 紅
+                    elif pledge_val >= 35:
+                        p_status = "警戒"
+                        p_color = "#ffc107" # 黃
+                    else:
+                        p_status = "安全"
+                        p_color = "#28a745" # 綠
+                        
+                    pledge_display = f"{pledge_val:.2f}%（{p_status}）"
+                    # --------------------------------
+
                     unwind_rate = fmt_pct(latest.get('建議拆倉比例', 0))
                     
                     # 取得台股60日季線乖離
@@ -580,8 +600,8 @@ if not df_C.empty:
                     with m_cols[1]:
                         st.markdown(make_metric("風險等級", risk_today, risk_color), unsafe_allow_html=True)
                     with m_cols[2]:
-                        # 質押率
-                        st.markdown(make_metric("質押率", pledge_rate), unsafe_allow_html=True)
+                        # 質押率 (帶有狀態顏色)
+                        st.markdown(make_metric("質押率", pledge_display, p_color), unsafe_allow_html=True)
                     with m_cols[3]:
                         # 建議拆倉
                         st.markdown(make_metric("建議拆倉", unwind_rate, "#dc3545" if safe_float(unwind_rate) > 0 else "black"), unsafe_allow_html=True)
