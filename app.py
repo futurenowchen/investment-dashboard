@@ -78,6 +78,17 @@ def fmt_date(value):
     try: return pd.to_datetime(value).strftime('%Y-%m-%d')
     except: return str(value)
 
+def fmt_pct(value):
+    """將數值轉為百分比字串，假設小於 5 的數值為小數 (ex: 0.15 -> 15.00%)"""
+    val = safe_float(value)
+    if val == 0: return "0.00%"
+    # 簡單判斷：如果數值 <= 5.0，視為小數格式 (0.5 = 50%)
+    # 如果數值 > 5.0，視為已經是百分比的數字 (50 = 50%)，視情況調整
+    if abs(val) <= 5.0:
+        return f"{val*100:.2f}%"
+    else:
+        return f"{val:.2f}%"
+
 # --- 文字日報生成函式 ---
 def generate_daily_report(df_A, df_C, df_D, df_E, df_F, df_H):
     lines = []
@@ -137,10 +148,14 @@ def generate_daily_report(df_A, df_C, df_D, df_E, df_F, df_H):
                 
                 ldr = str(latest.get('LDR', 'N/A'))
                 risk = str(latest.get('今日風險等級', 'N/A'))
+                pledge = fmt_pct(latest.get('質押率', 0))
+                unwind = fmt_pct(latest.get('建議拆倉比例', 0))
                 cmd = str(latest.get('今日指令', 'N/A'))
                 
                 lines.append(f"LDR：{ldr}")
                 lines.append(f"風險等級：{risk}")
+                lines.append(f"質押率：{pledge}")
+                lines.append(f"建議拆倉：{unwind}")
                 lines.append(f"指令：{cmd}")
             else:
                  lines.append("表H無日期欄位")
@@ -511,6 +526,10 @@ if not df_C.empty:
                     cmd = str(latest.get('今日指令', 'N/A'))
                     market_pos = str(latest.get('盤勢位置', 'N/A'))
                     
+                    # 新增欄位
+                    pledge_rate = fmt_pct(latest.get('質押率', 0))
+                    unwind_rate = fmt_pct(latest.get('建議拆倉比例', 0))
+                    
                     # 取得台股60日季線乖離
                     bias_val = "N/A"
                     if not df_Market.empty and '台股60日季線乖離' in df_Market.columns:
@@ -536,32 +555,39 @@ if not df_C.empty:
                     # 標題
                     st.subheader('📅 今日判斷 & 市場狀態')
                     
-                    # 建立四欄顯示 (移除外部灰底 box)
-                    m1, m2, m3, m4 = st.columns(4)
+                    # 建立六欄顯示 (擴充)
+                    m_cols = st.columns(6)
                     
                     # 統一的樣式輔助函式 (確保字體大小一致)
                     def make_metric(label, value, color="black"):
                          return f"""
                          <div style='margin-bottom:5px;'>
                             <div style='font-size:0.9rem; color:gray; margin-bottom:0px;'>{label}</div>
-                            <div style='font-size:1.6rem; font-weight:bold; color:{color}; line-height:1.2;'>{value}</div>
+                            <div style='font-size:1.4rem; font-weight:bold; color:{color}; line-height:1.2;'>{value}</div>
                          </div>
                          """
 
-                    with m1:
-                        st.markdown(make_metric("LDR (槓桿密度)", ldr_val), unsafe_allow_html=True)
-                    with m2:
+                    with m_cols[0]:
+                        st.markdown(make_metric("LDR", ldr_val), unsafe_allow_html=True)
+                    with m_cols[1]:
                         st.markdown(make_metric("風險等級", risk_today, risk_color), unsafe_allow_html=True)
-                    with m3:
-                        val_str = f"{market_pos} ({bias_val})"
-                        st.markdown(make_metric("盤勢 / 60日乖離", val_str), unsafe_allow_html=True)
-                    with m4:
-                        st.markdown(make_metric("VIX 恐慌指數", vix_display), unsafe_allow_html=True)
+                    with m_cols[2]:
+                        # 質押率
+                        st.markdown(make_metric("質押率", pledge_rate), unsafe_allow_html=True)
+                    with m_cols[3]:
+                        # 建議拆倉
+                        st.markdown(make_metric("建議拆倉", unwind_rate, "#dc3545" if safe_float(unwind_rate) > 0 else "black"), unsafe_allow_html=True)
+                    with m_cols[4]:
+                        val_str = f"{market_pos}"
+                        # 乖離放後面或同一格，這裡只放盤勢比較簡潔，或可合併
+                        st.markdown(make_metric("盤勢", val_str), unsafe_allow_html=True)
+                    with m_cols[5]:
+                        st.markdown(make_metric("VIX", vix_display.split(' ')[0]), unsafe_allow_html=True) # 簡化顯示
                     
                     st.markdown("---")
                     
                     # 第二列：指令
-                    st.markdown(f"<div style='font-size:0.9em;color:gray;margin-bottom:5px'>📊 操作指令</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div style='font-size:0.9em;color:gray;margin-bottom:5px'>📊 操作指令 (60日乖離: {bias_val})</div>", unsafe_allow_html=True)
                     st.info(f"{cmd}")
                     
             except Exception as e:
