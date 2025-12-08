@@ -510,7 +510,8 @@ if not df_C.empty:
     elif '危險' in risk_txt: 
         style = {'e':'🚨', 'bg':'#dc3545', 't':'white'} # 紅
 
-    c1, c2 = st.columns([2, 1])
+    # 調整欄位比例：3:1 (放大左側，縮小右側)
+    c1, c2 = st.columns([3, 1])
     with c1:
         st.subheader('核心資產')
         # 修正：更新要隱藏的欄位，將指標類資訊隱藏，只顯示資產數據
@@ -587,12 +588,12 @@ if not df_C.empty:
                     # 建立六欄顯示 (擴充)
                     m_cols = st.columns(6)
                     
-                    # 統一的樣式輔助函式 (確保字體大小一致)
+                    # 統一的樣式輔助函式 (字體放大版)
                     def make_metric(label, value, color="black"):
                          return f"""
                          <div style='margin-bottom:5px;'>
-                            <div style='font-size:0.85rem; color:gray; margin-bottom:0px; white-space: nowrap;'>{label}</div>
-                            <div style='font-size:1.1rem; font-weight:bold; color:{color}; line-height:1.2; white-space: nowrap;'>{value}</div>
+                            <div style='font-size:0.95rem; color:gray; margin-bottom:0px; white-space: nowrap;'>{label}</div>
+                            <div style='font-size:1.5rem; font-weight:bold; color:{color}; line-height:1.2; white-space: nowrap;'>{value}</div>
                          </div>
                          """
 
