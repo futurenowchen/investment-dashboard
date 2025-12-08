@@ -19,14 +19,21 @@ st.set_page_config(layout="wide", page_title="投資組合儀表板")
 # 注入 CSS
 st.markdown("""
 <style>
+/* 1. 減少頁面頂部與底部的留白，讓版面更緊湊 */
+.block-container {
+    padding-top: 1rem;
+    padding-bottom: 2rem;
+}
+
 html, body, [class*="stApp"] { font-size: 16px; }
-h1 { font-size: 2.5em; }
-h2 { font-size: 1.8em; }
-h3 { font-size: 1.5em; }
+h1 { font-size: 2.2em; margin-bottom: 0.5rem; }
+h2 { font-size: 1.6em; padding-top: 0.5rem; }
+h3 { font-size: 1.4em; }
+
 /* 修正：將表格字體縮小至 0.8em 以利單行呈現 */
 .stDataFrame { font-size: 0.8em; }
-.stMetric > div:first-child { font-size: 1.25em !important; }
-.stMetric > div:nth-child(2) > div:first-child { font-size: 2.5em !important; }
+.stMetric > div:first-child { font-size: 1.1em !important; }
+.stMetric > div:nth-child(2) > div:first-child { font-size: 2.0em !important; }
 
 /* 側邊欄按鈕樣式 */
 div[data-testid="stSidebar"] .stButton button {
@@ -42,12 +49,12 @@ div[data-testid="stMultiSelect"] > label { display: none; }
 
 /* 🎯 風險燈號 CSS */
 .risk-indicator {
-    padding: 15px;
+    padding: 10px; /* 稍微縮小 padding */
     border-radius: 8px;
     text-align: center;
-    font-size: 1.5em;
+    font-size: 1.4em;
     font-weight: bold;
-    margin-bottom: 10px;
+    margin-bottom: 5px;
     border: 2px solid;
 }
 </style>
@@ -90,7 +97,7 @@ def fmt_pct(value):
     else:
         return f"{val:.2f}%"
 
-# --- 文字日報生成函式 ---
+# --- 文字日報生成函式 (修正價格為0的問題) ---
 def generate_daily_report(df_A, df_C, df_D, df_E, df_F, df_H):
     lines = []
     today = datetime.now().strftime('%Y/%m/%d')
@@ -175,8 +182,24 @@ def generate_daily_report(df_A, df_C, df_D, df_E, df_F, df_H):
             qty = fmt_int(row.get('持有數量（股）', 0)) + "股"
             avg = "均價" + fmt_money(row.get('平均成本', 0))
             
+            # 修正價格為 0 的問題：多重來源備援
+            # 優先順序：1. 即時 API (session_state) 2. Sheet '收盤價' 3. Sheet '即時收盤價' 4. Sheet '成交價'
             live_p = st.session_state['live_prices'].get(ticker)
-            close_val = live_p if live_p else safe_float(row.get('收盤價', 0))
+            
+            close_val = 0.0
+            price_candidates = [
+                live_p, 
+                row.get('收盤價'), 
+                row.get('即時收盤價'), 
+                row.get('成交價')
+            ]
+            
+            for p in price_candidates:
+                v = safe_float(p)
+                if v > 0:
+                    close_val = v
+                    break
+            
             close = "收盤" + f"{close_val:,.2f}"
             mkt_val = safe_float(row.get('持有數量（股）', 0)) * close_val
             mkt = "市值" + f"{mkt_val:,.0f}"
@@ -564,7 +587,7 @@ if not df_C.empty:
     # --- 下層：今日判斷 & 市場狀態 ---
     # 此區塊位於第一列下方，寬度全滿，且字體放大
     
-    st.markdown("---")
+    # 移除上方分割線，減少垂直間距
     st.subheader('📅 今日判斷 & 市場狀態')
 
     if not df_H.empty:
@@ -632,9 +655,9 @@ if not df_C.empty:
                 # 統一的樣式輔助函式 (字體放大版)
                 def make_metric(label, value, color="black"):
                         return f"""
-                        <div style='margin-bottom:10px;'>
-                        <div style='font-size:1.2rem; color:gray; margin-bottom:2px; white-space: nowrap;'>{label}</div>
-                        <div style='font-size:2.0rem; font-weight:bold; color:{color}; line-height:1.2; white-space: nowrap;'>{value}</div>
+                        <div style='margin-bottom:5px;'>
+                        <div style='font-size:1.1rem; color:gray; margin-bottom:2px; white-space: nowrap;'>{label}</div>
+                        <div style='font-size:1.8rem; font-weight:bold; color:{color}; line-height:1.2; white-space: nowrap;'>{value}</div>
                         </div>
                         """
 
