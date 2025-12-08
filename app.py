@@ -554,8 +554,9 @@ if not df_C.empty:
                     else:
                         p_status = "安全"
                         p_color = "#28a745" # 綠
-                        
-                    pledge_display = f"{pledge_val:.2f}%（{p_status}）"
+                    
+                    # 修改這裡：使用 HTML 分行顯示狀態，不加括號
+                    pledge_display = f"{pledge_val:.2f}%<div style='font-size: 0.6em; line-height: 1.0; margin-top: 2px;'>{p_status}</div>"
                     # --------------------------------
 
                     unwind_rate = fmt_pct(latest.get('建議拆倉比例', 0))
