@@ -23,7 +23,8 @@ html, body, [class*="stApp"] { font-size: 16px; }
 h1 { font-size: 2.5em; }
 h2 { font-size: 1.8em; }
 h3 { font-size: 1.5em; }
-.stDataFrame { font-size: 1.0em; }
+/* 修正：將表格字體縮小至 0.8em 以利單行呈現 */
+.stDataFrame { font-size: 0.8em; }
 .stMetric > div:first-child { font-size: 1.25em !important; }
 .stMetric > div:nth-child(2) > div:first-child { font-size: 2.5em !important; }
 
