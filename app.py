@@ -310,15 +310,16 @@ def load_data(sheet_name):
             st.error(f"讀取 {sheet_name} 失敗: {e}")
             return pd.DataFrame() 
 
-# --- 股價 API (修復版：自動加 .TW) ---
+# --- 股價 API (修正版：移除所有 st UI 元件以避免 Cache Error) ---
 @st.cache_data(ttl="60s") 
 def fetch_current_prices(tickers):
     """
     抓取即時股價，針對純數字代碼自動加上 .TW
+    注意：此函式被快取，內部不可使用 st.toast 或 st.error 等 UI 互動
     """
     if not tickers: return {}
     
-    st.toast(f"正在更新 {len(tickers)} 檔股價...", icon="⏳")
+    # 移除 st.toast，改由外部呼叫時處理
     
     # 1. 建立代碼映射表 (原始代碼 -> Yahoo代碼)
     ticker_map = {}
@@ -329,7 +330,6 @@ def fetch_current_prices(tickers):
         if not raw_t: continue
         
         # 簡單判斷：如果是純數字，假設為台股，加上 .TW
-        # 如果您有上櫃股票，需自行調整邏輯或在 Sheet 裡直接寫 .TWO
         if raw_t.isdigit():
             y_t = f"{raw_t}.TW"
         else:
@@ -347,13 +347,10 @@ def fetch_current_prices(tickers):
         data = yf.download(query_tickers, period='1d', interval='1d', progress=False)
         
         if data.empty:
-            st.warning("Yahoo Finance 未回傳數據")
+            # 移除 st.warning
             return {}
 
         # 3. 解析資料 (處理單檔與多檔的差異)
-        # yfinance 新版多檔時會回傳 MultiIndex Columns
-        
-        # 取得最後一筆 Close
         try:
             closes = data['Close']
         except KeyError:
@@ -365,15 +362,14 @@ def fetch_current_prices(tickers):
         last_row = closes.iloc[-1]
         
         if len(query_tickers) == 1:
-            # 單檔股票，last_row 是一個 float
+            # 單檔股票
             val = last_row
-            # 有時會是 Series (取決於版本)，轉為 float
             if hasattr(val, 'item'): val = val.item()
             
             original_ticker = ticker_map[query_tickers[0]]
             res[original_ticker] = round(float(val), 2)
         else:
-            # 多檔股票，last_row 是一個 Series，index 是 Yahoo 代碼
+            # 多檔股票
             for y_t, original_t in ticker_map.items():
                 try:
                     val = last_row.get(y_t)
@@ -385,7 +381,8 @@ def fetch_current_prices(tickers):
         
         return res
     except Exception as e:
-        st.error(f"股價更新發生錯誤: {e}")
+        # 移除 st.error
+        print(f"Error fetching prices: {e}") # 改用 print 到後台 logs
         return {}
 
 # 寫入 API
@@ -415,7 +412,7 @@ def write_prices_to_sheet(df_A, updates):
 
 # === 主程式 ===
 # ⚠️ 強制更新標題以確認版本
-st.title('💰 投資組合儀表板')
+st.title('💰 投資組合儀表板 (Final Fix)')
 
 # --- 診斷區塊 (除錯用) ---
 with st.expander("🛠️ 連線狀態檢查 (若資料跑不出來請點此)", expanded=False):
@@ -447,6 +444,9 @@ if st.sidebar.button("💾 更新股價至 Google Sheets", type="primary"):
     if not df_A.empty and '股票' in df_A.columns:
         # 取得不重複的股票代碼列表
         tickers = [t for t in df_A['股票'].unique() if str(t).strip()]
+        
+        # 在這裡顯示 Toast，而不是在 cached function 內部
+        st.toast(f"正在更新 {len(tickers)} 檔股價...", icon="⏳")
         
         # 呼叫修復後的函式
         updates = fetch_current_prices(tickers)
@@ -628,7 +628,8 @@ with c1:
         st.dataframe(df_show, use_container_width=True, height=height_val, hide_index=True)
 
 with c2:
-    st.markdown("<h3>🍰 資產配置</h3>", unsafe_allow_html=True) 
+    # 改用 HTML 並設定置中樣式，讓標題與圓餅圖對齊
+    st.markdown("<h3 style='text-align: center;'>🍰 資產配置</h3>", unsafe_allow_html=True) 
     if not df_B.empty and '市值（元）' in df_B.columns:
         df_B['num'] = df_B['市值（元）'].apply(safe_float)
         chart_data = df_B[(df_B['num'] > 0) & (~df_B['股票'].str.contains('總資產|Total', na=False))]
@@ -781,5 +782,3 @@ if not df_G.empty:
         st.dataframe(df_G, use_container_width=True)
 else:
     st.info("無財富藍圖資料")
-
-
