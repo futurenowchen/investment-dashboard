@@ -587,7 +587,17 @@ if not df_C.empty:
                         st.markdown(make_metric("建議拆倉", unwind_rate, "#dc3545" if safe_float(unwind_rate) > 0 else "black"), unsafe_allow_html=True)
                     with m_cols[4]:
                         # 將乖離率整合進盤勢顯示
-                        bias_display = fmt_pct(bias_val) if bias_val != "N/A" else "N/A"
+                        # 修正：針對乖離率數值進行判斷，避免 3.63 被轉為 363%
+                        bias_display = "N/A"
+                        if bias_val != "N/A":
+                             bv = safe_float(bias_val)
+                             # 如果數值絕對值 >= 1.0 (例如 3.63)，視為已經是百分比數值
+                             # 如果數值絕對值 < 1.0 (例如 0.0363)，視為小數，需乘以 100
+                             if abs(bv) >= 1.0:
+                                 bias_display = f"{bv:.2f}%"
+                             else:
+                                 bias_display = f"{bv*100:.2f}%"
+                        
                         val_str = f"{market_pos} ({bias_display})"
                         st.markdown(make_metric("盤勢", val_str), unsafe_allow_html=True)
                     with m_cols[5]:
