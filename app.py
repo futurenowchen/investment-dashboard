@@ -576,9 +576,10 @@ if not df_C.empty:
                             v_status = vix_row.iloc[0].get('狀態', '')
                             vix_display = f"{v_price} ({v_status})"
 
-                    # 顏色邏輯
+                    # 顏色邏輯 - 修正：加入橘色判斷
                     risk_color = "black"
                     if "紅" in risk_today: risk_color = "#dc3545"
+                    elif "橘" in risk_today: risk_color = "#fd7e14" # 橘色
                     elif "黃" in risk_today: risk_color = "#ffc107"
                     elif "綠" in risk_today: risk_color = "#28a745"
 
@@ -600,7 +601,18 @@ if not df_C.empty:
                     with m_cols[0]:
                         st.markdown(make_metric("LDR", ldr_val), unsafe_allow_html=True)
                     with m_cols[1]:
-                        st.markdown(make_metric("風險等級", risk_today, risk_color), unsafe_allow_html=True)
+                        # 處理風險等級顯示：將括號內容移至下一行並縮小
+                        match = re.search(r"(.+?)\s*([\(（].+?[\)）])", risk_today)
+                        if match:
+                            r_main = match.group(1).strip()
+                            r_sub = match.group(2).strip()
+                            # 組合成兩行 HTML
+                            risk_display_html = f"{r_main}<div style='font-size: 0.6em; line-height: 1.0; margin-top: 2px;'>{r_sub}</div>"
+                        else:
+                            risk_display_html = risk_today
+                        
+                        st.markdown(make_metric("風險等級", risk_display_html, risk_color), unsafe_allow_html=True)
+                        
                     with m_cols[2]:
                         # 質押率 (帶有狀態顏色)
                         st.markdown(make_metric("質押率", pledge_display, p_color), unsafe_allow_html=True)
