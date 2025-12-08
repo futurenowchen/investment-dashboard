@@ -454,8 +454,8 @@ def write_prices_to_sheet(df_A, updates):
         return False
 
 # === 主程式 ===
-# ⚠️ 強制更新標題以確認版本
-st.title('💰 投資組合儀表板 (Final Fix)')
+# ⚠️ 修正標題
+st.title('💰 投資組合儀表板')
 
 # --- 診斷區塊 (除錯用) ---
 with st.expander("🛠️ 連線狀態檢查 (若資料跑不出來請點此)", expanded=False):
@@ -709,8 +709,8 @@ else:
 
 # 2. 持股
 st.header('2. 持股分析')
-# 調整比例：左(表格) 2.5 : 右(圖) 1，讓表格有更多寬度
-c1, c2 = st.columns([2.5, 1])
+# 調整比例：左(表格) 3 : 右(圖) 1，讓表格有更多寬度
+c1, c2 = st.columns([3, 1])
 with c1:
     # 改用 markdown 確保字體大小控制權
     st.markdown("### 📝 持股明細") 
@@ -737,8 +737,11 @@ with c2:
         chart_data = df_B[(df_B['num'] > 0) & (~df_B['股票'].str.contains('總資產|Total', na=False))]
         if not chart_data.empty:
             fig = px.pie(chart_data, values='num', names='股票')
-            # 移除所有邊距
-            fig.update_layout(margin=dict(t=10, b=10, l=10, r=10))
+            # 移除所有邊距，將圖例移至底部
+            fig.update_layout(
+                margin=dict(t=10, b=10, l=10, r=10),
+                legend=dict(orientation="h", yanchor="bottom", y=-0.2, xanchor="center", x=0.5)
+            )
             st.plotly_chart(fig, use_container_width=True)
 
 # 3. 交易紀錄
@@ -857,29 +860,6 @@ if not df_G.empty:
                         
                         if body:
                             st.dataframe(pd.DataFrame(body, columns=u_heads), use_container_width=True, hide_index=True)
-                        else:
-                            st.info("無詳細數據")
-                current_title = first_cell
-                current_data = []
-            elif any(str(c).strip() for c in row):
-                if current_title is not None:
-                    current_data.append(row)
-        
-        # Render last
-        if current_title:
-            st.subheader(current_title)
-            if len(current_data) > 0:
-                headers = current_data[0]
-                body = current_data[1:] if len(current_data) > 1 else []
-                u_heads = []
-                seen = {}
-                for h in headers:
-                    h_str = str(h).strip()
-                    if not h_str: h_str = "-" 
-                    if h_str in seen: seen[h_str] += 1; u_heads.append(f"{h_str}_{seen[h_str]}")
-                    else: seen[h_str] = 0; u_heads.append(h_str)
-                if body:
-                    st.dataframe(pd.DataFrame(body, columns=u_heads), use_container_width=True, hide_index=True)
     except:
         st.dataframe(df_G, use_container_width=True)
 else:
