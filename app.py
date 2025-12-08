@@ -591,8 +591,8 @@ if not df_C.empty:
                     def make_metric(label, value, color="black"):
                          return f"""
                          <div style='margin-bottom:5px;'>
-                            <div style='font-size:0.9rem; color:gray; margin-bottom:0px;'>{label}</div>
-                            <div style='font-size:1.4rem; font-weight:bold; color:{color}; line-height:1.2;'>{value}</div>
+                            <div style='font-size:0.85rem; color:gray; margin-bottom:0px; white-space: nowrap;'>{label}</div>
+                            <div style='font-size:1.1rem; font-weight:bold; color:{color}; line-height:1.2; white-space: nowrap;'>{value}</div>
                          </div>
                          """
 
