@@ -601,13 +601,15 @@ if not df_C.empty:
                     with m_cols[0]:
                         st.markdown(make_metric("LDR", ldr_val), unsafe_allow_html=True)
                     with m_cols[1]:
-                        # 處理風險等級顯示：將括號內容移至下一行並縮小
+                        # 處理風險等級顯示：將括號內容移至下一行並縮小，並移除括號
                         match = re.search(r"(.+?)\s*([\(（].+?[\)）])", risk_today)
                         if match:
                             r_main = match.group(1).strip()
                             r_sub = match.group(2).strip()
+                            # 移除括號
+                            r_sub_clean = re.sub(r"[（）\(\)]", "", r_sub)
                             # 組合成兩行 HTML
-                            risk_display_html = f"{r_main}<div style='font-size: 0.6em; line-height: 1.0; margin-top: 2px;'>{r_sub}</div>"
+                            risk_display_html = f"{r_main}<div style='font-size: 0.6em; line-height: 1.0; margin-top: 2px;'>{r_sub_clean}</div>"
                         else:
                             risk_display_html = risk_today
                         
