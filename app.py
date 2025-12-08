@@ -498,10 +498,12 @@ if not df_C.empty:
     df_c.set_index(df_c.columns[0], inplace=True)
     col_val = df_c.columns[0]
     
+    # 計算相關變數
     risk = str(df_c.loc['β風險燈號', col_val]) if 'β風險燈號' in df_c.index else '未知'
     risk_txt = re.sub(r'\s+', '', risk)
     lev = safe_float(df_c.loc['槓桿倍數β', col_val]) if '槓桿倍數β' in df_c.index else 0
 
+    # 風險指標樣式
     style = {'e':'❓', 'bg':'#6c757d', 't':'white'}
     if '安全' in risk_txt: 
         style = {'e':'✅', 'bg':'#28a745', 't':'white'} # 綠
@@ -510,153 +512,28 @@ if not df_C.empty:
     elif '危險' in risk_txt: 
         style = {'e':'🚨', 'bg':'#dc3545', 't':'white'} # 紅
 
-    # 調整欄位比例：3:1 (放大左側，縮小右側)
-    c1, c2 = st.columns([3, 1])
-    with c1:
+    # 調整版面配置：分為三欄，並置顯示
+    # 比例分配：2 (表格) : 1 (風險) : 1 (目標)
+    c_top1, c_top2, c_top3 = st.columns([2, 1, 1])
+    
+    # 欄 1: 核心資產表格
+    with c_top1:
         st.subheader('核心資產')
-        # 修正：更新要隱藏的欄位，將指標類資訊隱藏，只顯示資產數據
         mask = ~df_c.index.isin([
             'β風險燈號', '槓桿倍數β', '短期財務目標', '短期財務目標差距', '達成進度', 
             'LDR', 'LDR燈號', '槓桿密度比LDR', '質押率'
         ])
         st.dataframe(df_c[mask], use_container_width=True)
 
-        # 🎯 今日判斷與市場資訊整合
-        if not df_H.empty:
-            try:
-                df_h = df_H.copy()
-                date_col = next((c for c in df_h.columns if '日期' in c), None)
-                if date_col:
-                    df_h['dt'] = pd.to_datetime(df_h[date_col], errors='coerce')
-                    latest = df_h.sort_values('dt', ascending=False).iloc[0]
-                    
-                    # 取出各項數值
-                    ldr_val = str(latest.get('LDR', 'N/A'))
-                    risk_today = str(latest.get('今日風險等級', 'N/A'))
-                    cmd = str(latest.get('今日指令', 'N/A'))
-                    market_pos = str(latest.get('盤勢位置', 'N/A'))
-                    
-                    # --- 新增邏輯：質押率狀態判斷 ---
-                    raw_pledge = safe_float(latest.get('質押率', 0))
-                    # 統一轉為百分比數值 (ex: 0.4631 -> 46.31)
-                    if abs(raw_pledge) <= 5.0:
-                        pledge_val = raw_pledge * 100
-                    else:
-                        pledge_val = raw_pledge
-                        
-                    # 判斷狀態：安全 <35%，警戒 35–45%，危險 >45%
-                    if pledge_val > 45:
-                        p_status = "危險"
-                        p_color = "#dc3545" # 紅
-                    elif pledge_val >= 35:
-                        p_status = "警戒"
-                        p_color = "#ffc107" # 黃
-                    else:
-                        p_status = "安全"
-                        p_color = "#28a745" # 綠
-                    
-                    # 修改這裡：使用 HTML 分行顯示狀態，不加括號
-                    pledge_display = f"{pledge_val:.2f}%<div style='font-size: 0.6em; line-height: 1.0; margin-top: 2px;'>{p_status}</div>"
-                    # --------------------------------
-
-                    unwind_rate = fmt_pct(latest.get('建議拆倉比例', 0))
-                    
-                    # 取得台股60日季線乖離
-                    bias_val = "N/A"
-                    if not df_Market.empty and '台股60日季線乖離' in df_Market.columns:
-                        valid_rows = df_Market[df_Market['台股60日季線乖離'].astype(str).str.strip() != '']
-                        if not valid_rows.empty:
-                            bias_val = valid_rows.iloc[-1]['台股60日季線乖離']
-                    
-                    # 取得 VIX 資訊
-                    vix_display = "N/A"
-                    if not df_Global.empty and '代碼' in df_Global.columns:
-                        vix_row = df_Global[df_Global['代碼'] == 'VIX']
-                        if not vix_row.empty:
-                            v_price = vix_row.iloc[0].get('價格', 'N/A')
-                            v_status = vix_row.iloc[0].get('狀態', '')
-                            vix_display = f"{v_price} ({v_status})"
-
-                    # 顏色邏輯 - 修正：加入橘色判斷
-                    risk_color = "black"
-                    if "紅" in risk_today: risk_color = "#dc3545"
-                    elif "橘" in risk_today: risk_color = "#fd7e14" # 橘色
-                    elif "黃" in risk_today: risk_color = "#ffc107"
-                    elif "綠" in risk_today: risk_color = "#28a745"
-
-                    # 標題
-                    st.subheader('📅 今日判斷 & 市場狀態')
-                    
-                    # 建立六欄顯示 (擴充)
-                    m_cols = st.columns(6)
-                    
-                    # 統一的樣式輔助函式 (字體放大版)
-                    def make_metric(label, value, color="black"):
-                         return f"""
-                         <div style='margin-bottom:5px;'>
-                            <div style='font-size:1.0rem; color:gray; margin-bottom:0px; white-space: nowrap;'>{label}</div>
-                            <div style='font-size:1.6rem; font-weight:bold; color:{color}; line-height:1.2; white-space: nowrap;'>{value}</div>
-                         </div>
-                         """
-
-                    with m_cols[0]:
-                        st.markdown(make_metric("LDR", ldr_val), unsafe_allow_html=True)
-                    with m_cols[1]:
-                        # 處理風險等級顯示：將括號內容移至下一行並縮小，並移除括號
-                        match = re.search(r"(.+?)\s*([\(（].+?[\)）])", risk_today)
-                        if match:
-                            r_main = match.group(1).strip()
-                            r_sub = match.group(2).strip()
-                            # 移除括號
-                            r_sub_clean = re.sub(r"[（）\(\)]", "", r_sub)
-                            # 組合成兩行 HTML
-                            risk_display_html = f"{r_main}<div style='font-size: 0.6em; line-height: 1.0; margin-top: 2px;'>{r_sub_clean}</div>"
-                        else:
-                            risk_display_html = risk_today
-                        
-                        st.markdown(make_metric("風險等級", risk_display_html, risk_color), unsafe_allow_html=True)
-                        
-                    with m_cols[2]:
-                        # 質押率 (帶有狀態顏色)
-                        st.markdown(make_metric("質押率", pledge_display, p_color), unsafe_allow_html=True)
-                    with m_cols[3]:
-                        # 建議拆倉
-                        st.markdown(make_metric("建議拆倉", unwind_rate, "#dc3545" if safe_float(unwind_rate) > 0 else "black"), unsafe_allow_html=True)
-                    with m_cols[4]:
-                        # 將乖離率整合進盤勢顯示
-                        # 修正：針對乖離率數值進行判斷，避免 3.63 被轉為 363%
-                        bias_display = "N/A"
-                        if bias_val != "N/A":
-                             bv = safe_float(bias_val)
-                             # 如果數值絕對值 >= 1.0 (例如 3.63)，視為已經是百分比數值
-                             # 如果數值絕對值 < 1.0 (例如 0.0363)，視為小數，需乘以 100
-                             if abs(bv) >= 1.0:
-                                 bias_display = f"{bv:.2f}%"
-                             else:
-                                 bias_display = f"{bv*100:.2f}%"
-                        
-                        # 修正：分行顯示乖離率，不加括號
-                        val_str = f"{market_pos}<div style='font-size: 0.6em; line-height: 1.0; margin-top: 2px;'>{bias_display}</div>"
-                        st.markdown(make_metric("盤勢", val_str), unsafe_allow_html=True)
-                    with m_cols[5]:
-                        st.markdown(make_metric("VIX", vix_display.split(' ')[0]), unsafe_allow_html=True) # 簡化顯示
-                    
-                    st.markdown("---")
-                    
-                    # 第二列：指令
-                    st.markdown(f"<div style='font-size:0.9em;color:gray;margin-bottom:5px'>📊 操作指令 (60日乖離: {bias_val})</div>", unsafe_allow_html=True)
-                    st.info(f"{cmd}")
-                    
-            except Exception as e:
-                st.error(f"解析判斷數據時發生錯誤: {e}")
-    
-    with c2:
+    # 欄 2: 風險指標卡片
+    with c_top2:
         st.subheader('風險指標')
         st.markdown(f"<div class='risk-indicator' style='background:{style['bg']};color:{style['t']};border-color:{style['bg']}'>{style['e']} {risk}</div>", unsafe_allow_html=True)
         st.metric("槓桿倍數", f"{lev:.2f}")
-        
-        st.markdown("---")
-        # 財務目標
+
+    # 欄 3: 短期財務目標卡片
+    with c_top3:
+        st.subheader('短期目標')
         try:
             target = safe_float(df_c.loc['短期財務目標', col_val]) if '短期財務目標' in df_c.index else 0
             gap = safe_float(df_c.loc['短期財務目標差距', col_val]) if '短期財務目標差距' in df_c.index else 0
@@ -667,15 +544,14 @@ if not df_C.empty:
                 
                 st.markdown(f"""
                 <div style="background-color:#f8f9fa; padding:15px; border-radius:10px; margin-bottom:10px; border:1px solid #e9ecef;">
-                    <div style="font-size:1.1em; color:#6c757d; margin-bottom:5px;">短期財務目標達成率</div>
-                    <div style="font-size:2.8em; font-weight:bold; color:#007bff; line-height:1.1;">
+                    <div style="font-size:1.0em; color:#6c757d; margin-bottom:5px;">達成率</div>
+                    <div style="font-size:2.2em; font-weight:bold; color:#007bff; line-height:1.1;">
                         {pct*100:.1f}%
                     </div>
-                    <div style="margin-top:8px; font-size:0.95em; display:flex; justify-content:space-between; color:#495057;">
+                    <div style="margin-top:8px; font-size:0.85em; display:flex; justify-content:space-between; color:#495057;">
                         <span>目前: <b>{fmt_int(curr)}</b></span>
-                        <span>目標: <b>{fmt_int(target)}</b></span>
                     </div>
-                     <div style="text-align:right; font-size:0.85em; color:#dc3545; margin-top:2px;">
+                     <div style="text-align:right; font-size:0.8em; color:#dc3545; margin-top:2px;">
                         (差 {fmt_int(gap)})
                     </div>
                 </div>
@@ -684,6 +560,126 @@ if not df_C.empty:
             else:
                 st.caption("無法計算進度")
         except: pass
+
+    # --- 下層：今日判斷 & 市場狀態 ---
+    # 此區塊位於第一列下方，寬度全滿，且字體放大
+    
+    st.markdown("---")
+    st.subheader('📅 今日判斷 & 市場狀態')
+
+    if not df_H.empty:
+        try:
+            df_h = df_H.copy()
+            date_col = next((c for c in df_h.columns if '日期' in c), None)
+            if date_col:
+                df_h['dt'] = pd.to_datetime(df_h[date_col], errors='coerce')
+                latest = df_h.sort_values('dt', ascending=False).iloc[0]
+                
+                # 取出各項數值
+                ldr_val = str(latest.get('LDR', 'N/A'))
+                risk_today = str(latest.get('今日風險等級', 'N/A'))
+                cmd = str(latest.get('今日指令', 'N/A'))
+                market_pos = str(latest.get('盤勢位置', 'N/A'))
+                
+                # --- 新增邏輯：質押率狀態判斷 ---
+                raw_pledge = safe_float(latest.get('質押率', 0))
+                if abs(raw_pledge) <= 5.0:
+                    pledge_val = raw_pledge * 100
+                else:
+                    pledge_val = raw_pledge
+                    
+                if pledge_val > 45:
+                    p_status = "危險"
+                    p_color = "#dc3545" # 紅
+                elif pledge_val >= 35:
+                    p_status = "警戒"
+                    p_color = "#ffc107" # 黃
+                else:
+                    p_status = "安全"
+                    p_color = "#28a745" # 綠
+                
+                pledge_display = f"{pledge_val:.2f}%<div style='font-size: 0.6em; line-height: 1.0; margin-top: 2px;'>{p_status}</div>"
+                # --------------------------------
+
+                unwind_rate = fmt_pct(latest.get('建議拆倉比例', 0))
+                
+                # 取得台股60日季線乖離
+                bias_val = "N/A"
+                if not df_Market.empty and '台股60日季線乖離' in df_Market.columns:
+                    valid_rows = df_Market[df_Market['台股60日季線乖離'].astype(str).str.strip() != '']
+                    if not valid_rows.empty:
+                        bias_val = valid_rows.iloc[-1]['台股60日季線乖離']
+                
+                # 取得 VIX 資訊
+                vix_display = "N/A"
+                if not df_Global.empty and '代碼' in df_Global.columns:
+                    vix_row = df_Global[df_Global['代碼'] == 'VIX']
+                    if not vix_row.empty:
+                        v_price = vix_row.iloc[0].get('價格', 'N/A')
+                        v_status = vix_row.iloc[0].get('狀態', '')
+                        vix_display = f"{v_price} ({v_status})"
+
+                # 顏色邏輯
+                risk_color = "black"
+                if "紅" in risk_today: risk_color = "#dc3545"
+                elif "橘" in risk_today: risk_color = "#fd7e14" # 橘色
+                elif "黃" in risk_today: risk_color = "#ffc107"
+                elif "綠" in risk_today: risk_color = "#28a745"
+
+                # 建立六欄顯示
+                m_cols = st.columns(6)
+                
+                # 統一的樣式輔助函式 (字體放大版)
+                def make_metric(label, value, color="black"):
+                        return f"""
+                        <div style='margin-bottom:10px;'>
+                        <div style='font-size:1.2rem; color:gray; margin-bottom:2px; white-space: nowrap;'>{label}</div>
+                        <div style='font-size:2.0rem; font-weight:bold; color:{color}; line-height:1.2; white-space: nowrap;'>{value}</div>
+                        </div>
+                        """
+
+                with m_cols[0]:
+                    st.markdown(make_metric("LDR", ldr_val), unsafe_allow_html=True)
+                with m_cols[1]:
+                    # 風險等級
+                    match = re.search(r"(.+?)\s*([\(（].+?[\)）])", risk_today)
+                    if match:
+                        r_main = match.group(1).strip()
+                        r_sub = match.group(2).strip()
+                        r_sub_clean = re.sub(r"[（）\(\)]", "", r_sub)
+                        risk_display_html = f"{r_main}<div style='font-size: 0.6em; line-height: 1.0; margin-top: 2px;'>{r_sub_clean}</div>"
+                    else:
+                        risk_display_html = risk_today
+                    
+                    st.markdown(make_metric("風險等級", risk_display_html, risk_color), unsafe_allow_html=True)
+                    
+                with m_cols[2]:
+                    # 質押率
+                    st.markdown(make_metric("質押率", pledge_display, p_color), unsafe_allow_html=True)
+                with m_cols[3]:
+                    # 建議拆倉
+                    st.markdown(make_metric("建議拆倉", unwind_rate, "#dc3545" if safe_float(unwind_rate) > 0 else "black"), unsafe_allow_html=True)
+                with m_cols[4]:
+                    # 盤勢
+                    bias_display = "N/A"
+                    if bias_val != "N/A":
+                            bv = safe_float(bias_val)
+                            if abs(bv) >= 1.0:
+                                bias_display = f"{bv:.2f}%"
+                            else:
+                                bias_display = f"{bv*100:.2f}%"
+                    
+                    val_str = f"{market_pos}<div style='font-size: 0.6em; line-height: 1.0; margin-top: 2px;'>{bias_display}</div>"
+                    st.markdown(make_metric("盤勢", val_str), unsafe_allow_html=True)
+                with m_cols[5]:
+                    st.markdown(make_metric("VIX", vix_display.split(' ')[0]), unsafe_allow_html=True) 
+                
+                # 第二列：指令
+                st.markdown(f"<div style='font-size:1.1em;color:gray;margin-top:10px;margin-bottom:5px'>📊 操作指令 (60日乖離: {bias_val})</div>", unsafe_allow_html=True)
+                st.info(f"{cmd}")
+                
+        except Exception as e:
+            st.error(f"解析判斷數據時發生錯誤: {e}")
 
 else:
     st.warning('總覽數據載入失敗。請檢查 Secrets 設定或試算表網址。')
