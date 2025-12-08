@@ -594,8 +594,8 @@ if not df_C.empty:
                     def make_metric(label, value, color="black"):
                          return f"""
                          <div style='margin-bottom:5px;'>
-                            <div style='font-size:0.95rem; color:gray; margin-bottom:0px; white-space: nowrap;'>{label}</div>
-                            <div style='font-size:1.5rem; font-weight:bold; color:{color}; line-height:1.2; white-space: nowrap;'>{value}</div>
+                            <div style='font-size:1.0rem; color:gray; margin-bottom:0px; white-space: nowrap;'>{label}</div>
+                            <div style='font-size:1.6rem; font-weight:bold; color:{color}; line-height:1.2; white-space: nowrap;'>{value}</div>
                          </div>
                          """
 
@@ -635,7 +635,8 @@ if not df_C.empty:
                              else:
                                  bias_display = f"{bv*100:.2f}%"
                         
-                        val_str = f"{market_pos} ({bias_display})"
+                        # 修正：分行顯示乖離率，不加括號
+                        val_str = f"{market_pos}<div style='font-size: 0.6em; line-height: 1.0; margin-top: 2px;'>{bias_display}</div>"
                         st.markdown(make_metric("盤勢", val_str), unsafe_allow_html=True)
                     with m_cols[5]:
                         st.markdown(make_metric("VIX", vix_display.split(' ')[0]), unsafe_allow_html=True) # 簡化顯示
