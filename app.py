@@ -103,33 +103,37 @@ def generate_daily_report(df_A, df_C, df_D, df_E, df_F, df_H):
             df_c.set_index(df_c.columns[0], inplace=True)
             col = df_c.columns[0]
             
+            # 更新對應表以符合新欄位
             items = {
-                '股票市值': '股票市值', '現金': '現金', '借款餘額': '借款餘額', 
-                '總資產市值': '總資產市值', '實質NAV': '實質NAV', '槓桿倍數β': '槓桿倍數β',
-                '短期財務目標': '短期財務目標', '達成進度': '達成進度'
+                '股票市值': '股票市值', 
+                '現金': '現金', 
+                '質押借款餘額': '質押借款餘額', 
+                '總資產市值': '總資產市值', 
+                '實質NAV': '實質NAV', 
+                '質押率': '質押率',
+                '槓桿倍數β': '槓桿倍數β',
+                'β風險燈號': 'β風險燈號',
+                '短期財務目標': '短期財務目標', 
+                '短期財務目標差距': '目標差距',
+                '達成進度': '達成進度',
+                '槓桿密度比LDR': 'LDR',
+                'LDR燈號': 'LDR燈號'
             }
             
             for key, label in items.items():
                 val = df_c.loc[key, col] if key in df_c.index else "N/A"
-                
-                if key == '達成進度':
-                    v_float = safe_float(val)
-                    if isinstance(val, str) and '%' in val:
-                         val_str = f"{v_float:.2f}%"
-                    elif v_float <= 1.0:
-                         val_str = f"{v_float*100:.2f}%"
-                    else:
-                         val_str = f"{v_float:.2f}%"
+                val_str = str(val)
 
-                elif key == '槓桿倍數β':
-                     if isinstance(val, str) and '%' in val:
+                # 格式化邏輯
+                if key in ['達成進度', '槓桿倍數β', '質押率', '槓桿密度比LDR']:
+                    if isinstance(val, str) and '%' in val:
                          val_str = val
-                     else:
-                         val_str = f"{safe_float(val)*100:.2f}%" 
-                elif key in ['股票市值', '現金', '借款餘額', '總資產市值', '實質NAV', '短期財務目標']:
+                    else:
+                         val_str = fmt_pct(val)
+                
+                elif key in ['股票市值', '現金', '質押借款餘額', '總資產市值', '實質NAV', '短期財務目標', '短期財務目標差距']:
                      val_str = fmt_int(val)
-                else:
-                     val_str = str(val)
+                
                 lines.append(f"{label}：{val_str}")
         except Exception as e:
             lines.append(f"讀取表C錯誤: {e}")
@@ -508,7 +512,11 @@ if not df_C.empty:
     c1, c2 = st.columns([2, 1])
     with c1:
         st.subheader('核心資產')
-        mask = ~df_c.index.isin(['β風險燈號', '槓桿倍數β', '短期財務目標', '短期財務目標差距', '達成進度', 'LDR', 'LDR燈號'])
+        # 修正：更新要隱藏的欄位，將指標類資訊隱藏，只顯示資產數據
+        mask = ~df_c.index.isin([
+            'β風險燈號', '槓桿倍數β', '短期財務目標', '短期財務目標差距', '達成進度', 
+            'LDR', 'LDR燈號', '槓桿密度比LDR', '質押率'
+        ])
         st.dataframe(df_c[mask], use_container_width=True)
 
         # 🎯 今日判斷與市場資訊整合
@@ -578,8 +586,9 @@ if not df_C.empty:
                         # 建議拆倉
                         st.markdown(make_metric("建議拆倉", unwind_rate, "#dc3545" if safe_float(unwind_rate) > 0 else "black"), unsafe_allow_html=True)
                     with m_cols[4]:
-                        val_str = f"{market_pos}"
-                        # 乖離放後面或同一格，這裡只放盤勢比較簡潔，或可合併
+                        # 將乖離率整合進盤勢顯示
+                        bias_display = fmt_pct(bias_val) if bias_val != "N/A" else "N/A"
+                        val_str = f"{market_pos} ({bias_display})"
                         st.markdown(make_metric("盤勢", val_str), unsafe_allow_html=True)
                     with m_cols[5]:
                         st.markdown(make_metric("VIX", vix_display.split(' ')[0]), unsafe_allow_html=True) # 簡化顯示
