@@ -19,21 +19,20 @@ st.set_page_config(layout="wide", page_title="投資組合儀表板")
 # 注入 CSS
 st.markdown("""
 <style>
-/* 1. 調整頁面頂部留白，解決標題被遮擋問題 (從 1rem 改為 3.5rem) */
+/* 1. 極致緊湊：大幅減少頂部留白 */
 .block-container {
-    padding-top: 3.5rem;
-    padding-bottom: 2rem;
+    padding-top: 1rem;
+    padding-bottom: 1rem;
 }
 
 html, body, [class*="stApp"] { font-size: 16px; }
-h1 { font-size: 2.2em; margin-bottom: 0.5rem; }
-h2 { font-size: 1.6em; padding-top: 0.5rem; }
-h3 { font-size: 1.4em; }
+/* 縮小標題間距 */
+h1 { font-size: 2.0em; margin-bottom: 0.1rem; }
+h2 { font-size: 1.5em; padding-top: 0.2rem; margin-bottom: 0.2rem; }
+h3 { font-size: 1.2em; margin-bottom: 0.2rem; }
 
-/* 修正：恢復表格字體為正常大小 (1.0rem) */
+/* 表格設定 */
 .stDataFrame { font-size: 1.0rem; }
-.stMetric > div:first-child { font-size: 1.1em !important; }
-.stMetric > div:nth-child(2) > div:first-child { font-size: 2.0em !important; }
 
 /* 側邊欄按鈕樣式 */
 div[data-testid="stSidebar"] .stButton button {
@@ -47,14 +46,14 @@ div[data-testid="stSidebar"] .stButton button {
 /* 隱藏 Multiselect 的標籤 */
 div[data-testid="stMultiSelect"] > label { display: none; }
 
-/* 🎯 風險燈號 CSS */
+/* 🎯 風險燈號 CSS (更緊湊) */
 .risk-indicator {
-    padding: 10px; /* 稍微縮小 padding */
+    padding: 5px;
     border-radius: 8px;
     text-align: center;
-    font-size: 1.4em;
+    font-size: 1.3em;
     font-weight: bold;
-    margin-bottom: 5px;
+    margin-bottom: 2px;
     border: 2px solid;
 }
 </style>
@@ -97,7 +96,7 @@ def fmt_pct(value):
     else:
         return f"{val:.2f}%"
 
-# --- 文字日報生成函式 (修正價格為0的問題) ---
+# --- 文字日報生成函式 ---
 def generate_daily_report(df_A, df_C, df_D, df_E, df_F, df_H):
     lines = []
     today = datetime.now().strftime('%Y/%m/%d')
@@ -183,9 +182,7 @@ def generate_daily_report(df_A, df_C, df_D, df_E, df_F, df_H):
             avg = "均價" + fmt_money(row.get('平均成本', 0))
             
             # 修正價格為 0 的問題：多重來源備援
-            # 優先順序：1. 即時 API (session_state) 2. Sheet '收盤價' 3. Sheet '即時收盤價' 4. Sheet '成交價'
             live_p = st.session_state['live_prices'].get(ticker)
-            
             close_val = 0.0
             price_candidates = [
                 live_p, 
@@ -193,7 +190,6 @@ def generate_daily_report(df_A, df_C, df_D, df_E, df_F, df_H):
                 row.get('即時收盤價'), 
                 row.get('成交價')
             ]
-            
             for p in price_candidates:
                 v = safe_float(p)
                 if v > 0:
@@ -459,14 +455,6 @@ def write_prices_to_sheet(df_A, updates):
 # ⚠️ 修正標題
 st.title('💰 投資組合儀表板')
 
-# --- 診斷區塊 (除錯用) ---
-with st.expander("🛠️ 連線狀態檢查 (若資料跑不出來請點此)", expanded=False):
-    st.write(f"目前設定的 Sheet URL: `{SHEET_URL}`")
-    if "connections" in st.secrets:
-        st.success("✅ Secrets 設定已偵測到")
-    else:
-        st.error("❌ 找不到 Secrets 設定")
-
 # 載入所有資料
 df_A = load_data('表A_持股總表')
 df_B = load_data('表B_持股比例')
@@ -513,6 +501,15 @@ if st.sidebar.button("產生文字日報"):
     report_text = generate_daily_report(df_A, df_C, df_D, df_E, df_F, df_H)
     st.sidebar.markdown("請點擊下方代碼區塊右上角的 **複製按鈕**：")
     st.sidebar.code(report_text, language='text')
+
+# 搬移連線狀態檢查到 Sidebar 最下方
+st.sidebar.markdown("---")
+with st.sidebar.expander("🛠️ 連線狀態檢查"):
+    st.write(f"目前設定的 Sheet URL: `{SHEET_URL}`")
+    if "connections" in st.secrets:
+        st.success("✅ Secrets 設定已偵測到")
+    else:
+        st.error("❌ 找不到 Secrets 設定")
 
 st.sidebar.markdown("---")
 
@@ -589,7 +586,6 @@ if not df_C.empty:
     # --- 下層：今日判斷 & 市場狀態 ---
     # 此區塊位於第一列下方，寬度全滿，且字體放大
     
-    # 移除上方分割線，減少垂直間距
     st.subheader('📅 今日判斷 & 市場狀態')
 
     if not df_H.empty:
@@ -669,7 +665,7 @@ if not df_C.empty:
                 # 統一的樣式輔助函式 (字體放大版)
                 def make_metric(label, value, color="black"):
                         return f"""
-                        <div style='margin-bottom:5px;'>
+                        <div style='margin-bottom:0px;'>
                         <div style='font-size:1.1rem; color:gray; margin-bottom:2px; white-space: nowrap;'>{label}</div>
                         <div style='font-size:1.8rem; font-weight:bold; color:{color}; line-height:1.2; white-space: nowrap;'>{value}</div>
                         </div>
@@ -732,7 +728,7 @@ if not df_C.empty:
                     st.markdown(make_metric("VIX", vix_display_html), unsafe_allow_html=True) 
                 
                 # 第二列：指令
-                st.markdown(f"<div style='font-size:1.1em;color:gray;margin-top:10px;margin-bottom:5px'>📊 操作指令 (60日乖離: {bias_val})</div>", unsafe_allow_html=True)
+                st.markdown(f"<div style='font-size:1.1em;color:gray;margin-top:2px;margin-bottom:2px'>📊 操作指令 (60日乖離: {bias_val})</div>", unsafe_allow_html=True)
                 st.info(f"{cmd}")
                 
         except Exception as e:
