@@ -182,12 +182,19 @@ def generate_daily_report(df_A, df_C, df_D, df_E, df_F, df_H):
             qty = fmt_int(row.get('持有數量（股）', 0)) + "股"
             avg = "均價" + fmt_money(row.get('平均成本', 0))
             
-            # --- 文字日報價格修復邏輯 (同步主程式) ---
+            # 修正價格為 0 的問題：多重來源備援
+            # 優先順序：1. 即時 API (session_state) 2. Sheet '收盤價' 3. Sheet '即時收盤價' 4. Sheet '成交價'
             live_p = st.session_state['live_prices'].get(ticker)
+            
             close_val = 0.0
-            # 依序尋找可用價格：API > 收盤價 > 即時收盤價 > 成交價
-            candidates = [live_p, row.get('收盤價'), row.get('即時收盤價'), row.get('成交價')]
-            for p in candidates:
+            price_candidates = [
+                live_p, 
+                row.get('收盤價'), 
+                row.get('即時收盤價'), 
+                row.get('成交價')
+            ]
+            
+            for p in price_candidates:
                 v = safe_float(p)
                 if v > 0:
                     close_val = v
@@ -616,7 +623,8 @@ if not df_C.empty:
                     p_status = "安全"
                     p_color = "#28a745" # 綠
                 
-                pledge_display = f"{pledge_val:.2f}%<div style='font-size: 0.6em; line-height: 1.0; margin-top: 2px;'>{p_status}</div>"
+                # 修正字體大小：狀態文字改為 1rem (正常)
+                pledge_display = f"{pledge_val:.2f}%<div style='font-size: 1rem; line-height: 1.0; margin-top: 2px;'>{p_status}</div>"
                 # --------------------------------
 
                 unwind_rate = fmt_pct(latest.get('建議拆倉比例', 0))
@@ -676,7 +684,8 @@ if not df_C.empty:
                         r_main = match.group(1).strip()
                         r_sub = match.group(2).strip()
                         r_sub_clean = re.sub(r"[（）\(\)]", "", r_sub)
-                        risk_display_html = f"{r_main}<div style='font-size: 0.6em; line-height: 1.0; margin-top: 2px;'>{r_sub_clean}</div>"
+                        # 修正字體大小：狀態文字改為 1rem (正常)
+                        risk_display_html = f"{r_main}<div style='font-size: 1rem; line-height: 1.0; margin-top: 2px;'>{r_sub_clean}</div>"
                     else:
                         risk_display_html = risk_today
                     
@@ -698,7 +707,8 @@ if not df_C.empty:
                             else:
                                 bias_display = f"{bv*100:.2f}%"
                     
-                    val_str = f"{market_pos}<div style='font-size: 0.6em; line-height: 1.0; margin-top: 2px;'>{bias_display}</div>"
+                    # 修正字體大小：乖離率文字改為 1rem (正常)
+                    val_str = f"{market_pos}<div style='font-size: 1rem; line-height: 1.0; margin-top: 2px;'>{bias_display}</div>"
                     st.markdown(make_metric("盤勢", val_str), unsafe_allow_html=True)
                 with m_cols[5]:
                     # VIX 顯示調整：
@@ -712,10 +722,12 @@ if not df_C.empty:
                         v_sub = match.group(2).strip()
                         v_sub_clean = re.sub(r"[（）\(\)]", "", v_sub) # 移除括號
                         # 組合 HTML：主狀態 + 說明文字 (設定為可換行)
-                        v_html = f"{v_main}<div style='font-size: 0.5em; line-height: 1.3; margin-top: 2px; white-space: normal; color: gray;'>{v_sub_clean}</div>"
+                        # 修正字體大小：狀態文字改為 1rem (正常)
+                        v_html = f"{v_main}<div style='font-size: 1rem; line-height: 1.3; margin-top: 2px; white-space: normal; color: gray;'>{v_sub_clean}</div>"
                     
                     # 組合數值與狀態
-                    vix_display_html = f"{vix_val}<div style='font-size: 0.6em; line-height: 1.2; margin-top: 2px;'>{v_html}</div>"
+                    # 修正字體大小：狀態整體容器字體大小調整，避免重複縮放
+                    vix_display_html = f"{vix_val}<div style='font-size: 1rem; line-height: 1.2; margin-top: 2px;'>{v_html}</div>"
                     
                     st.markdown(make_metric("VIX", vix_display_html), unsafe_allow_html=True) 
                 
