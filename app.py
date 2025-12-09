@@ -19,9 +19,9 @@ st.set_page_config(layout="wide", page_title="投資組合儀表板")
 # 注入 CSS
 st.markdown("""
 <style>
-/* 1. 極致緊湊：大幅減少頂部留白 */
+/* 1. 調整頁面頂部留白：增加至 2.5rem 以避免標題被遮擋 */
 .block-container {
-    padding-top: 1rem;
+    padding-top: 2.5rem;
     padding-bottom: 1rem;
 }
 
@@ -892,29 +892,6 @@ if not df_G.empty:
                         
                         if body:
                             st.dataframe(pd.DataFrame(body, columns=u_heads), use_container_width=True, hide_index=True)
-                        else:
-                            st.info("無詳細數據")
-                current_title = first_cell
-                current_data = []
-            elif any(str(c).strip() for c in row):
-                if current_title is not None:
-                    current_data.append(row)
-        
-        # Render last
-        if current_title:
-            st.subheader(current_title)
-            if len(current_data) > 0:
-                headers = current_data[0]
-                body = current_data[1:] if len(current_data) > 1 else []
-                u_heads = []
-                seen = {}
-                for h in headers:
-                    h_str = str(h).strip()
-                    if not h_str: h_str = "-" 
-                    if h_str in seen: seen[h_str] += 1; u_heads.append(f"{h_str}_{seen[h_str]}")
-                    else: seen[h_str] = 0; u_heads.append(h_str)
-                if body:
-                    st.dataframe(pd.DataFrame(body, columns=u_heads), use_container_width=True, hide_index=True)
         
         # ⚠️ 備援機制：如果上面的邏輯完全沒抓到任何區塊 (found_sections 仍為 False)，則顯示原始表格
         # 這能避免「整個不見」的情況，至少讓使用者看到原始資料
