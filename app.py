@@ -340,7 +340,7 @@ def load_data(sheet_name):
                 
             if not data: return pd.DataFrame()
             
-            # Fix: 自動移除欄位名稱的前後空白
+            # Fix: 自動移除欄位名稱的前後空白，解決 'VIX ' 抓不到的問題
             headers = [str(h).strip() for h in data[0]]
             df = pd.DataFrame(data[1:], columns=headers)
             
@@ -635,7 +635,7 @@ if not df_C.empty:
                         """
 
                 with m_cols[0]:
-                    st.markdown(make_metric("LDR", ldr_val), unsafe_allow_html=True)
+                    st.markdown(make_metric("LDR", ldr), unsafe_allow_html=True) # Fixed var
                 with m_cols[1]:
                     match = re.search(r"(.+?)\s*([\(（].+?[\)）])", risk_today)
                     if match:
