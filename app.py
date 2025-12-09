@@ -30,8 +30,8 @@ h1 { font-size: 2.2em; margin-bottom: 0.5rem; }
 h2 { font-size: 1.6em; padding-top: 0.5rem; }
 h3 { font-size: 1.4em; }
 
-/* 修正：將表格字體縮小至 0.8em 以利單行呈現 */
-.stDataFrame { font-size: 0.8em; }
+/* 修正：恢復表格字體為正常大小 (1.0rem) */
+.stDataFrame { font-size: 1.0rem; }
 .stMetric > div:first-child { font-size: 1.1em !important; }
 .stMetric > div:nth-child(2) > div:first-child { font-size: 2.0em !important; }
 
@@ -639,8 +639,8 @@ if not df_C.empty:
                 if not df_Global.empty and '代碼' in df_Global.columns:
                     vix_row = df_Global[df_Global['代碼'] == 'VIX']
                     if not vix_row.empty:
-                        vix_val = vix_row.iloc[0].get('價格', 'N/A')
-                        vix_status = vix_row.iloc[0].get('狀態', '')
+                        v_price = vix_row.iloc[0].get('價格', 'N/A')
+                        v_status = vix_row.iloc[0].get('狀態', '')
 
                 # 顏色邏輯
                 risk_color = "black"
