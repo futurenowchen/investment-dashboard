@@ -165,12 +165,14 @@ def generate_daily_report(df_A, df_C, df_D, df_E, df_F, df_H):
                 risk = str(latest.get('今日風險等級', 'N/A'))
                 pledge = fmt_pct(latest.get('質押率', 0))
                 unwind = fmt_pct(latest.get('建議拆倉比例', 0))
+                flywheel = str(latest.get('飛輪階段', 'N/A')) # 新增
                 cmd = str(latest.get('今日指令', 'N/A'))
                 
                 lines.append(f"LDR：{ldr}")
                 lines.append(f"風險等級：{risk}")
                 lines.append(f"質押率：{pledge}")
                 lines.append(f"建議拆倉：{unwind}")
+                lines.append(f"飛輪階段：{flywheel}")
                 lines.append(f"指令：{cmd}")
             else:
                  lines.append("表H無日期欄位")
@@ -340,7 +342,7 @@ def load_data(sheet_name):
                 
             if not data: return pd.DataFrame()
             
-            # Fix: 自動移除欄位名稱的前後空白，解決 'VIX ' 抓不到的問題
+            # Fix: 自動移除欄位名稱的前後空白
             headers = [str(h).strip() for h in data[0]]
             df = pd.DataFrame(data[1:], columns=headers)
             
@@ -576,6 +578,7 @@ if not df_C.empty:
                 risk_today = str(latest.get('今日風險等級', 'N/A'))
                 cmd = str(latest.get('今日指令', 'N/A'))
                 market_pos = str(latest.get('盤勢位置', 'N/A'))
+                flywheel_stage = str(latest.get('飛輪階段', 'N/A'))
                 
                 raw_pledge = safe_float(latest.get('質押率', 0))
                 if abs(raw_pledge) <= 5.0:
@@ -624,7 +627,7 @@ if not df_C.empty:
                 elif "黃" in risk_today: risk_color = "#ffc107"
                 elif "綠" in risk_today: risk_color = "#28a745"
 
-                m_cols = st.columns(6)
+                m_cols = st.columns(7)
                 
                 def make_metric(label, value, color="black"):
                         return f"""
@@ -635,7 +638,7 @@ if not df_C.empty:
                         """
 
                 with m_cols[0]:
-                    st.markdown(make_metric("LDR", ldr), unsafe_allow_html=True) # Fixed var
+                    st.markdown(make_metric("LDR", ldr), unsafe_allow_html=True)
                 with m_cols[1]:
                     match = re.search(r"(.+?)\s*([\(（].+?[\)）])", risk_today)
                     if match:
@@ -664,6 +667,8 @@ if not df_C.empty:
                     val_str = f"{market_pos}<div style='font-size: 1rem; line-height: 1.0; margin-top: 2px;'>{bias_display}</div>"
                     st.markdown(make_metric("盤勢", val_str), unsafe_allow_html=True)
                 with m_cols[5]:
+                    st.markdown(make_metric("飛輪階段", flywheel_stage), unsafe_allow_html=True)
+                with m_cols[6]:
                     v_html = vix_status
                     match = re.search(r"(.+?)\s*([\(（].+?[\)）])", vix_status)
                     if match:
