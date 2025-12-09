@@ -182,19 +182,12 @@ def generate_daily_report(df_A, df_C, df_D, df_E, df_F, df_H):
             qty = fmt_int(row.get('持有數量（股）', 0)) + "股"
             avg = "均價" + fmt_money(row.get('平均成本', 0))
             
-            # 修正價格為 0 的問題：多重來源備援
-            # 優先順序：1. 即時 API (session_state) 2. Sheet '收盤價' 3. Sheet '即時收盤價' 4. Sheet '成交價'
+            # --- 文字日報價格修復邏輯 (同步主程式) ---
             live_p = st.session_state['live_prices'].get(ticker)
-            
             close_val = 0.0
-            price_candidates = [
-                live_p, 
-                row.get('收盤價'), 
-                row.get('即時收盤價'), 
-                row.get('成交價')
-            ]
-            
-            for p in price_candidates:
+            # 依序尋找可用價格：API > 收盤價 > 即時收盤價 > 成交價
+            candidates = [live_p, row.get('收盤價'), row.get('即時收盤價'), row.get('成交價')]
+            for p in candidates:
                 v = safe_float(p)
                 if v > 0:
                     close_val = v
@@ -336,7 +329,9 @@ def load_data(sheet_name):
                 
             if not data: return pd.DataFrame()
             
-            df = pd.DataFrame(data[1:], columns=data[0])
+            # Fix: 自動移除欄位名稱的前後空白，解決 'VIX ' 抓不到的問題
+            headers = [str(h).strip() for h in data[0]]
+            df = pd.DataFrame(data[1:], columns=headers)
             
             # 處理重複欄位名稱
             if len(df.columns) != len(set(df.columns)):
@@ -628,19 +623,30 @@ if not df_C.empty:
                 
                 # 取得台股60日季線乖離
                 bias_val = "N/A"
-                if not df_Market.empty and '台股60日季線乖離' in df_Market.columns:
-                    valid_rows = df_Market[df_Market['台股60日季線乖離'].astype(str).str.strip() != '']
-                    if not valid_rows.empty:
-                        bias_val = valid_rows.iloc[-1]['台股60日季線乖離']
+                if not df_Market.empty:
+                    # 模糊搜尋欄位
+                    b_col = next((c for c in df_Market.columns if '乖離' in c), None)
+                    if b_col:
+                        valid_rows = df_Market[df_Market[b_col].astype(str).str.strip() != '']
+                        if not valid_rows.empty:
+                            bias_val = valid_rows.iloc[-1][b_col]
                 
                 # 取得 VIX 資訊
                 vix_val = "N/A"
                 vix_status = ""
-                if not df_Global.empty and '代碼' in df_Global.columns:
-                    vix_row = df_Global[df_Global['代碼'] == 'VIX']
-                    if not vix_row.empty:
-                        v_price = vix_row.iloc[0].get('價格', 'N/A')
-                        v_status = vix_row.iloc[0].get('狀態', '')
+                if not df_Global.empty:
+                    # 模糊搜尋 '代碼' 欄位
+                    code_col = next((c for c in df_Global.columns if '代碼' in c), None)
+                    if code_col:
+                        # 轉大寫並去除空白來比對 'VIX'
+                        vix_row = df_Global[df_Global[code_col].astype(str).str.strip().str.upper() == 'VIX']
+                        if not vix_row.empty:
+                            # 模糊搜尋 '價格' 與 '狀態'
+                            p_col = next((c for c in df_Global.columns if '價格' in c), None)
+                            s_col = next((c for c in df_Global.columns if '狀態' in c), None)
+                            
+                            if p_col: vix_val = vix_row.iloc[0].get(p_col, 'N/A')
+                            if s_col: vix_status = vix_row.iloc[0].get(s_col, '')
 
                 # 顏色邏輯
                 risk_color = "black"
