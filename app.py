@@ -695,8 +695,22 @@ if not df_C.empty:
                     val_str = f"{market_pos}<div style='font-size: 0.6em; line-height: 1.0; margin-top: 2px;'>{bias_display}</div>"
                     st.markdown(make_metric("盤勢", val_str), unsafe_allow_html=True)
                 with m_cols[5]:
-                    # VIX 顯示調整：數值在上方，狀態文字(vix_status)在下方且縮小
-                    vix_display_html = f"{vix_val}<div style='font-size: 0.6em; line-height: 1.0; margin-top: 2px;'>{vix_status}</div>"
+                    # VIX 顯示調整：
+                    # 1. 解析狀態字串，分離主狀態與括號內說明
+                    # 2. 移除括號
+                    # 3. 允許說明文字換行 (white-space: normal)
+                    v_html = vix_status
+                    match = re.search(r"(.+?)\s*([\(（].+?[\)）])", vix_status)
+                    if match:
+                        v_main = match.group(1).strip()
+                        v_sub = match.group(2).strip()
+                        v_sub_clean = re.sub(r"[（）\(\)]", "", v_sub) # 移除括號
+                        # 組合 HTML：主狀態 + 說明文字 (設定為可換行)
+                        v_html = f"{v_main}<div style='font-size: 0.5em; line-height: 1.3; margin-top: 2px; white-space: normal; color: gray;'>{v_sub_clean}</div>"
+                    
+                    # 組合數值與狀態
+                    vix_display_html = f"{vix_val}<div style='font-size: 0.6em; line-height: 1.2; margin-top: 2px;'>{v_html}</div>"
+                    
                     st.markdown(make_metric("VIX", vix_display_html), unsafe_allow_html=True) 
                 
                 # 第二列：指令
