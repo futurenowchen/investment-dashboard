@@ -165,8 +165,14 @@ def generate_daily_report(df_A, df_C, df_D, df_E, df_F, df_H):
                 risk = str(latest.get('今日風險等級', 'N/A'))
                 pledge = fmt_pct(latest.get('質押率', 0))
                 unwind = fmt_pct(latest.get('建議拆倉比例', 0))
-                flywheel = str(latest.get('飛輪階段', 'N/A')) # 新增
+                
+                # 模糊搜尋 '飛輪' 欄位
+                fw_col = next((c for c in df_h.columns if '飛輪' in c), None)
+                flywheel = str(latest.get(fw_col, 'N/A')) if fw_col else 'N/A'
+                
                 cmd = str(latest.get('今日指令', 'N/A'))
+                # 隱藏 Debug 資訊
+                cmd = re.sub(r"【Debug｜.*?】", "", cmd).strip()
                 
                 lines.append(f"LDR：{ldr}")
                 lines.append(f"風險等級：{risk}")
@@ -577,8 +583,14 @@ if not df_C.empty:
                 ldr = str(latest.get('LDR', 'N/A'))
                 risk_today = str(latest.get('今日風險等級', 'N/A'))
                 cmd = str(latest.get('今日指令', 'N/A'))
+                # 隱藏 Debug 資訊
+                cmd = re.sub(r"【Debug｜.*?】", "", cmd).strip()
+                
                 market_pos = str(latest.get('盤勢位置', 'N/A'))
-                flywheel_stage = str(latest.get('飛輪階段', 'N/A'))
+                
+                # 模糊搜尋 '飛輪' 欄位
+                fw_col = next((c for c in df_h.columns if '飛輪' in c), None)
+                flywheel_stage = str(latest.get(fw_col, 'N/A')) if fw_col else 'N/A'
                 
                 raw_pledge = safe_float(latest.get('質押率', 0))
                 if abs(raw_pledge) <= 5.0:
