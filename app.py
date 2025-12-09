@@ -110,7 +110,7 @@ def generate_daily_report(df_A, df_C, df_D, df_E, df_F, df_H):
             df_c.set_index(df_c.columns[0], inplace=True)
             col = df_c.columns[0]
             
-            # 更新對應表以符合新欄位
+            # 更新對應表以符合新欄位 (名稱修正：槓桿倍數β -> 曝險指標 E)
             items = {
                 '股票市值': '股票市值', 
                 '現金': '現金', 
@@ -118,8 +118,11 @@ def generate_daily_report(df_A, df_C, df_D, df_E, df_F, df_H):
                 '總資產市值': '總資產市值', 
                 '實質NAV': '實質NAV', 
                 '質押率': '質押率',
-                '槓桿倍數β': '槓桿倍數β',
+                # 優先使用新名稱，若無則讀取舊名稱
+                '曝險指標 E': '曝險指標 E',
+                '槓桿倍數β': '曝險指標 E', 
                 'β風險燈號': 'β風險燈號',
+                'E風險燈號': 'E風險燈號', # 新增
                 '短期財務目標': '短期財務目標', 
                 '短期財務目標差距': '目標差距',
                 '達成進度': '達成進度',
@@ -128,20 +131,22 @@ def generate_daily_report(df_A, df_C, df_D, df_E, df_F, df_H):
             }
             
             for key, label in items.items():
-                val = df_c.loc[key, col] if key in df_c.index else "N/A"
-                val_str = str(val)
+                # 只有當 key 存在於 index 時才處理，避免重複輸出
+                if key in df_c.index:
+                    val = df_c.loc[key, col]
+                    val_str = str(val)
 
-                # 格式化邏輯
-                if key in ['達成進度', '槓桿倍數β', '質押率', '槓桿密度比LDR']:
-                    if isinstance(val, str) and '%' in val:
-                         val_str = val
-                    else:
-                         val_str = fmt_pct(val)
-                
-                elif key in ['股票市值', '現金', '質押借款餘額', '總資產市值', '實質NAV', '短期財務目標', '短期財務目標差距']:
-                     val_str = fmt_int(val)
-                
-                lines.append(f"{label}：{val_str}")
+                    # 格式化邏輯
+                    if key in ['達成進度', '槓桿倍數β', '曝險指標 E', '質押率', '槓桿密度比LDR']:
+                        if isinstance(val, str) and '%' in val:
+                             val_str = val
+                        else:
+                             val_str = fmt_pct(val)
+                    
+                    elif key in ['股票市值', '現金', '質押借款餘額', '總資產市值', '實質NAV', '短期財務目標', '短期財務目標差距']:
+                         val_str = fmt_int(val)
+                    
+                    lines.append(f"{label}：{val_str}")
         except Exception as e:
             lines.append(f"讀取表C錯誤: {e}")
     else:
@@ -204,7 +209,7 @@ def generate_daily_report(df_A, df_C, df_D, df_E, df_F, df_H):
             line = f"{ticker} {name}  {qty}  {avg}  {close}  {mkt}  {note}"
             lines.append(line.strip())
 
-    # --- 表F 最近3日 ---
+    # --- 表F 最近3日 (修正名稱與顯示) ---
     lines.append("\n[表F_最近3日]")
     if not df_F.empty:
         try:
@@ -223,9 +228,14 @@ def generate_daily_report(df_A, df_C, df_D, df_E, df_F, df_H):
                     chg_val = safe_float(row.get('當日淨變動', 0))
                     chg = "當日淨變動" + fmt_int(chg_val)
                     nav = "NAV" + fmt_int(row.get('實質NAV', 0))
-                    beta_val = safe_float(row.get('槓桿倍數β', 0))
-                    if beta_val <= 5.0: beta = f"β{beta_val*100:.2f}%"
-                    else: beta = f"β{beta_val:.2f}%"
+                    
+                    # 優先讀取 '曝險指標 E'，若無則讀 '槓桿倍數β'
+                    beta_raw = row.get('曝險指標 E', row.get('槓桿倍數β', 0))
+                    beta_val = safe_float(beta_raw)
+                    
+                    if beta_val <= 5.0: beta = f"E{beta_val*100:.2f}%" # 顯示改為 E
+                    else: beta = f"E{beta_val:.2f}%"
+                    
                     lines.append(f"{d} {stk_v} {tot} {cash} {chg} {nav} {beta}")
             else:
                 lines.append("表F無日期欄位")
@@ -521,9 +531,13 @@ if not df_C.empty:
     col_val = df_c.columns[0]
     
     # 計算相關變數
-    risk = str(df_c.loc['β風險燈號', col_val]) if 'β風險燈號' in df_c.index else '未知'
+    # 優先使用 'E風險燈號'，備援 'β風險燈號'
+    risk = str(df_c.loc['E風險燈號', col_val]) if 'E風險燈號' in df_c.index else str(df_c.loc['β風險燈號', col_val]) if 'β風險燈號' in df_c.index else '未知'
     risk_txt = re.sub(r'\s+', '', risk)
-    lev = safe_float(df_c.loc['槓桿倍數β', col_val]) if '槓桿倍數β' in df_c.index else 0
+    
+    # 修正：相容性讀取 (優先 '曝險指標 E', 備援 '槓桿倍數β')
+    val_lev = df_c.loc['曝險指標 E', col_val] if '曝險指標 E' in df_c.index else df_c.loc['槓桿倍數β', col_val] if '槓桿倍數β' in df_c.index else 0
+    lev = safe_float(val_lev)
 
     # 風險指標樣式
     style = {'e':'❓', 'bg':'#6c757d', 't':'white'}
@@ -541,17 +555,19 @@ if not df_C.empty:
     # 欄 1: 核心資產表格
     with c_top1:
         st.subheader('核心資產')
+        # 修正：更新遮罩列表，隱藏新舊指標名稱，確保表格精簡
         mask = ~df_c.index.isin([
-            'β風險燈號', '槓桿倍數β', '短期財務目標', '短期財務目標差距', '達成進度', 
-            'LDR', 'LDR燈號', '槓桿密度比LDR', '質押率'
+            'β風險燈號', 'E風險燈號', '槓桿倍數β', '曝險指標 E', # 舊與新
+            '短期財務目標', '短期財務目標差距', '達成進度', 
+            'LDR', 'LDR燈號', '槓桿密度比LDR', '質押率', '質押率燈號'
         ])
         st.dataframe(df_c[mask], use_container_width=True)
 
     # 欄 2: 風險指標卡片
     with c_top2:
-        st.subheader('風險指標')
+        st.subheader('曝險指標') # 修正標題
         st.markdown(f"<div class='risk-indicator' style='background:{style['bg']};color:{style['t']};border-color:{style['bg']}'>{style['e']} {risk}</div>", unsafe_allow_html=True)
-        st.metric("槓桿倍數", f"{lev:.2f}")
+        st.metric("曝險倍數", f"{lev:.2f}") # 修正標籤
 
     # 欄 3: 短期財務目標卡片
     with c_top3:
