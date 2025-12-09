@@ -19,10 +19,10 @@ st.set_page_config(layout="wide", page_title="投資組合儀表板")
 # 注入 CSS
 st.markdown("""
 <style>
-/* 1. 調整頁面頂部留白：增加至 2.5rem 以避免標題被遮擋 */
+/* 1. 調整頁面頂部留白：增加至 4.5rem 以確保標題完全不被遮擋 */
 .block-container {
-    padding-top: 2.5rem;
-    padding-bottom: 1rem;
+    padding-top: 4.5rem;
+    padding-bottom: 2rem;
 }
 
 html, body, [class*="stApp"] { font-size: 16px; }
@@ -110,7 +110,7 @@ def generate_daily_report(df_A, df_C, df_D, df_E, df_F, df_H):
             df_c.set_index(df_c.columns[0], inplace=True)
             col = df_c.columns[0]
             
-            # 更新對應表以符合新欄位 (名稱修正：槓桿倍數β -> 曝險指標 E)
+            # 更新對應表以符合新欄位
             items = {
                 '股票市值': '股票市值', 
                 '現金': '現金', 
@@ -122,7 +122,7 @@ def generate_daily_report(df_A, df_C, df_D, df_E, df_F, df_H):
                 '曝險指標 E': '曝險指標 E',
                 '槓桿倍數β': '曝險指標 E', 
                 'β風險燈號': 'β風險燈號',
-                'E風險燈號': 'E風險燈號', # 新增
+                'E風險燈號': 'E風險燈號', 
                 '短期財務目標': '短期財務目標', 
                 '短期財務目標差距': '目標差距',
                 '達成進度': '達成進度',
@@ -131,7 +131,6 @@ def generate_daily_report(df_A, df_C, df_D, df_E, df_F, df_H):
             }
             
             for key, label in items.items():
-                # 只有當 key 存在於 index 時才處理，避免重複輸出
                 if key in df_c.index:
                     val = df_c.loc[key, col]
                     val_str = str(val)
@@ -209,7 +208,7 @@ def generate_daily_report(df_A, df_C, df_D, df_E, df_F, df_H):
             line = f"{ticker} {name}  {qty}  {avg}  {close}  {mkt}  {note}"
             lines.append(line.strip())
 
-    # --- 表F 最近3日 (修正名稱與顯示) ---
+    # --- 表F 最近3日 ---
     lines.append("\n[表F_最近3日]")
     if not df_F.empty:
         try:
@@ -229,11 +228,10 @@ def generate_daily_report(df_A, df_C, df_D, df_E, df_F, df_H):
                     chg = "當日淨變動" + fmt_int(chg_val)
                     nav = "NAV" + fmt_int(row.get('實質NAV', 0))
                     
-                    # 優先讀取 '曝險指標 E'，若無則讀 '槓桿倍數β'
                     beta_raw = row.get('曝險指標 E', row.get('槓桿倍數β', 0))
                     beta_val = safe_float(beta_raw)
                     
-                    if beta_val <= 5.0: beta = f"E{beta_val*100:.2f}%" # 顯示改為 E
+                    if beta_val <= 5.0: beta = f"E{beta_val*100:.2f}%"
                     else: beta = f"E{beta_val:.2f}%"
                     
                     lines.append(f"{d} {stk_v} {tot} {cash} {chg} {nav} {beta}")
@@ -342,7 +340,7 @@ def load_data(sheet_name):
                 
             if not data: return pd.DataFrame()
             
-            # Fix: 自動移除欄位名稱的前後空白，解決 'VIX ' 抓不到的問題
+            # Fix: 自動移除欄位名稱的前後空白
             headers = [str(h).strip() for h in data[0]]
             df = pd.DataFrame(data[1:], columns=headers)
             
@@ -361,7 +359,7 @@ def load_data(sheet_name):
             st.error(f"讀取 {sheet_name} 失敗: {e}")
             return pd.DataFrame() 
 
-# --- 股價 API (修正版：移除所有 st UI 元件以避免 Cache Error) ---
+# --- 股價 API (修正版) ---
 @st.cache_data(ttl="60s") 
 def fetch_current_prices(tickers):
     """
@@ -370,8 +368,6 @@ def fetch_current_prices(tickers):
     """
     if not tickers: return {}
     
-    # 移除 st.toast，改由外部呼叫時處理
-    
     # 1. 建立代碼映射表 (原始代碼 -> Yahoo代碼)
     ticker_map = {}
     query_tickers = []
@@ -379,8 +375,6 @@ def fetch_current_prices(tickers):
     for t in tickers:
         raw_t = str(t).strip()
         if not raw_t: continue
-        
-        # 簡單判斷：如果是純數字，假設為台股，加上 .TW
         if raw_t.isdigit():
             y_t = f"{raw_t}.TW"
         else:
@@ -393,34 +387,23 @@ def fetch_current_prices(tickers):
     if not query_tickers: return {}
 
     try:
-        # 2. 下載資料
-        # progress=False 隱藏進度條
         data = yf.download(query_tickers, period='1d', interval='1d', progress=False)
-        
-        if data.empty:
-            # 移除 st.warning
-            return {}
+        if data.empty: return {}
 
-        # 3. 解析資料 (處理單檔與多檔的差異)
         try:
             closes = data['Close']
         except KeyError:
             return {}
             
         if closes.empty: return {}
-        
-        # 取最後一列 (最新的收盤價)
         last_row = closes.iloc[-1]
         
         if len(query_tickers) == 1:
-            # 單檔股票
             val = last_row
             if hasattr(val, 'item'): val = val.item()
-            
             original_ticker = ticker_map[query_tickers[0]]
             res[original_ticker] = round(float(val), 2)
         else:
-            # 多檔股票
             for y_t, original_t in ticker_map.items():
                 try:
                     val = last_row.get(y_t)
@@ -429,11 +412,9 @@ def fetch_current_prices(tickers):
                          res[original_t] = round(float(val), 2)
                 except:
                     pass
-        
         return res
     except Exception as e:
-        # 移除 st.error
-        print(f"Error fetching prices: {e}") # 改用 print 到後台 logs
+        print(f"Error fetching prices: {e}")
         return {}
 
 # 寫入 API
@@ -442,18 +423,15 @@ def write_prices_to_sheet(df_A, updates):
     if not sh: return False
     try:
         ws = sh.worksheet('表A_持股總表')
-        # 準備要寫入的資料列表
         vals = []
         for _, row in df_A.iterrows():
             t = str(row.get('股票','')).strip()
-            # 從 updates 字典找價格
             p = updates.get(t)
             if p:
                 vals.append([p]) 
             else:
-                vals.append(['']) # 如果沒抓到價格，填空或保留原值? 這裡先填空
+                vals.append([''])
         
-        # 批次更新 E 欄 (從 E2 開始)
         if vals:
             ws.update(f'E2:E{2+len(vals)-1}', vals, value_input_option='USER_ENTERED')
         return True
@@ -462,7 +440,6 @@ def write_prices_to_sheet(df_A, updates):
         return False
 
 # === 主程式 ===
-# ⚠️ 修正標題
 st.title('💰 投資組合儀表板')
 
 # 載入所有資料
@@ -485,16 +462,10 @@ if st.sidebar.button("🔄 重新載入資料"):
 
 if st.sidebar.button("💾 更新股價至 Google Sheets", type="primary"):
     if not df_A.empty and '股票' in df_A.columns:
-        # 取得不重複的股票代碼列表
         tickers = [t for t in df_A['股票'].unique() if str(t).strip()]
-        
-        # 在這裡顯示 Toast，而不是在 cached function 內部
         st.toast(f"正在更新 {len(tickers)} 檔股價...", icon="⏳")
-        
-        # 呼叫修復後的函式
         updates = fetch_current_prices(tickers)
         st.session_state['live_prices'] = updates
-        
         if updates:
             success = write_prices_to_sheet(df_A, updates)
             if success:
@@ -531,11 +502,9 @@ if not df_C.empty:
     col_val = df_c.columns[0]
     
     # 計算相關變數
-    # 優先使用 'E風險燈號'，備援 'β風險燈號'
     risk = str(df_c.loc['E風險燈號', col_val]) if 'E風險燈號' in df_c.index else str(df_c.loc['β風險燈號', col_val]) if 'β風險燈號' in df_c.index else '未知'
     risk_txt = re.sub(r'\s+', '', risk)
     
-    # 修正：相容性讀取 (優先 '曝險指標 E', 備援 '槓桿倍數β')
     val_lev = df_c.loc['曝險指標 E', col_val] if '曝險指標 E' in df_c.index else df_c.loc['槓桿倍數β', col_val] if '槓桿倍數β' in df_c.index else 0
     lev = safe_float(val_lev)
 
@@ -548,28 +517,22 @@ if not df_C.empty:
     elif '危險' in risk_txt: 
         style = {'e':'🚨', 'bg':'#dc3545', 't':'white'} # 紅
 
-    # 調整版面配置：分為三欄，並置顯示
-    # 比例分配：2 (表格) : 1 (風險) : 1 (目標)
     c_top1, c_top2, c_top3 = st.columns([2, 1, 1])
     
-    # 欄 1: 核心資產表格
     with c_top1:
         st.subheader('核心資產')
-        # 修正：更新遮罩列表，隱藏新舊指標名稱，確保表格精簡
         mask = ~df_c.index.isin([
-            'β風險燈號', 'E風險燈號', '槓桿倍數β', '曝險指標 E', # 舊與新
+            'β風險燈號', 'E風險燈號', '槓桿倍數β', '曝險指標 E',
             '短期財務目標', '短期財務目標差距', '達成進度', 
             'LDR', 'LDR燈號', '槓桿密度比LDR', '質押率', '質押率燈號'
         ])
         st.dataframe(df_c[mask], use_container_width=True)
 
-    # 欄 2: 風險指標卡片
     with c_top2:
-        st.subheader('曝險指標') # 修正標題
+        st.subheader('曝險指標') 
         st.markdown(f"<div class='risk-indicator' style='background:{style['bg']};color:{style['t']};border-color:{style['bg']}'>{style['e']} {risk}</div>", unsafe_allow_html=True)
-        st.metric("曝險倍數", f"{lev:.2f}") # 修正標籤
+        st.metric("曝險倍數", f"{lev:.2f}") 
 
-    # 欄 3: 短期財務目標卡片
     with c_top3:
         st.subheader('短期目標')
         try:
@@ -599,9 +562,6 @@ if not df_C.empty:
                 st.caption("無法計算進度")
         except: pass
 
-    # --- 下層：今日判斷 & 市場狀態 ---
-    # 此區塊位於第一列下方，寬度全滿，且字體放大
-    
     st.subheader('📅 今日判斷 & 市場狀態')
 
     if not df_H.empty:
@@ -612,13 +572,11 @@ if not df_C.empty:
                 df_h['dt'] = pd.to_datetime(df_h[date_col], errors='coerce')
                 latest = df_h.sort_values('dt', ascending=False).iloc[0]
                 
-                # 取出各項數值
-                ldr_val = str(latest.get('LDR', 'N/A'))
+                ldr = str(latest.get('LDR', 'N/A'))
                 risk_today = str(latest.get('今日風險等級', 'N/A'))
                 cmd = str(latest.get('今日指令', 'N/A'))
                 market_pos = str(latest.get('盤勢位置', 'N/A'))
                 
-                # --- 新增邏輯：質押率狀態判斷 ---
                 raw_pledge = safe_float(latest.get('質押率', 0))
                 if abs(raw_pledge) <= 5.0:
                     pledge_val = raw_pledge * 100
@@ -635,50 +593,39 @@ if not df_C.empty:
                     p_status = "安全"
                     p_color = "#28a745" # 綠
                 
-                # 修正字體大小：狀態文字改為 1rem (正常)
                 pledge_display = f"{pledge_val:.2f}%<div style='font-size: 1rem; line-height: 1.0; margin-top: 2px;'>{p_status}</div>"
-                # --------------------------------
 
                 unwind_rate = fmt_pct(latest.get('建議拆倉比例', 0))
                 
-                # 取得台股60日季線乖離
                 bias_val = "N/A"
                 if not df_Market.empty:
-                    # 模糊搜尋欄位
                     b_col = next((c for c in df_Market.columns if '乖離' in c), None)
                     if b_col:
                         valid_rows = df_Market[df_Market[b_col].astype(str).str.strip() != '']
                         if not valid_rows.empty:
                             bias_val = valid_rows.iloc[-1][b_col]
                 
-                # 取得 VIX 資訊
                 vix_val = "N/A"
                 vix_status = ""
                 if not df_Global.empty:
-                    # 模糊搜尋 '代碼' 欄位
                     code_col = next((c for c in df_Global.columns if '代碼' in c), None)
                     if code_col:
-                        # 轉大寫並去除空白來比對 'VIX'
                         vix_row = df_Global[df_Global[code_col].astype(str).str.strip().str.upper() == 'VIX']
                         if not vix_row.empty:
-                            # 模糊搜尋 '價格' 與 '狀態'
                             p_col = next((c for c in df_Global.columns if '價格' in c), None)
                             s_col = next((c for c in df_Global.columns if '狀態' in c), None)
                             
                             if p_col: vix_val = vix_row.iloc[0].get(p_col, 'N/A')
                             if s_col: vix_status = vix_row.iloc[0].get(s_col, '')
 
-                # 顏色邏輯
                 risk_color = "black"
                 if "紅" in risk_today: risk_color = "#dc3545"
                 elif "橘" in risk_today: risk_color = "#fd7e14" # 橘色
                 elif "黃" in risk_today: risk_color = "#ffc107"
                 elif "綠" in risk_today: risk_color = "#28a745"
 
-                # 建立六欄顯示
                 m_cols = st.columns(6)
                 
-                # 統一的樣式輔助函式 (字體放大版)
                 def make_metric(label, value, color="black"):
                         return f"""
                         <div style='margin-bottom:0px;'>
@@ -690,13 +637,11 @@ if not df_C.empty:
                 with m_cols[0]:
                     st.markdown(make_metric("LDR", ldr_val), unsafe_allow_html=True)
                 with m_cols[1]:
-                    # 風險等級
                     match = re.search(r"(.+?)\s*([\(（].+?[\)）])", risk_today)
                     if match:
                         r_main = match.group(1).strip()
                         r_sub = match.group(2).strip()
                         r_sub_clean = re.sub(r"[（）\(\)]", "", r_sub)
-                        # 修正字體大小：狀態文字改為 1rem (正常)
                         risk_display_html = f"{r_main}<div style='font-size: 1rem; line-height: 1.0; margin-top: 2px;'>{r_sub_clean}</div>"
                     else:
                         risk_display_html = risk_today
@@ -704,13 +649,10 @@ if not df_C.empty:
                     st.markdown(make_metric("風險等級", risk_display_html, risk_color), unsafe_allow_html=True)
                     
                 with m_cols[2]:
-                    # 質押率
                     st.markdown(make_metric("質押率", pledge_display, p_color), unsafe_allow_html=True)
                 with m_cols[3]:
-                    # 建議拆倉
                     st.markdown(make_metric("建議拆倉", unwind_rate, "#dc3545" if safe_float(unwind_rate) > 0 else "black"), unsafe_allow_html=True)
                 with m_cols[4]:
-                    # 盤勢
                     bias_display = "N/A"
                     if bias_val != "N/A":
                             bv = safe_float(bias_val)
@@ -719,31 +661,20 @@ if not df_C.empty:
                             else:
                                 bias_display = f"{bv*100:.2f}%"
                     
-                    # 修正字體大小：乖離率文字改為 1rem (正常)
                     val_str = f"{market_pos}<div style='font-size: 1rem; line-height: 1.0; margin-top: 2px;'>{bias_display}</div>"
                     st.markdown(make_metric("盤勢", val_str), unsafe_allow_html=True)
                 with m_cols[5]:
-                    # VIX 顯示調整：
-                    # 1. 解析狀態字串，分離主狀態與括號內說明
-                    # 2. 移除括號
-                    # 3. 允許說明文字換行 (white-space: normal)
                     v_html = vix_status
                     match = re.search(r"(.+?)\s*([\(（].+?[\)）])", vix_status)
                     if match:
                         v_main = match.group(1).strip()
                         v_sub = match.group(2).strip()
-                        v_sub_clean = re.sub(r"[（）\(\)]", "", v_sub) # 移除括號
-                        # 組合 HTML：主狀態 + 說明文字 (設定為可換行)
-                        # 修正字體大小：狀態文字改為 1rem (正常)
+                        v_sub_clean = re.sub(r"[（）\(\)]", "", v_sub)
                         v_html = f"{v_main}<div style='font-size: 1rem; line-height: 1.3; margin-top: 2px; white-space: normal; color: gray;'>{v_sub_clean}</div>"
                     
-                    # 組合數值與狀態
-                    # 修正字體大小：狀態整體容器字體大小調整，避免重複縮放
                     vix_display_html = f"{vix_val}<div style='font-size: 1rem; line-height: 1.2; margin-top: 2px;'>{v_html}</div>"
-                    
                     st.markdown(make_metric("VIX", vix_display_html), unsafe_allow_html=True) 
                 
-                # 第二列：指令
                 st.markdown(f"<div style='font-size:1.1em;color:gray;margin-top:2px;margin-bottom:2px'>📊 操作指令 (60日乖離: {bias_val})</div>", unsafe_allow_html=True)
                 st.info(f"{cmd}")
                 
@@ -755,10 +686,8 @@ else:
 
 # 2. 持股
 st.header('2. 持股分析')
-# 調整比例：左(表格) 3 : 右(圖) 1，讓表格有更多寬度
 c1, c2 = st.columns([3, 1])
 with c1:
-    # 改用 markdown 確保字體大小控制權
     st.markdown("### 📝 持股明細") 
     if not df_A.empty:
         df_show = df_A.copy()
@@ -770,20 +699,16 @@ with c1:
         for c in ['平均成本', '收盤價', '即時價']:
             if c in df_show.columns: df_show[c] = df_show[c].apply(fmt_money)
             
-        # ⚠️ 強制隱藏 Index 並增加高度
-        # 公式調整：每一列約 35px，Header 35px，加上 20px 緩衝
         height_val = (len(df_show) + 1) * 35 + 20
         st.dataframe(df_show, use_container_width=True, height=height_val, hide_index=True)
 
 with c2:
-    # 改用 HTML 並設定置中樣式，讓標題與圓餅圖對齊
     st.markdown("<h3 style='text-align: center;'>🍰 資產配置</h3>", unsafe_allow_html=True) 
     if not df_B.empty and '市值（元）' in df_B.columns:
         df_B['num'] = df_B['市值（元）'].apply(safe_float)
         chart_data = df_B[(df_B['num'] > 0) & (~df_B['股票'].str.contains('總資產|Total', na=False))]
         if not chart_data.empty:
             fig = px.pie(chart_data, values='num', names='股票')
-            # 移除所有邊距，將圖例移至底部
             fig.update_layout(
                 margin=dict(t=10, b=10, l=10, r=10),
                 legend=dict(orientation="h", yanchor="bottom", y=-0.2, xanchor="center", x=0.5)
@@ -908,6 +833,27 @@ if not df_G.empty:
                         
                         if body:
                             st.dataframe(pd.DataFrame(body, columns=u_heads), use_container_width=True, hide_index=True)
+                current_title = first_cell
+                current_data = []
+            elif any(str(c).strip() for c in row):
+                if current_title is not None:
+                    current_data.append(row)
+        
+        # Render last
+        if current_title:
+            st.subheader(current_title)
+            if len(current_data) > 0:
+                headers = current_data[0]
+                body = current_data[1:] if len(current_data) > 1 else []
+                u_heads = []
+                seen = {}
+                for h in headers:
+                    h_str = str(h).strip()
+                    if not h_str: h_str = "-" 
+                    if h_str in seen: seen[h_str] += 1; u_heads.append(f"{h_str}_{seen[h_str]}")
+                    else: seen[h_str] = 0; u_heads.append(h_str)
+                if body:
+                    st.dataframe(pd.DataFrame(body, columns=u_heads), use_container_width=True, hide_index=True)
         
         # ⚠️ 備援機制：如果上面的邏輯完全沒抓到任何區塊 (found_sections 仍為 False)，則顯示原始表格
         # 這能避免「整個不見」的情況，至少讓使用者看到原始資料
