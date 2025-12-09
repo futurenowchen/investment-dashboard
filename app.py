@@ -634,13 +634,13 @@ if not df_C.empty:
                         bias_val = valid_rows.iloc[-1]['台股60日季線乖離']
                 
                 # 取得 VIX 資訊
-                vix_display = "N/A"
+                vix_val = "N/A"
+                vix_status = ""
                 if not df_Global.empty and '代碼' in df_Global.columns:
                     vix_row = df_Global[df_Global['代碼'] == 'VIX']
                     if not vix_row.empty:
-                        v_price = vix_row.iloc[0].get('價格', 'N/A')
-                        v_status = vix_row.iloc[0].get('狀態', '')
-                        vix_display = f"{v_price} ({v_status})"
+                        vix_val = vix_row.iloc[0].get('價格', 'N/A')
+                        vix_status = vix_row.iloc[0].get('狀態', '')
 
                 # 顏色邏輯
                 risk_color = "black"
@@ -695,7 +695,9 @@ if not df_C.empty:
                     val_str = f"{market_pos}<div style='font-size: 0.6em; line-height: 1.0; margin-top: 2px;'>{bias_display}</div>"
                     st.markdown(make_metric("盤勢", val_str), unsafe_allow_html=True)
                 with m_cols[5]:
-                    st.markdown(make_metric("VIX", vix_display.split(' ')[0]), unsafe_allow_html=True) 
+                    # VIX 顯示調整：數值在上方，狀態文字(vix_status)在下方且縮小
+                    vix_display_html = f"{vix_val}<div style='font-size: 0.6em; line-height: 1.0; margin-top: 2px;'>{vix_status}</div>"
+                    st.markdown(make_metric("VIX", vix_display_html), unsafe_allow_html=True) 
                 
                 # 第二列：指令
                 st.markdown(f"<div style='font-size:1.1em;color:gray;margin-top:10px;margin-bottom:5px'>📊 操作指令 (60日乖離: {bias_val})</div>", unsafe_allow_html=True)
