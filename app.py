@@ -647,16 +647,10 @@ if not df_C.empty:
                 pledge_display = f"{pledge_val:.2f}%<div style='font-size: 1rem; line-height: 1.0; margin-top: 2px;'>{p_status}</div>"
 
                 # --- 3. 風險等級 (Risk Level) 判斷 ---
-                # 邏輯：
-                # 1. 現金 < 50000 -> 紅燈（現金不足）
-                # 2. 質押 >= 45% -> 紅燈（質押率危險）
-                # 3. 質押 >= 40% -> 橘燈（質押率過高）
-                # 4. E < 0.95 & LDR >= 1.08 -> 橘燈（E偏低但結構過熱）
-                # 5. 0.95 <= E < 1.05 & LDR >= 1.06 -> 橘燈（E正常且結構過熱）
-                # 6. E >= 1.05 & LDR >= 1.03 -> 橘燈（E偏高且結構過熱）
-                # 7. E < 0.95 & LDR < 1.05 & Pledge < 35% -> 綠燈（安全）
-                # 8. 其他 -> 黃燈（偏熱）
-
+                # 預設值 (確保 else 也有值)
+                risk_today = "黃燈（偏熱：需保守操作）"
+                risk_color = "#ffc107"
+                
                 if cash_val < 50000:
                     risk_today = "紅燈（現金不足）"
                     risk_color = "#dc3545"
@@ -678,8 +672,7 @@ if not df_C.empty:
                 elif e_ratio < 0.95 and ldr_ratio < 1.05 and pledge_val < 35:
                     risk_today = "綠燈（安全：曝險指標 E 溫和＋LDR 正常＋質押低）"
                     risk_color = "#28a745"
-                else:
-                    risk_today = "黃燈（偏熱：需保守操作）"
+                # else: ... 預設值已在上方設定
 
                 # 格式化顯示 (主標題 + 副標題)
                 match = re.search(r"(.+?)\s*([\(（].+?[\)）])", risk_today)
