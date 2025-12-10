@@ -349,9 +349,11 @@ def load_data(sheet_name):
                     
                 if not data: return pd.DataFrame()
                 
+                # Fix: 自動移除欄位名稱的前後空白
                 headers = [str(h).strip() for h in data[0]]
                 df = pd.DataFrame(data[1:], columns=headers)
                 
+                # 處理重複欄位名稱
                 if len(df.columns) != len(set(df.columns)):
                     cols = []
                     count = {}
@@ -467,6 +469,9 @@ df_G = load_data('表G_財富藍圖')
 df_H = load_data('表H_每日判斷')
 df_Market = load_data('Market')
 df_Global = load_data('Global')
+
+# 全域初始化關鍵變數，防止未定義錯誤
+lev = 0.0
 
 # 側邊欄
 st.sidebar.header("🎯 數據管理")
@@ -586,11 +591,50 @@ if not df_C.empty:
                 df_h['dt'] = pd.to_datetime(df_h[date_col], errors='coerce')
                 latest = df_h.sort_values('dt', ascending=False).iloc[0]
                 
-                ldr = str(latest.get('LDR', 'N/A'))
+                # 初始化預設值，防止未定義錯誤
+                ldr_display = "N/A"
+                ldr_color = "black"
+                
+                # 取出各項數值
+                ldr_raw = str(latest.get('LDR', 'N/A'))
                 risk_today = str(latest.get('今日風險等級', 'N/A'))
                 cmd = str(latest.get('今日指令', 'N/A'))
                 market_pos = str(latest.get('盤勢位置', 'N/A'))
                 
+                # --- 新增邏輯：LDR 狀態判斷 ---
+                ldr_val_num = safe_float(ldr_raw)
+                # 簡單正規化：大於5則視為百分比
+                ldr_ratio = ldr_val_num / 100.0 if ldr_val_num > 5 else ldr_val_num
+                
+                # E 值 (Ratio) - 使用全域變數 lev
+                e_ratio = lev / 100.0 if lev > 5 else lev 
+                
+                # safeL = IF(E<0.95,1.05,IF(E<1.05,1.03,1.01))
+                if e_ratio < 0.95: safe_l = 1.05
+                elif e_ratio < 1.05: safe_l = 1.03
+                else: safe_l = 1.01
+
+                # hotL = IF(E<0.95,1.08,IF(E<1.05,1.06,1.03))
+                if e_ratio < 0.95: hot_l = 1.08
+                elif e_ratio < 1.05: hot_l = 1.06
+                else: hot_l = 1.03
+                
+                if ldr_ratio <= 1.0:
+                    ldr_status_txt = "黃金結構"
+                    ldr_color = "#28a745" # Green
+                elif ldr_ratio <= safe_l:
+                    ldr_status_txt = "偏熱"
+                    ldr_color = "#ffc107" # Yellow
+                elif ldr_ratio <= hot_l:
+                    ldr_status_txt = "過熱"
+                    ldr_color = "#fd7e14" # Orange
+                else:
+                    ldr_status_txt = "危險"
+                    ldr_color = "#dc3545" # Red
+                
+                ldr_display = f"{ldr_val_num:.2f}%<div style='font-size: 1rem; line-height: 1.0; margin-top: 2px;'>{ldr_status_txt}</div>"
+
+                # --- 質押率狀態判斷 ---
                 raw_pledge = safe_float(latest.get('質押率', 0))
                 if abs(raw_pledge) <= 5.0:
                     pledge_val = raw_pledge * 100
@@ -611,6 +655,10 @@ if not df_C.empty:
                 pledge_display = f"{pledge_val:.2f}%<div style='font-size: 1rem; line-height: 1.0; margin-top: 2px; white-space: normal; word-break: break-word;'>{p_status}</div>"
 
                 unwind_rate = fmt_pct(latest.get('建議拆倉比例', 0))
+                
+                # 模糊搜尋 '飛輪' 欄位
+                fw_col = next((c for c in df_h.columns if '飛輪' in c), None)
+                flywheel_stage = str(latest.get(fw_col, 'N/A')) if fw_col else 'N/A'
                 
                 bias_val = "N/A"
                 if not df_Market.empty:
@@ -657,7 +705,6 @@ if not df_C.empty:
                         r_main = match.group(1).strip()
                         r_sub = match.group(2).strip()
                         r_sub_clean = re.sub(r"[（）\(\)]", "", r_sub)
-                        # 修正：允許換行
                         risk_display_html = f"{r_main}<div style='font-size: 1rem; line-height: 1.0; margin-top: 2px; white-space: normal; word-break: break-word;'>{r_sub_clean}</div>"
                     else:
                         risk_display_html = risk_today
@@ -687,7 +734,7 @@ if not df_C.empty:
                     if match:
                         v_main = match.group(1).strip()
                         v_sub = match.group(2).strip()
-                        v_sub_clean = re.sub(r"[（）\(\)]", "", r_sub)
+                        v_sub_clean = re.sub(r"[（）\(\)]", "", v_sub)
                         v_html = f"{v_main}<div style='font-size: 1rem; line-height: 1.3; margin-top: 2px; white-space: normal; color: gray;'>{v_sub_clean}</div>"
                     
                     vix_display_html = f"{vix_val}<div style='font-size: 1rem; line-height: 1.2; margin-top: 2px;'>{v_html}</div>"
