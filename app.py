@@ -733,12 +733,15 @@ if not df_C.empty:
                 with m_cols[5]:
                     st.markdown(make_metric("飛輪階段", flywheel_stage), unsafe_allow_html=True)
                 with m_cols[6]:
+                    # Regex fix for VIX: use re.DOTALL to handle newlines
                     v_html = vix_status
-                    match = re.search(r"(.+?)\s*([\(（].+?[\)）])", vix_status)
+                    match = re.search(r"(.+?)\s*([\(（].+?[\)）])", vix_status, re.DOTALL)
                     if match:
                         v_main = match.group(1).strip()
                         v_sub = match.group(2).strip()
-                        v_sub_clean = re.sub(r"[（）\(\)]", "", r_sub)
+                        v_sub_clean = re.sub(r"[（）\(\)]", "", v_sub)
+                        # Remove newlines in sub-text to avoid weird breaks if desired, or keep them
+                        v_sub_clean = v_sub_clean.replace('\n', ' ')
                         v_html = f"{v_main}<div style='font-size: 1rem; line-height: 1.3; margin-top: 2px; white-space: normal; color: gray;'>{v_sub_clean}</div>"
                     
                     vix_display_html = f"{vix_val}<div style='font-size: 1rem; line-height: 1.2; margin-top: 2px;'>{v_html}</div>"
