@@ -52,6 +52,10 @@ div[data-testid="stSidebar"] .stButton button {
     border-radius: 10px;
     padding: 12px;
     text-align: center;
+    height: 100%; /* 嘗試填滿高度 */
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
 }
 .metric-label {
     font-size: 0.9em;
@@ -59,19 +63,20 @@ div[data-testid="stSidebar"] .stButton button {
     margin-bottom: 4px;
 }
 .metric-value {
-    font-size: 1.8em;
+    font-size: 2.0em; /* 稍微加大數值 */
     font-weight: bold;
     color: #212529;
     line-height: 1.1;
 }
 .metric-badge {
-    display: inline-block;
-    padding: 2px 8px;
-    border-radius: 4px;
+    display: block; /* 改為區塊元素以滿版 */
+    width: 100%;    /* 設定寬度為 100% */
+    padding: 6px 0; /* 增加垂直 padding */
+    border-radius: 6px;
     color: white;
-    font-size: 0.9em;
+    font-size: 1.1em; /* 加大字體 */
     font-weight: bold;
-    margin-bottom: 6px;
+    margin-bottom: 10px; /* 增加下方間距 */
 }
 
 /* 買房計畫資訊卡樣式 */
@@ -516,8 +521,8 @@ if not df_C.empty:
     elif '警戒' in risk_txt or '警示' in risk_txt: style = {'e':'⚠️', 'bg':'#ffc107', 't':'black'}
     elif '危險' in risk_txt: style = {'e':'🚨', 'bg':'#dc3545', 't':'white'}
 
-    # Layout: 4 Columns [2, 1, 1, 1]
-    c1, c2, c3, c4 = st.columns([2, 1, 1, 1])
+    # Layout: 4 Columns [1, 1, 1, 1] 等寬
+    c1, c2, c3, c4 = st.columns([1, 1, 1, 1])
     
     # 1. Core Assets Table (Clean Look)
     with c1:
