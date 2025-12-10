@@ -118,6 +118,7 @@ def generate_daily_report(df_A, df_C, df_D, df_E, df_F, df_H):
                 '總資產市值': '總資產市值', 
                 '實質NAV': '實質NAV', 
                 '質押率': '質押率',
+                '質押率燈號': '質押率燈號', # 新增
                 # 優先使用新名稱，若無則讀取舊名稱
                 '曝險指標 E': '曝險指標 E',
                 '槓桿倍數β': '曝險指標 E', 
@@ -638,21 +639,57 @@ if not df_C.empty:
                 ldr_display = f"{ldr_val_num:.2f}%<div style='font-size: 1rem; line-height: 1.0; margin-top: 2px;'>{ldr_status_txt}</div>"
 
                 # --- 質押率狀態判斷 ---
+                # 修正：改從 Google Sheet 表C (df_C) 讀取 '質押率燈號'
                 raw_pledge = safe_float(latest.get('質押率', 0))
                 if abs(raw_pledge) <= 5.0:
                     pledge_val = raw_pledge * 100
                 else:
                     pledge_val = raw_pledge
-                    
-                if pledge_val > 45:
-                    p_status = "危險"
-                    p_color = "#dc3545" # 紅
-                elif pledge_val >= 35:
-                    p_status = "警戒"
-                    p_color = "#ffc107" # 黃
+
+                sheet_pledge_status = ""
+                if not df_C.empty:
+                    try:
+                        # 建立臨時查找表
+                        df_c_temp = df_C.copy()
+                        df_c_temp.set_index(df_c_temp.columns[0], inplace=True)
+                        c_col = df_c_temp.columns[0]
+                        # 嘗試查找
+                        if '質押率燈號' in df_c_temp.index:
+                            sheet_pledge_status = str(df_c_temp.loc['質押率燈號', c_col]).strip()
+                    except:
+                        pass
+
+                if sheet_pledge_status:
+                     p_status = sheet_pledge_status
+                     if "安全" in p_status:
+                        p_color = "#28a745"
+                     elif "謹慎" in p_status:
+                        p_color = "#17a2b8"
+                     elif "高警戒" in p_status:
+                        p_color = "#fd7e14"
+                     elif "警戒" in p_status:
+                        p_color = "#ffc107"
+                     elif "危險" in p_status:
+                        p_color = "#dc3545"
+                     else:
+                        p_color = "black"
                 else:
-                    p_status = "安全"
-                    p_color = "#28a745" # 綠
+                     # 備援 Python 計算
+                    if pledge_val < 30:
+                        p_status = "安全（絕對安全區）"
+                        p_color = "#28a745" # Green
+                    elif pledge_val < 35:
+                        p_status = "謹慎可開火區"
+                        p_color = "#17a2b8" # Cyan
+                    elif pledge_val < 40:
+                        p_status = "警戒（火力鎖定區）"
+                        p_color = "#ffc107" # Yellow
+                    elif pledge_val < 45:
+                        p_status = "高警戒"
+                        p_color = "#fd7e14" # Orange
+                    else:
+                        p_status = "危險"
+                        p_color = "#dc3545" # Red
                 
                 # 修正：確保允許自動換行
                 pledge_display = f"{pledge_val:.2f}%<div style='font-size: 1rem; line-height: 1.0; margin-top: 2px; white-space: normal; word-break: break-word;'>{p_status}</div>"
@@ -739,7 +776,7 @@ if not df_C.empty:
                     if match:
                         v_main = match.group(1).strip()
                         v_sub = match.group(2).strip()
-                        v_sub_clean = re.sub(r"[（）\(\)]", "", v_sub)
+                        v_sub_clean = re.sub(r"[（）\(\)]", "", r_sub)
                         # Remove newlines in sub-text to avoid weird breaks if desired, or keep them
                         v_sub_clean = v_sub_clean.replace('\n', ' ')
                         v_html = f"{v_main}<div style='font-size: 1rem; line-height: 1.3; margin-top: 2px; white-space: normal; color: gray;'>{v_sub_clean}</div>"
