@@ -332,40 +332,56 @@ def get_gsheet_connection():
         return None, None
 
 # 數據載入 (純搬運，不做任何轉換)
-@st.cache_data(ttl=None) 
+# 修正 1: 增加 cache TTL 為 1小時 (3600秒)，避免頻繁讀取
+@st.cache_data(ttl=3600) 
 def load_data(sheet_name): 
-    with st.spinner(f"讀取: {sheet_name}"):
-        try:
-            _, sh = get_gsheet_connection()
-            if not sh: return pd.DataFrame()
-            
+    # 修正 2: 增加 429 錯誤的重試機制
+    max_retries = 3
+    for attempt in range(max_retries):
+        with st.spinner(f"讀取: {sheet_name} (嘗試 {attempt+1}/{max_retries})..."):
             try:
-                ws = sh.worksheet(sheet_name) 
-                data = ws.get_all_values()
-            except gspread.exceptions.WorksheetNotFound:
-                # 靜默失敗，回傳空表即可
-                return pd.DataFrame()
+                gc, sh = get_gsheet_connection() # 這裡需要拆解，因為 get_gsheet_connection 本身可能失敗
+                if not sh: return pd.DataFrame()
                 
-            if not data: return pd.DataFrame()
-            
-            # Fix: 自動移除欄位名稱的前後空白
-            headers = [str(h).strip() for h in data[0]]
-            df = pd.DataFrame(data[1:], columns=headers)
-            
-            # 處理重複欄位名稱
-            if len(df.columns) != len(set(df.columns)):
-                cols = []
-                count = {}
-                for c in df.columns:
-                    n = "Unnamed" if not c else c
-                    if n in count: count[n]+=1; cols.append(f"{n}_{count[n]}")
-                    else: count[n]=0; cols.append(n)
-                df.columns = cols
-            return df
-            
-        except Exception as e:
-            st.error(f"讀取 {sheet_name} 失敗: {e}")
-            return pd.DataFrame() 
+                try:
+                    ws = sh.worksheet(sheet_name) 
+                    data = ws.get_all_values()
+                except gspread.exceptions.WorksheetNotFound:
+                    return pd.DataFrame()
+                    
+                if not data: return pd.DataFrame()
+                
+                # Fix: 自動移除欄位名稱的前後空白
+                headers = [str(h).strip() for h in data[0]]
+                df = pd.DataFrame(data[1:], columns=headers)
+                
+                # 處理重複欄位名稱
+                if len(df.columns) != len(set(df.columns)):
+                    cols = []
+                    count = {}
+                    for c in df.columns:
+                        n = "Unnamed" if not c else c
+                        if n in count: count[n]+=1; cols.append(f"{n}_{count[n]}")
+                        else: count[n]=0; cols.append(n)
+                    df.columns = cols
+                return df
+                
+            except gspread.exceptions.APIError as e:
+                # 如果是 Quota exceeded (429)，則等待後重試
+                if "429" in str(e):
+                    if attempt < max_retries - 1:
+                        time.sleep(2 * (attempt + 1)) # 指數退避
+                        continue
+                    else:
+                        st.error(f"❌ API 配額超限，請稍後再試。 ({e})")
+                        return pd.DataFrame()
+                else:
+                    st.error(f"讀取 {sheet_name} 失敗: {e}")
+                    return pd.DataFrame()
+            except Exception as e:
+                st.error(f"讀取 {sheet_name} 失敗: {e}")
+                return pd.DataFrame()
+    return pd.DataFrame()
 
 # --- 股價 API (修正版) ---
 @st.cache_data(ttl="60s") 
@@ -580,126 +596,46 @@ if not df_C.empty:
                 df_h['dt'] = pd.to_datetime(df_h[date_col], errors='coerce')
                 latest = df_h.sort_values('dt', ascending=False).iloc[0]
                 
-                # --- 資料準備 ---
-                ldr_raw = str(latest.get('LDR', 'N/A'))
-                ldr_val_num = safe_float(ldr_raw)
-                # 簡單正規化：大於5則視為百分比
-                ldr_ratio = ldr_val_num / 100.0 if ldr_val_num > 5 else ldr_val_num
+                # 取出各項數值
+                ldr_val = str(latest.get('LDR', 'N/A'))
+                risk_today = str(latest.get('今日風險等級', 'N/A'))
+                cmd = str(latest.get('今日指令', 'N/A'))
+                market_pos = str(latest.get('盤勢位置', 'N/A'))
                 
-                # E 值 (Ratio)
-                e_ratio = lev / 100.0 if lev > 5 else lev 
-                
-                # 質押率
+                # --- 新增邏輯：質押率狀態判斷 ---
                 raw_pledge = safe_float(latest.get('質押率', 0))
-                # 統一轉為百分比數值 (0-100)
                 if abs(raw_pledge) <= 5.0:
                     pledge_val = raw_pledge * 100
                 else:
                     pledge_val = raw_pledge
-                pledge_ratio = pledge_val / 100.0
-
-                # 現金
-                cash_val = safe_float(df_c.loc['現金', col_val]) if '現金' in df_c.index else 999999
-                
-                # --- 1. LDR 狀態判斷 (基於 E) ---
-                # safeL = IF(E<0.95,1.05,IF(E<1.05,1.03,1.01))
-                if e_ratio < 0.95: safe_l = 1.05
-                elif e_ratio < 1.05: safe_l = 1.03
-                else: safe_l = 1.01
-
-                # hotL = IF(E<0.95,1.08,IF(E<1.05,1.06,1.03))
-                if e_ratio < 0.95: hot_l = 1.08
-                elif e_ratio < 1.05: hot_l = 1.06
-                else: hot_l = 1.03
-                
-                if ldr_ratio <= 1.0:
-                    ldr_status_txt = "黃金結構"
-                    ldr_color = "#28a745" # Green
-                elif ldr_ratio <= safe_l:
-                    ldr_status_txt = "偏熱"
-                    ldr_color = "#ffc107" # Yellow
-                elif ldr_ratio <= hot_l:
-                    ldr_status_txt = "過熱"
-                    ldr_color = "#fd7e14" # Orange
-                else:
-                    ldr_status_txt = "危險"
-                    ldr_color = "#dc3545" # Red
-                
-                ldr_display = f"{ldr_val_num:.2f}%<div style='font-size: 1rem; line-height: 1.0; margin-top: 2px;'>{ldr_status_txt}</div>"
-
-                # --- 2. 質押率 狀態判斷 ---
-                if pledge_val < 30:
-                    p_status = "安全（絕對安全區）"
-                    p_color = "#28a745" # Green
-                elif pledge_val < 35:
-                    p_status = "謹慎可開火區"
-                    p_color = "#17a2b8" # Cyan
-                elif pledge_val < 40:
-                    p_status = "警戒（火力鎖定區）"
-                    p_color = "#ffc107" # Yellow
-                elif pledge_val < 45:
-                    p_status = "高警戒"
-                    p_color = "#fd7e14" # Orange
-                else:
+                    
+                if pledge_val > 45:
                     p_status = "危險"
-                    p_color = "#dc3545" # Red
-                
-                pledge_display = f"{pledge_val:.2f}%<div style='font-size: 1rem; line-height: 1.0; margin-top: 2px;'>{p_status}</div>"
-
-                # --- 3. 風險等級 (Risk Level) 判斷 ---
-                # 預設值 (確保 else 也有值)
-                risk_today = "黃燈（偏熱：需保守操作）"
-                risk_color = "#ffc107"
-                
-                if cash_val < 50000:
-                    risk_today = "紅燈（現金不足）"
-                    risk_color = "#dc3545"
-                elif pledge_val >= 45:
-                    risk_today = "紅燈（質押率危險 ≥45%）"
-                    risk_color = "#dc3545"
-                elif pledge_val >= 40:
-                    risk_today = "橘燈（質押率過高 40–45%）"
-                    risk_color = "#fd7e14"
-                elif e_ratio < 0.95 and ldr_ratio >= 1.08:
-                    risk_today = "橘燈（曝險指標 E 偏低但結構過熱）"
-                    risk_color = "#fd7e14"
-                elif 0.95 <= e_ratio < 1.05 and ldr_ratio >= 1.06:
-                    risk_today = "橘燈（曝險指標 E 正常且結構過熱）"
-                    risk_color = "#fd7e14"
-                elif e_ratio >= 1.05 and ldr_ratio >= 1.03:
-                    risk_today = "橘燈（曝險指標 E 偏高且結構過熱）"
-                    risk_color = "#fd7e14"
-                elif e_ratio < 0.95 and ldr_ratio < 1.05 and pledge_val < 35:
-                    risk_today = "綠燈（安全：曝險指標 E 溫和＋LDR 正常＋質押低）"
-                    risk_color = "#28a745"
-                # else: ... 預設值已在上方設定
-
-                # 格式化顯示 (主標題 + 副標題)
-                match = re.search(r"(.+?)\s*([\(（].+?[\)）])", risk_today)
-                if match:
-                    r_main = match.group(1).strip()
-                    r_sub = match.group(2).strip()
-                    r_sub_clean = re.sub(r"[（）\(\)]", "", r_sub)
-                    risk_display_html = f"{r_main}<div style='font-size: 1rem; line-height: 1.0; margin-top: 2px;'>{r_sub_clean}</div>"
+                    p_color = "#dc3545" # 紅
+                elif pledge_val >= 35:
+                    p_status = "警戒"
+                    p_color = "#ffc107" # 黃
                 else:
-                    risk_display_html = risk_today
+                    p_status = "安全"
+                    p_color = "#28a745" # 綠
+                
+                # 修正：允許換行
+                pledge_display = f"{pledge_val:.2f}%<div style='font-size: 1rem; line-height: 1.0; margin-top: 2px; white-space: normal; word-break: break-word;'>{p_status}</div>"
+                # --------------------------------
 
-                # --- 其他欄位 ---
-                cmd = str(latest.get('今日指令', 'N/A'))
-                cmd = re.sub(r"【Debug｜.*?】", "", cmd).strip()
-                market_pos = str(latest.get('盤勢位置', 'N/A'))
-                fw_col = next((c for c in df_h.columns if '飛輪' in c), None)
-                flywheel_stage = str(latest.get(fw_col, 'N/A')) if fw_col else 'N/A'
                 unwind_rate = fmt_pct(latest.get('建議拆倉比例', 0))
                 
+                # 取得台股60日季線乖離
                 bias_val = "N/A"
                 if not df_Market.empty:
+                    # 模糊搜尋欄位
                     b_col = next((c for c in df_Market.columns if '乖離' in c), None)
                     if b_col:
                         valid_rows = df_Market[df_Market[b_col].astype(str).str.strip() != '']
                         if not valid_rows.empty:
                             bias_val = valid_rows.iloc[-1][b_col]
                 
+                # 取得 VIX 資訊
                 vix_val = "N/A"
                 vix_status = ""
                 if not df_Global.empty:
@@ -709,23 +645,43 @@ if not df_C.empty:
                         if not vix_row.empty:
                             p_col = next((c for c in df_Global.columns if '價格' in c), None)
                             s_col = next((c for c in df_Global.columns if '狀態' in c), None)
+                            
                             if p_col: vix_val = vix_row.iloc[0].get(p_col, 'N/A')
                             if s_col: vix_status = vix_row.iloc[0].get(s_col, '')
 
+                risk_color = "black"
+                if "紅" in risk_today: risk_color = "#dc3545"
+                elif "橘" in risk_today: risk_color = "#fd7e14" # 橘色
+                elif "黃" in risk_today: risk_color = "#ffc107"
+                elif "綠" in risk_today: risk_color = "#28a745"
+
                 m_cols = st.columns(7)
                 
+                # 修正：make_metric 預設允許換行
                 def make_metric(label, value, color="black"):
                         return f"""
                         <div style='margin-bottom:0px;'>
                         <div style='font-size:1.1rem; color:gray; margin-bottom:2px; white-space: nowrap;'>{label}</div>
-                        <div style='font-size:1.8rem; font-weight:bold; color:{color}; line-height:1.2; white-space: nowrap;'>{value}</div>
+                        <div style='font-size:1.8rem; font-weight:bold; color:{color}; line-height:1.2; white-space: normal; word-break: break-word;'>{value}</div>
                         </div>
                         """
 
                 with m_cols[0]:
-                    st.markdown(make_metric("LDR", ldr_display, ldr_color), unsafe_allow_html=True)
+                    st.markdown(make_metric("LDR", ldr_val), unsafe_allow_html=True)
                 with m_cols[1]:
+                    # 風險等級
+                    match = re.search(r"(.+?)\s*([\(（].+?[\)）])", risk_today)
+                    if match:
+                        r_main = match.group(1).strip()
+                        r_sub = match.group(2).strip()
+                        r_sub_clean = re.sub(r"[（）\(\)]", "", r_sub)
+                        # 修正：允許換行
+                        risk_display_html = f"{r_main}<div style='font-size: 1rem; line-height: 1.0; margin-top: 2px; white-space: normal; word-break: break-word;'>{r_sub_clean}</div>"
+                    else:
+                        risk_display_html = risk_today
+                    
                     st.markdown(make_metric("風險等級", risk_display_html, risk_color), unsafe_allow_html=True)
+                    
                 with m_cols[2]:
                     st.markdown(make_metric("質押率", pledge_display, p_color), unsafe_allow_html=True)
                 with m_cols[3]:
@@ -738,7 +694,8 @@ if not df_C.empty:
                                 bias_display = f"{bv:.2f}%"
                             else:
                                 bias_display = f"{bv*100:.2f}%"
-                    val_str = f"{market_pos}<div style='font-size: 1.2rem; line-height: 1.0; margin-top: 2px;'>{bias_display}</div>"
+                    
+                    val_str = f"{market_pos}<div style='font-size: 1rem; line-height: 1.0; margin-top: 2px;'>{bias_display}</div>"
                     st.markdown(make_metric("盤勢", val_str), unsafe_allow_html=True)
                 with m_cols[5]:
                     st.markdown(make_metric("飛輪階段", flywheel_stage), unsafe_allow_html=True)
@@ -750,6 +707,7 @@ if not df_C.empty:
                         v_sub = match.group(2).strip()
                         v_sub_clean = re.sub(r"[（）\(\)]", "", v_sub)
                         v_html = f"{v_main}<div style='font-size: 1rem; line-height: 1.3; margin-top: 2px; white-space: normal; color: gray;'>{v_sub_clean}</div>"
+                    
                     vix_display_html = f"{vix_val}<div style='font-size: 1rem; line-height: 1.2; margin-top: 2px;'>{v_html}</div>"
                     st.markdown(make_metric("VIX", vix_display_html), unsafe_allow_html=True) 
                 
@@ -942,4 +900,3 @@ if not df_G.empty:
         st.dataframe(df_G, use_container_width=True)
 else:
     st.info("無財富藍圖資料")
-
