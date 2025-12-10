@@ -738,7 +738,7 @@ if not df_C.empty:
                                 bias_display = f"{bv:.2f}%"
                             else:
                                 bias_display = f"{bv*100:.2f}%"
-                    val_str = f"{market_pos}<div style='font-size: 1rem; line-height: 1.0; margin-top: 2px;'>{bias_display}</div>"
+                    val_str = f"{market_pos}<div style='font-size: 1.2rem; line-height: 1.0; margin-top: 2px;'>{bias_display}</div>"
                     st.markdown(make_metric("盤勢", val_str), unsafe_allow_html=True)
                 with m_cols[5]:
                     st.markdown(make_metric("飛輪階段", flywheel_stage), unsafe_allow_html=True)
@@ -942,3 +942,4 @@ if not df_G.empty:
         st.dataframe(df_G, use_container_width=True)
 else:
     st.info("無財富藍圖資料")
+
