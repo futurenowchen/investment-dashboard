@@ -171,8 +171,8 @@ def generate_daily_report(df_A, df_C, df_D, df_E, df_F, df_H):
                 flywheel = str(latest.get(fw_col, 'N/A')) if fw_col else 'N/A'
                 
                 cmd = str(latest.get('今日指令', 'N/A'))
-                # 隱藏 Debug 資訊
-                cmd = re.sub(r"【Debug｜.*?】", "", cmd).strip()
+                # 隱藏 Debug 資訊 (更寬鬆的 Regex)
+                cmd = re.sub(r"【Debug.*?】", "", cmd, flags=re.DOTALL).strip()
                 
                 lines.append(f"LDR：{ldr}")
                 lines.append(f"風險等級：{risk}")
@@ -599,6 +599,9 @@ if not df_C.empty:
                 ldr_raw = str(latest.get('LDR', 'N/A'))
                 risk_today = str(latest.get('今日風險等級', 'N/A'))
                 cmd = str(latest.get('今日指令', 'N/A'))
+                # 隱藏 Debug 資訊 (更寬鬆的 Regex)
+                cmd = re.sub(r"【Debug.*?】", "", cmd, flags=re.DOTALL).strip()
+                
                 market_pos = str(latest.get('盤勢位置', 'N/A'))
                 
                 # --- 新增邏輯：LDR 狀態判斷 ---
@@ -705,6 +708,7 @@ if not df_C.empty:
                         r_main = match.group(1).strip()
                         r_sub = match.group(2).strip()
                         r_sub_clean = re.sub(r"[（）\(\)]", "", r_sub)
+                        # 修正：允許換行
                         risk_display_html = f"{r_main}<div style='font-size: 1rem; line-height: 1.0; margin-top: 2px; white-space: normal; word-break: break-word;'>{r_sub_clean}</div>"
                     else:
                         risk_display_html = risk_today
@@ -734,7 +738,7 @@ if not df_C.empty:
                     if match:
                         v_main = match.group(1).strip()
                         v_sub = match.group(2).strip()
-                        v_sub_clean = re.sub(r"[（）\(\)]", "", v_sub)
+                        v_sub_clean = re.sub(r"[（）\(\)]", "", r_sub)
                         v_html = f"{v_main}<div style='font-size: 1rem; line-height: 1.3; margin-top: 2px; white-space: normal; color: gray;'>{v_sub_clean}</div>"
                     
                     vix_display_html = f"{vix_val}<div style='font-size: 1rem; line-height: 1.2; margin-top: 2px;'>{v_html}</div>"
