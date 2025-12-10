@@ -580,36 +580,123 @@ if not df_C.empty:
                 df_h['dt'] = pd.to_datetime(df_h[date_col], errors='coerce')
                 latest = df_h.sort_values('dt', ascending=False).iloc[0]
                 
-                ldr = str(latest.get('LDR', 'N/A'))
-                risk_today = str(latest.get('今日風險等級', 'N/A'))
-                cmd = str(latest.get('今日指令', 'N/A'))
-                # 隱藏 Debug 資訊
-                cmd = re.sub(r"【Debug｜.*?】", "", cmd).strip()
+                # --- 資料準備 ---
+                ldr_raw = str(latest.get('LDR', 'N/A'))
+                ldr_val_num = safe_float(ldr_raw)
+                # 簡單正規化：大於5則視為百分比
+                ldr_ratio = ldr_val_num / 100.0 if ldr_val_num > 5 else ldr_val_num
                 
-                market_pos = str(latest.get('盤勢位置', 'N/A'))
+                # E 值 (Ratio)
+                e_ratio = lev / 100.0 if lev > 5 else lev 
                 
-                # 模糊搜尋 '飛輪' 欄位
-                fw_col = next((c for c in df_h.columns if '飛輪' in c), None)
-                flywheel_stage = str(latest.get(fw_col, 'N/A')) if fw_col else 'N/A'
-                
+                # 質押率
                 raw_pledge = safe_float(latest.get('質押率', 0))
+                # 統一轉為百分比數值 (0-100)
                 if abs(raw_pledge) <= 5.0:
                     pledge_val = raw_pledge * 100
                 else:
                     pledge_val = raw_pledge
-                    
-                if pledge_val > 45:
-                    p_status = "危險"
-                    p_color = "#dc3545" # 紅
-                elif pledge_val >= 35:
-                    p_status = "警戒"
-                    p_color = "#ffc107" # 黃
+                pledge_ratio = pledge_val / 100.0
+
+                # 現金
+                cash_val = safe_float(df_c.loc['現金', col_val]) if '現金' in df_c.index else 999999
+                
+                # --- 1. LDR 狀態判斷 (基於 E) ---
+                # safeL = IF(E<0.95,1.05,IF(E<1.05,1.03,1.01))
+                if e_ratio < 0.95: safe_l = 1.05
+                elif e_ratio < 1.05: safe_l = 1.03
+                else: safe_l = 1.01
+
+                # hotL = IF(E<0.95,1.08,IF(E<1.05,1.06,1.03))
+                if e_ratio < 0.95: hot_l = 1.08
+                elif e_ratio < 1.05: hot_l = 1.06
+                else: hot_l = 1.03
+                
+                if ldr_ratio <= 1.0:
+                    ldr_status_txt = "黃金結構"
+                    ldr_color = "#28a745" # Green
+                elif ldr_ratio <= safe_l:
+                    ldr_status_txt = "偏熱"
+                    ldr_color = "#ffc107" # Yellow
+                elif ldr_ratio <= hot_l:
+                    ldr_status_txt = "過熱"
+                    ldr_color = "#fd7e14" # Orange
                 else:
-                    p_status = "安全"
-                    p_color = "#28a745" # 綠
+                    ldr_status_txt = "危險"
+                    ldr_color = "#dc3545" # Red
+                
+                ldr_display = f"{ldr_val_num:.2f}%<div style='font-size: 1rem; line-height: 1.0; margin-top: 2px;'>{ldr_status_txt}</div>"
+
+                # --- 2. 質押率 狀態判斷 ---
+                if pledge_val < 30:
+                    p_status = "安全（絕對安全區）"
+                    p_color = "#28a745" # Green
+                elif pledge_val < 35:
+                    p_status = "謹慎可開火區"
+                    p_color = "#17a2b8" # Cyan
+                elif pledge_val < 40:
+                    p_status = "警戒（火力鎖定區）"
+                    p_color = "#ffc107" # Yellow
+                elif pledge_val < 45:
+                    p_status = "高警戒"
+                    p_color = "#fd7e14" # Orange
+                else:
+                    p_status = "危險"
+                    p_color = "#dc3545" # Red
                 
                 pledge_display = f"{pledge_val:.2f}%<div style='font-size: 1rem; line-height: 1.0; margin-top: 2px;'>{p_status}</div>"
 
+                # --- 3. 風險等級 (Risk Level) 判斷 ---
+                # 邏輯：
+                # 1. 現金 < 50000 -> 紅燈（現金不足）
+                # 2. 質押 >= 45% -> 紅燈（質押率危險）
+                # 3. 質押 >= 40% -> 橘燈（質押率過高）
+                # 4. E < 0.95 & LDR >= 1.08 -> 橘燈（E偏低但結構過熱）
+                # 5. 0.95 <= E < 1.05 & LDR >= 1.06 -> 橘燈（E正常且結構過熱）
+                # 6. E >= 1.05 & LDR >= 1.03 -> 橘燈（E偏高且結構過熱）
+                # 7. E < 0.95 & LDR < 1.05 & Pledge < 35% -> 綠燈（安全）
+                # 8. 其他 -> 黃燈（偏熱）
+
+                if cash_val < 50000:
+                    risk_today = "紅燈（現金不足）"
+                    risk_color = "#dc3545"
+                elif pledge_val >= 45:
+                    risk_today = "紅燈（質押率危險 ≥45%）"
+                    risk_color = "#dc3545"
+                elif pledge_val >= 40:
+                    risk_today = "橘燈（質押率過高 40–45%）"
+                    risk_color = "#fd7e14"
+                elif e_ratio < 0.95 and ldr_ratio >= 1.08:
+                    risk_today = "橘燈（曝險指標 E 偏低但結構過熱）"
+                    risk_color = "#fd7e14"
+                elif 0.95 <= e_ratio < 1.05 and ldr_ratio >= 1.06:
+                    risk_today = "橘燈（曝險指標 E 正常且結構過熱）"
+                    risk_color = "#fd7e14"
+                elif e_ratio >= 1.05 and ldr_ratio >= 1.03:
+                    risk_today = "橘燈（曝險指標 E 偏高且結構過熱）"
+                    risk_color = "#fd7e14"
+                elif e_ratio < 0.95 and ldr_ratio < 1.05 and pledge_val < 35:
+                    risk_today = "綠燈（安全：曝險指標 E 溫和＋LDR 正常＋質押低）"
+                    risk_color = "#28a745"
+                else:
+                    risk_today = "黃燈（偏熱：需保守操作）"
+
+                # 格式化顯示 (主標題 + 副標題)
+                match = re.search(r"(.+?)\s*([\(（].+?[\)）])", risk_today)
+                if match:
+                    r_main = match.group(1).strip()
+                    r_sub = match.group(2).strip()
+                    r_sub_clean = re.sub(r"[（）\(\)]", "", r_sub)
+                    risk_display_html = f"{r_main}<div style='font-size: 1rem; line-height: 1.0; margin-top: 2px;'>{r_sub_clean}</div>"
+                else:
+                    risk_display_html = risk_today
+
+                # --- 其他欄位 ---
+                cmd = str(latest.get('今日指令', 'N/A'))
+                cmd = re.sub(r"【Debug｜.*?】", "", cmd).strip()
+                market_pos = str(latest.get('盤勢位置', 'N/A'))
+                fw_col = next((c for c in df_h.columns if '飛輪' in c), None)
+                flywheel_stage = str(latest.get(fw_col, 'N/A')) if fw_col else 'N/A'
                 unwind_rate = fmt_pct(latest.get('建議拆倉比例', 0))
                 
                 bias_val = "N/A"
@@ -629,15 +716,8 @@ if not df_C.empty:
                         if not vix_row.empty:
                             p_col = next((c for c in df_Global.columns if '價格' in c), None)
                             s_col = next((c for c in df_Global.columns if '狀態' in c), None)
-                            
                             if p_col: vix_val = vix_row.iloc[0].get(p_col, 'N/A')
                             if s_col: vix_status = vix_row.iloc[0].get(s_col, '')
-
-                risk_color = "black"
-                if "紅" in risk_today: risk_color = "#dc3545"
-                elif "橘" in risk_today: risk_color = "#fd7e14" # 橘色
-                elif "黃" in risk_today: risk_color = "#ffc107"
-                elif "綠" in risk_today: risk_color = "#28a745"
 
                 m_cols = st.columns(7)
                 
@@ -650,19 +730,9 @@ if not df_C.empty:
                         """
 
                 with m_cols[0]:
-                    st.markdown(make_metric("LDR", ldr), unsafe_allow_html=True)
+                    st.markdown(make_metric("LDR", ldr_display, ldr_color), unsafe_allow_html=True)
                 with m_cols[1]:
-                    match = re.search(r"(.+?)\s*([\(（].+?[\)）])", risk_today)
-                    if match:
-                        r_main = match.group(1).strip()
-                        r_sub = match.group(2).strip()
-                        r_sub_clean = re.sub(r"[（）\(\)]", "", r_sub)
-                        risk_display_html = f"{r_main}<div style='font-size: 1rem; line-height: 1.0; margin-top: 2px;'>{r_sub_clean}</div>"
-                    else:
-                        risk_display_html = risk_today
-                    
                     st.markdown(make_metric("風險等級", risk_display_html, risk_color), unsafe_allow_html=True)
-                    
                 with m_cols[2]:
                     st.markdown(make_metric("質押率", pledge_display, p_color), unsafe_allow_html=True)
                 with m_cols[3]:
@@ -675,7 +745,6 @@ if not df_C.empty:
                                 bias_display = f"{bv:.2f}%"
                             else:
                                 bias_display = f"{bv*100:.2f}%"
-                    
                     val_str = f"{market_pos}<div style='font-size: 1rem; line-height: 1.0; margin-top: 2px;'>{bias_display}</div>"
                     st.markdown(make_metric("盤勢", val_str), unsafe_allow_html=True)
                 with m_cols[5]:
@@ -688,7 +757,6 @@ if not df_C.empty:
                         v_sub = match.group(2).strip()
                         v_sub_clean = re.sub(r"[（）\(\)]", "", v_sub)
                         v_html = f"{v_main}<div style='font-size: 1rem; line-height: 1.3; margin-top: 2px; white-space: normal; color: gray;'>{v_sub_clean}</div>"
-                    
                     vix_display_html = f"{vix_val}<div style='font-size: 1rem; line-height: 1.2; margin-top: 2px;'>{v_html}</div>"
                     st.markdown(make_metric("VIX", vix_display_html), unsafe_allow_html=True) 
                 
