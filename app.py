@@ -526,11 +526,14 @@ if not df_C.empty:
             'β風險燈號', 'E風險燈號', '槓桿倍數β', '曝險指標 E',
             '短期財務目標', '短期財務目標差距', '達成進度', 
             'LDR', 'LDR燈號', '槓桿密度比LDR', '質押率', '質押率燈號',
-            '頭期款目標', '房屋準備度R', '預估買房年份'
+            '頭期款', '頭期款目標', '房屋準備度R', '目標房屋準備度R', '預估買房年份'
         ])
-        # 重設索引，將項目變成欄位，然後隱藏 index，達到無表頭清單效果
-        df_show = df_c[mask].reset_index() 
-        df_show.columns = ['項目', '數值'] # 暫時命名，但會被CSS隱藏表頭
+        
+        # 修正：強制只取前兩欄，避免 ValueError
+        # reset_index() 會把索引變回欄位，iloc[:, :2] 確保只取前兩行
+        df_show = df_c[mask].reset_index().iloc[:, :2]
+        df_show.columns = ['項目', '數值'] 
+        
         st.dataframe(df_show, use_container_width=True, hide_index=True)
 
     # 2. Exposure Indicator (Optimized)
@@ -577,23 +580,39 @@ if not df_C.empty:
     with c4:
         st.subheader('買房計畫')
         try:
-            # 模糊搜尋抓取資料，避免空白造成 Key Error
-            dp_target_raw = fuzzy_get(df_c, '頭期款')
-            r_val_raw = fuzzy_get(df_c, '準備度')
-            est_year_raw = fuzzy_get(df_c, '買房年')
+            # 使用明確的 key，並檢查去除空白後的索引
+            # 注意：這裡直接使用 df_c (index已去除空白)
+            # 優先嘗試 "頭期款目標" 或 "頭期款"
+            dp_target = 0
+            if '頭期款目標' in df_c.index:
+                dp_target = safe_float(df_c.loc['頭期款目標', col_val])
+            elif '頭期款' in df_c.index:
+                dp_target = safe_float(df_c.loc['頭期款', col_val])
             
-            dp_target = safe_float(dp_target_raw)
-            est_year = str(est_year_raw) if est_year_raw else "N/A"
+            # 優先嘗試 "目標房屋準備度R" 或 "房屋準備度R"
+            r_val_raw = None
+            if '目標房屋準備度R' in df_c.index:
+                r_val_raw = df_c.loc['目標房屋準備度R', col_val]
+            elif '房屋準備度R' in df_c.index:
+                r_val_raw = df_c.loc['房屋準備度R', col_val]
+                
+            # 優先嘗試 "預估買房年份"
+            est_year = "N/A"
+            if '預估買房年份' in df_c.index:
+                est_year = str(df_c.loc['預估買房年份', col_val])
             
             # R 值顯示邏輯
             r_display = "N/A"
-            if r_val_raw:
+            if r_val_raw is not None:
                 if isinstance(r_val_raw, str) and '%' in r_val_raw:
                     r_display = r_val_raw
                 else:
                     r_float = safe_float(r_val_raw)
-                    if abs(r_float) <= 5.0 and r_float != 0:
-                        r_display = f"{r_float*100:.2f}%"
+                    if r_float != 0: # 只要不是0就轉換
+                        if abs(r_float) <= 5.0:
+                             r_display = f"{r_float*100:.2f}%"
+                        else:
+                             r_display = f"{r_float:.2f}%"
                     else:
                         r_display = str(r_val_raw)
 
