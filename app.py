@@ -118,7 +118,6 @@ def generate_daily_report(df_A, df_C, df_D, df_E, df_F, df_H):
                 '總資產市值': '總資產市值', 
                 '實質NAV': '實質NAV', 
                 '質押率': '質押率',
-                '質押率燈號': '質押率燈號', # 新增
                 # 優先使用新名稱，若無則讀取舊名稱
                 '曝險指標 E': '曝險指標 E',
                 '槓桿倍數β': '曝險指標 E', 
@@ -776,7 +775,7 @@ if not df_C.empty:
                     if match:
                         v_main = match.group(1).strip()
                         v_sub = match.group(2).strip()
-                        v_sub_clean = re.sub(r"[（）\(\)]", "", r_sub)
+                        v_sub_clean = re.sub(r"[（）\(\)]", "", v_sub)
                         # Remove newlines in sub-text to avoid weird breaks if desired, or keep them
                         v_sub_clean = v_sub_clean.replace('\n', ' ')
                         v_html = f"{v_main}<div style='font-size: 1rem; line-height: 1.3; margin-top: 2px; white-space: normal; color: gray;'>{v_sub_clean}</div>"
