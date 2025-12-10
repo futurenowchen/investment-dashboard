@@ -540,10 +540,12 @@ if not df_C.empty:
     
     with c_top1:
         st.subheader('核心資產')
+        # 隱藏重複欄位
         mask = ~df_c.index.isin([
             'β風險燈號', 'E風險燈號', '槓桿倍數β', '曝險指標 E',
             '短期財務目標', '短期財務目標差距', '達成進度', 
-            'LDR', 'LDR燈號', '槓桿密度比LDR', '質押率', '質押率燈號'
+            'LDR', 'LDR燈號', '槓桿密度比LDR', '質押率', '質押率燈號',
+            '頭期款目標', '房屋準備度R', '預估買房年份'
         ])
         st.dataframe(df_c[mask], use_container_width=True)
 
@@ -579,6 +581,38 @@ if not df_C.empty:
                 st.progress(pct)
             else:
                 st.caption("無法計算進度")
+            
+            # --- 新增資訊卡：買房計畫 ---
+            dp_target = safe_float(df_c.loc['頭期款目標', col_val]) if '頭期款目標' in df_c.index else 0
+            
+            # 房屋準備度R (可能是 % 字串，也可能是小數)
+            r_val = df_c.loc['房屋準備度R', col_val] if '房屋準備度R' in df_c.index else 0
+            # 若為數字且小於5，視為小數轉百分比；若為字串則直接顯示
+            r_display = str(r_val)
+            try:
+                r_float = safe_float(r_val)
+                if isinstance(r_val, str) and '%' in r_val:
+                    r_display = r_val
+                elif abs(r_float) <= 5.0 and r_float != 0:
+                     r_display = f"{r_float*100:.2f}%"
+            except: pass
+
+            est_year = str(df_c.loc['預估買房年份', col_val]) if '預估買房年份' in df_c.index else "N/A"
+            
+            st.markdown(f"""
+            <div style="background-color:#f8f9fa; padding:15px; border-radius:10px; margin-top:10px; border:1px solid #e9ecef;">
+                <div style="font-size:1.0em; color:#6c757d; margin-bottom:8px;">買房計畫 ({est_year})</div>
+                <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
+                    <span style="color:#495057;">頭期款目標</span>
+                    <span style="font-weight:bold; color:#333;">{fmt_int(dp_target)}</span>
+                </div>
+                <div style="display:flex; justify-content:space-between;">
+                    <span style="color:#495057;">準備度 R</span>
+                    <span style="font-weight:bold; color:#28a745;">{r_display}</span>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
         except: pass
 
     st.subheader('📅 今日判斷 & 市場狀態')
@@ -764,6 +798,7 @@ if not df_C.empty:
                             else:
                                 bias_display = f"{bv*100:.2f}%"
                     
+                    # 修正字體大小：乖離率文字改為 1rem (正常)
                     val_str = f"{market_pos}<div style='font-size: 1rem; line-height: 1.0; margin-top: 2px;'>{bias_display}</div>"
                     st.markdown(make_metric("盤勢", val_str), unsafe_allow_html=True)
                 with m_cols[5]:
@@ -926,7 +961,16 @@ if not df_G.empty:
             if first_cell.startswith(('一、', '二、', '三、', '四、', '五、')):
                 found_sections = True
                 if current_title:
-                    st.subheader(current_title)
+                    # 處理標題中的括號，將其移至下一行並縮小
+                    title_match = re.search(r"(.+?)\s*[（\(](.+)[）\)]", current_title)
+                    if title_match:
+                        main_t = title_match.group(1).strip()
+                        sub_t = title_match.group(2).strip()
+                        st.markdown(f"### {main_t}")
+                        st.markdown(f"<div style='font-size: 0.9em; color: gray; margin-top: -0.5rem; margin-bottom: 0.8rem;'>（{sub_t}）</div>", unsafe_allow_html=True)
+                    else:
+                        st.subheader(current_title)
+                        
                     if len(current_data) > 0:
                         headers = current_data[0]
                         body = current_data[1:] if len(current_data) > 1 else []
@@ -949,7 +993,16 @@ if not df_G.empty:
         
         # Render last
         if current_title:
-            st.subheader(current_title)
+            # 處理標題中的括號，將其移至下一行並縮小
+            title_match = re.search(r"(.+?)\s*[（\(](.+)[）\)]", current_title)
+            if title_match:
+                main_t = title_match.group(1).strip()
+                sub_t = title_match.group(2).strip()
+                st.markdown(f"### {main_t}")
+                st.markdown(f"<div style='font-size: 0.9em; color: gray; margin-top: -0.5rem; margin-bottom: 0.8rem;'>（{sub_t}）</div>", unsafe_allow_html=True)
+            else:
+                st.subheader(current_title)
+            
             if len(current_data) > 0:
                 headers = current_data[0]
                 body = current_data[1:] if len(current_data) > 1 else []
