@@ -19,9 +19,9 @@ st.set_page_config(layout="wide", page_title="投資組合儀表板")
 # 注入 CSS
 st.markdown("""
 <style>
-/* 1. 調整頁面頂部留白：增加至 4.5rem 以確保標題完全不被遮擋 */
+/* 1. 調整頁面頂部留白：增加至 6rem 以確保標題完全不被遮擋 */
 .block-container {
-    padding-top: 4.5rem;
+    padding-top: 6rem;
     padding-bottom: 2rem;
 }
 
@@ -332,15 +332,13 @@ def get_gsheet_connection():
         return None, None
 
 # 數據載入 (純搬運，不做任何轉換)
-# 修正 1: 增加 cache TTL 為 1小時 (3600秒)，避免頻繁讀取
 @st.cache_data(ttl=3600) 
 def load_data(sheet_name): 
-    # 修正 2: 增加 429 錯誤的重試機制
     max_retries = 3
     for attempt in range(max_retries):
         with st.spinner(f"讀取: {sheet_name} (嘗試 {attempt+1}/{max_retries})..."):
             try:
-                gc, sh = get_gsheet_connection() # 這裡需要拆解，因為 get_gsheet_connection 本身可能失敗
+                gc, sh = get_gsheet_connection() 
                 if not sh: return pd.DataFrame()
                 
                 try:
@@ -351,11 +349,9 @@ def load_data(sheet_name):
                     
                 if not data: return pd.DataFrame()
                 
-                # Fix: 自動移除欄位名稱的前後空白
                 headers = [str(h).strip() for h in data[0]]
                 df = pd.DataFrame(data[1:], columns=headers)
                 
-                # 處理重複欄位名稱
                 if len(df.columns) != len(set(df.columns)):
                     cols = []
                     count = {}
@@ -367,10 +363,9 @@ def load_data(sheet_name):
                 return df
                 
             except gspread.exceptions.APIError as e:
-                # 如果是 Quota exceeded (429)，則等待後重試
                 if "429" in str(e):
                     if attempt < max_retries - 1:
-                        time.sleep(2 * (attempt + 1)) # 指數退避
+                        time.sleep(2 * (attempt + 1)) 
                         continue
                     else:
                         st.error(f"❌ API 配額超限，請稍後再試。 ({e})")
@@ -386,13 +381,8 @@ def load_data(sheet_name):
 # --- 股價 API (修正版) ---
 @st.cache_data(ttl="60s") 
 def fetch_current_prices(tickers):
-    """
-    抓取即時股價，針對純數字代碼自動加上 .TW
-    注意：此函式被快取，內部不可使用 st.toast 或 st.error 等 UI 互動
-    """
     if not tickers: return {}
     
-    # 1. 建立代碼映射表 (原始代碼 -> Yahoo代碼)
     ticker_map = {}
     query_tickers = []
     
@@ -596,13 +586,11 @@ if not df_C.empty:
                 df_h['dt'] = pd.to_datetime(df_h[date_col], errors='coerce')
                 latest = df_h.sort_values('dt', ascending=False).iloc[0]
                 
-                # 取出各項數值
-                ldr_val = str(latest.get('LDR', 'N/A'))
+                ldr = str(latest.get('LDR', 'N/A'))
                 risk_today = str(latest.get('今日風險等級', 'N/A'))
                 cmd = str(latest.get('今日指令', 'N/A'))
                 market_pos = str(latest.get('盤勢位置', 'N/A'))
                 
-                # --- 新增邏輯：質押率狀態判斷 ---
                 raw_pledge = safe_float(latest.get('質押率', 0))
                 if abs(raw_pledge) <= 5.0:
                     pledge_val = raw_pledge * 100
@@ -619,23 +607,19 @@ if not df_C.empty:
                     p_status = "安全"
                     p_color = "#28a745" # 綠
                 
-                # 修正：允許換行
+                # 修正：確保允許自動換行
                 pledge_display = f"{pledge_val:.2f}%<div style='font-size: 1rem; line-height: 1.0; margin-top: 2px; white-space: normal; word-break: break-word;'>{p_status}</div>"
-                # --------------------------------
 
                 unwind_rate = fmt_pct(latest.get('建議拆倉比例', 0))
                 
-                # 取得台股60日季線乖離
                 bias_val = "N/A"
                 if not df_Market.empty:
-                    # 模糊搜尋欄位
                     b_col = next((c for c in df_Market.columns if '乖離' in c), None)
                     if b_col:
                         valid_rows = df_Market[df_Market[b_col].astype(str).str.strip() != '']
                         if not valid_rows.empty:
                             bias_val = valid_rows.iloc[-1][b_col]
                 
-                # 取得 VIX 資訊
                 vix_val = "N/A"
                 vix_status = ""
                 if not df_Global.empty:
@@ -645,7 +629,6 @@ if not df_C.empty:
                         if not vix_row.empty:
                             p_col = next((c for c in df_Global.columns if '價格' in c), None)
                             s_col = next((c for c in df_Global.columns if '狀態' in c), None)
-                            
                             if p_col: vix_val = vix_row.iloc[0].get(p_col, 'N/A')
                             if s_col: vix_status = vix_row.iloc[0].get(s_col, '')
 
@@ -667,9 +650,8 @@ if not df_C.empty:
                         """
 
                 with m_cols[0]:
-                    st.markdown(make_metric("LDR", ldr_val), unsafe_allow_html=True)
+                    st.markdown(make_metric("LDR", ldr_display, ldr_color), unsafe_allow_html=True)
                 with m_cols[1]:
-                    # 風險等級
                     match = re.search(r"(.+?)\s*([\(（].+?[\)）])", risk_today)
                     if match:
                         r_main = match.group(1).strip()
@@ -705,7 +687,7 @@ if not df_C.empty:
                     if match:
                         v_main = match.group(1).strip()
                         v_sub = match.group(2).strip()
-                        v_sub_clean = re.sub(r"[（）\(\)]", "", v_sub)
+                        v_sub_clean = re.sub(r"[（）\(\)]", "", r_sub)
                         v_html = f"{v_main}<div style='font-size: 1rem; line-height: 1.3; margin-top: 2px; white-space: normal; color: gray;'>{v_sub_clean}</div>"
                     
                     vix_display_html = f"{vix_val}<div style='font-size: 1rem; line-height: 1.2; margin-top: 2px;'>{v_html}</div>"
