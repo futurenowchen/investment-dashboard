@@ -107,7 +107,10 @@ def generate_daily_report(df_A, df_C, df_D, df_E, df_F, df_H):
     if not df_C.empty:
         try:
             df_c = df_C.copy()
-            df_c.set_index(df_c.columns[0], inplace=True)
+            # 修正：確保索引欄位去空白
+            first_col = df_c.columns[0]
+            df_c[first_col] = df_c[first_col].astype(str).str.strip()
+            df_c.set_index(first_col, inplace=True)
             col = df_c.columns[0]
             
             # 更新對應表以符合新欄位
@@ -517,7 +520,12 @@ st.sidebar.markdown("---")
 st.header('1. 投資總覽')
 if not df_C.empty:
     df_c = df_C.copy()
-    df_c.set_index(df_c.columns[0], inplace=True)
+    
+    # 修正：確保索引欄位去空白，防止 key 找不到 (例如 '頭期款目標 ' vs '頭期款目標')
+    first_col = df_c.columns[0]
+    df_c[first_col] = df_c[first_col].astype(str).str.strip()
+    df_c.set_index(first_col, inplace=True)
+    
     col_val = df_c.columns[0]
     
     # 計算相關變數
@@ -601,14 +609,18 @@ if not df_C.empty:
             
             st.markdown(f"""
             <div style="background-color:#f8f9fa; padding:15px; border-radius:10px; margin-top:10px; border:1px solid #e9ecef;">
-                <div style="font-size:1.0em; color:#6c757d; margin-bottom:8px;">買房計畫 ({est_year})</div>
-                <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
-                    <span style="color:#495057;">頭期款目標</span>
+                <div style="font-size:1.0em; color:#6c757d; margin-bottom:8px; font-weight:bold;">🏠 買房計畫</div>
+                <div style="display:flex; justify-content:space-between; margin-bottom:5px; border-bottom: 1px solid #eee; padding-bottom: 3px;">
+                    <span style="color:#495057; font-size:0.9em;">頭期款目標</span>
                     <span style="font-weight:bold; color:#333;">{fmt_int(dp_target)}</span>
                 </div>
-                <div style="display:flex; justify-content:space-between;">
-                    <span style="color:#495057;">準備度 R</span>
+                <div style="display:flex; justify-content:space-between; margin-bottom:5px; border-bottom: 1px solid #eee; padding-bottom: 3px;">
+                    <span style="color:#495057; font-size:0.9em;">準備度 R</span>
                     <span style="font-weight:bold; color:#28a745;">{r_display}</span>
+                </div>
+                <div style="display:flex; justify-content:space-between;">
+                    <span style="color:#495057; font-size:0.9em;">預估年份</span>
+                    <span style="font-weight:bold; color:#007bff;">{est_year}</span>
                 </div>
             </div>
             """, unsafe_allow_html=True)
@@ -684,7 +696,11 @@ if not df_C.empty:
                     try:
                         # 建立臨時查找表
                         df_c_temp = df_C.copy()
-                        df_c_temp.set_index(df_c_temp.columns[0], inplace=True)
+                        # 確保 df_c_temp 的索引列去空白
+                        first_col = df_c_temp.columns[0]
+                        df_c_temp[first_col] = df_c_temp[first_col].astype(str).str.strip()
+                        df_c_temp.set_index(first_col, inplace=True)
+                        
                         c_col = df_c_temp.columns[0]
                         # 嘗試查找
                         if '質押率燈號' in df_c_temp.index:
@@ -810,7 +826,7 @@ if not df_C.empty:
                     if match:
                         v_main = match.group(1).strip()
                         v_sub = match.group(2).strip()
-                        v_sub_clean = re.sub(r"[（）\(\)]", "", v_sub)
+                        v_sub_clean = re.sub(r"[（）\(\)]", "", r_sub)
                         # Remove newlines in sub-text to avoid weird breaks if desired, or keep them
                         v_sub_clean = v_sub_clean.replace('\n', ' ')
                         v_html = f"{v_main}<div style='font-size: 1rem; line-height: 1.3; margin-top: 2px; white-space: normal; color: gray;'>{v_sub_clean}</div>"
