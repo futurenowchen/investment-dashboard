@@ -79,31 +79,7 @@ div[data-testid="stSidebar"] .stButton button {
     margin-bottom: 10px; /* 增加下方間距 */
 }
 
-/* 買房計畫資訊卡樣式 */
-.info-card {
-    background-color: #f8f9fa; 
-    padding: 15px; 
-    border-radius: 10px; 
-    border: 1px solid #e9ecef;
-    height: 100%; /* 嘗試讓高度與隔壁對齊 */
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-}
-.info-card-title {
-    font-size: 1.0em; 
-    color: #6c757d; 
-    margin-bottom: 5px; 
-    font-weight: bold;
-    border-bottom: 1px solid #dee2e6;
-    padding-bottom: 5px;
-}
-.info-row {
-    display: flex; 
-    justify-content: space-between; 
-    margin-bottom: 4px;
-    font-size: 0.9em;
-}
+/* 買房計畫資訊卡樣式 (已停用，改用 inline style 統一風格) */
 </style>
 """, unsafe_allow_html=True)
 
@@ -589,7 +565,7 @@ if not df_C.empty:
             """, unsafe_allow_html=True)
         except: pass
 
-    # 4. Buying Plan (Fixed Missing Data)
+    # 4. Buying Plan (Updated Style)
     with c4:
         st.subheader('買房計畫')
         try:
@@ -629,16 +605,18 @@ if not df_C.empty:
                     else:
                         r_display = str(r_val_raw)
 
+            # 套用與短期目標一致的卡片風格
             st.markdown(f"""
-            <div class="info-card">
-                <div class="info-card-title">預估 {est_year}</div>
-                <div class="info-row" style="margin-top:15px;">
-                    <span style="color:#495057;">頭期款</span>
-                    <span style="font-weight:bold;">{fmt_int(dp_target)}</span>
+            <div style="background-color:#f8f9fa; padding:15px; border-radius:10px; margin-bottom:10px; border:1px solid #e9ecef;">
+                <div style="font-size:1.0em; color:#6c757d; margin-bottom:5px;">房屋準備度 R</div>
+                <div style="font-size:2.2em; font-weight:bold; color:#007bff; line-height:1.1;">
+                    {r_display}
                 </div>
-                <div class="info-row">
-                    <span style="color:#495057;">準備度 R</span>
-                    <span style="font-weight:bold; color:#28a745;">{r_display}</span>
+                <div style="margin-top:8px; font-size:0.85em; display:flex; justify-content:space-between; color:#495057;">
+                    <span>頭期款: <b>{fmt_int(dp_target)}</b></span>
+                </div>
+                 <div style="text-align:right; font-size:0.8em; color:#6c757d; margin-top:2px;">
+                    (預估 {est_year} 年)
                 </div>
             </div>
             """, unsafe_allow_html=True)
@@ -646,7 +624,6 @@ if not df_C.empty:
             st.error("資料讀取錯誤")
 
     # ... (Rest of the app remains same: Daily Judgment, Holdings, Transactions, Wealth Blueprint)
-    # Keeping the rest of the code structure for stability
     
     st.subheader('📅 今日判斷 & 市場狀態')
 
