@@ -78,8 +78,6 @@ div[data-testid="stSidebar"] .stButton button {
     font-weight: bold;
     margin-bottom: 10px; /* 增加下方間距 */
 }
-
-/* 買房計畫資訊卡樣式 (已停用，改用 inline style 統一風格) */
 </style>
 """, unsafe_allow_html=True)
 
@@ -545,21 +543,18 @@ if not df_C.empty:
                 curr = target - gap
                 pct = max(0.0, min(1.0, curr/target))
             
-            # 修復：補回「目標金額」與「目前金額」的顯示
+            # 使用 inline style 建立與右側一致的卡片風格
             st.markdown(f"""
-            <div class="info-card">
-                <div class="info-card-title">達成進度 {pct*100:.1f}%</div>
-                <div class="info-row">
-                    <span>目標金額</span>
-                    <span style="font-weight:bold;">{fmt_int(target)}</span>
+            <div style="background-color:#f8f9fa; padding:15px; border-radius:10px; margin-bottom:10px; border:1px solid #e9ecef; height: 100%; display: flex; flex-direction: column; justify-content: center;">
+                <div style="font-size:1.0em; color:#6c757d; margin-bottom:5px;">短期目標達成率</div>
+                <div style="font-size:2.2em; font-weight:bold; color:#007bff; line-height:1.1;">
+                    {pct*100:.1f}%
                 </div>
-                <div class="info-row">
-                    <span>目前金額</span>
-                    <span style="font-weight:bold;">{fmt_int(curr)}</span>
+                <div style="margin-top:8px; font-size:0.85em; display:flex; justify-content:space-between; color:#495057;">
+                    <span>目標: <b>{fmt_int(target)}</b></span>
                 </div>
-                <div class="info-row" style="border-top: 1px solid #eee; padding-top:4px; margin-top:4px;">
-                    <span>目標差額</span>
-                    <span style="color:#dc3545;">{fmt_int(gap)}</span>
+                 <div style="text-align:right; font-size:0.8em; color:#dc3545; margin-top:2px;">
+                    (差 {fmt_int(gap)})
                 </div>
             </div>
             """, unsafe_allow_html=True)
@@ -605,9 +600,9 @@ if not df_C.empty:
                     else:
                         r_display = str(r_val_raw)
 
-            # 套用與短期目標一致的卡片風格
+            # 套用與短期目標一致的卡片風格，確保高度與對齊一致
             st.markdown(f"""
-            <div style="background-color:#f8f9fa; padding:15px; border-radius:10px; margin-bottom:10px; border:1px solid #e9ecef;">
+            <div style="background-color:#f8f9fa; padding:15px; border-radius:10px; margin-bottom:10px; border:1px solid #e9ecef; height: 100%; display: flex; flex-direction: column; justify-content: center;">
                 <div style="font-size:1.0em; color:#6c757d; margin-bottom:5px;">房屋準備度 R</div>
                 <div style="font-size:2.2em; font-weight:bold; color:#007bff; line-height:1.1;">
                     {r_display}
