@@ -86,11 +86,14 @@ div[data-testid="stSidebar"] .stButton button {
     border-radius: 10px; 
     border: 1px solid #e9ecef;
     height: 100%; /* 嘗試讓高度與隔壁對齊 */
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
 }
 .info-card-title {
     font-size: 1.0em; 
     color: #6c757d; 
-    margin-bottom: 10px; 
+    margin-bottom: 5px; 
     font-weight: bold;
     border-bottom: 1px solid #dee2e6;
     padding-bottom: 5px;
@@ -98,7 +101,7 @@ div[data-testid="stSidebar"] .stButton button {
 .info-row {
     display: flex; 
     justify-content: space-between; 
-    margin-bottom: 6px;
+    margin-bottom: 4px;
     font-size: 0.9em;
 }
 </style>
@@ -566,19 +569,24 @@ if not df_C.empty:
                 curr = target - gap
                 pct = max(0.0, min(1.0, curr/target))
             
+            # 修復：補回「目標金額」與「目前金額」的顯示
             st.markdown(f"""
             <div class="info-card">
-                <div class="info-card-title">達成進度</div>
-                <div style="font-size:2.4em; font-weight:bold; color:#007bff; line-height:1.2; text-align:center; margin:10px 0;">
-                    {pct*100:.1f}%
+                <div class="info-card-title">達成進度 {pct*100:.1f}%</div>
+                <div class="info-row">
+                    <span>目標金額</span>
+                    <span style="font-weight:bold;">{fmt_int(target)}</span>
                 </div>
                 <div class="info-row">
+                    <span>目前金額</span>
+                    <span style="font-weight:bold;">{fmt_int(curr)}</span>
+                </div>
+                <div class="info-row" style="border-top: 1px solid #eee; padding-top:4px; margin-top:4px;">
                     <span>目標差額</span>
                     <span style="color:#dc3545;">{fmt_int(gap)}</span>
                 </div>
             </div>
             """, unsafe_allow_html=True)
-            # st.progress(pct) # Progress bar moved/removed for cleaner card look or keep if preferred
         except: pass
 
     # 4. Buying Plan (Fixed Missing Data)
