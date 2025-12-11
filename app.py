@@ -79,17 +79,18 @@ div[data-testid="stSidebar"] .stButton button {
     margin-bottom: 10px; /* 增加下方間距 */
 }
 
-/* 心態提醒卡片樣式 */
+/* 心態提醒卡片樣式 (調整為填滿) */
 .mindset-card {
     background-color: #e8f4f8; /* 淺藍色底 */
     border-left: 5px solid #17a2b8; /* 左側藍色線條 */
     padding: 15px;
     border-radius: 5px;
-    margin-bottom: 20px;
+    margin-top: 15px; /* 與上方卡片保持距離 */
     color: #0f5132;
-    font-size: 1.1em;
+    font-size: 1.0em;
     display: flex;
     align-items: center;
+    width: 100%;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -492,34 +493,6 @@ with st.sidebar.expander("🛠️ 連線狀態檢查"):
 
 st.sidebar.markdown("---")
 
-# --- 新增：心態提醒區塊 ---
-if not df_H.empty:
-    try:
-        # 先轉換日期以取得最新資料
-        df_h_temp = df_H.copy()
-        date_col = next((c for c in df_h_temp.columns if '日期' in c), None)
-        if date_col:
-            df_h_temp['dt'] = pd.to_datetime(df_h_temp[date_col], errors='coerce')
-            latest_row = df_h_temp.sort_values('dt', ascending=False).iloc[0]
-            
-            # 優先搜尋包含「心態」或「提醒」的欄位
-            mindset_col = next((c for c in df_h_temp.columns if '心態' in str(c) or '提醒' in str(c)), None)
-            
-            # 如果找不到，嘗試使用第 11 欄 (索引 10, 即 K 欄)
-            if not mindset_col and len(df_h_temp.columns) > 10:
-                mindset_col = df_h_temp.columns[10]
-            
-            if mindset_col:
-                mindset_text = str(latest_row.get(mindset_col, '')).strip()
-                if mindset_text:
-                    st.markdown(f"""
-                    <div class="mindset-card">
-                        💡 <b>心態提醒：</b> {mindset_text}
-                    </div>
-                    """, unsafe_allow_html=True)
-    except Exception as e:
-        pass # 失敗則不顯示，保持版面乾淨
-
 # 1. 投資總覽
 st.header('1. 投資總覽')
 if not df_C.empty:
@@ -539,11 +512,11 @@ if not df_C.empty:
     elif '警戒' in risk_txt or '警示' in risk_txt: style = {'e':'⚠️', 'bg':'#ffc107', 't':'black'}
     elif '危險' in risk_txt: style = {'e':'🚨', 'bg':'#dc3545', 't':'white'}
 
-    # Layout: 4 Columns [1, 1, 1, 1] 等寬
-    c1, c2, c3, c4 = st.columns([1, 1, 1, 1])
+    # Layout: 2 Columns [1, 3] -> Left: Table, Right: Cards & Mindset
+    c_left, c_right = st.columns([1, 3])
     
-    # 1. Core Assets Table (Clean Look)
-    with c1:
+    # Left Column: Core Assets Table
+    with c_left:
         st.subheader('核心資產')
         mask = ~df_c.index.isin([
             'β風險燈號', 'E風險燈號', '槓桿倍數β', '曝險指標 E',
@@ -551,103 +524,116 @@ if not df_C.empty:
             'LDR', 'LDR燈號', '槓桿密度比LDR', '質押率', '質押率燈號',
             '頭期款', '頭期款目標', '房屋準備度R', '目標房屋準備度R', '預估買房年份'
         ])
-        
         df_show = df_c[mask].reset_index().iloc[:, :2]
         df_show.columns = ['項目', '數值'] 
-        
         st.dataframe(df_show, use_container_width=True, hide_index=True)
 
-    # 2. Exposure Indicator (Optimized)
-    with c2:
-        st.subheader('曝險指標')
-        st.markdown(f"""
-        <div class='custom-metric-card'>
-            <div class='metric-badge' style='background-color: {style['bg']}; color: {style['t']};'>
-                {style['e']} {risk}
-            </div>
-            <div class='metric-label'>曝險倍數</div>
-            <div class='metric-value'>{lev:.2f}</div>
-        </div>
-        """, unsafe_allow_html=True)
-
-    # 3. Short Term Goal
-    with c3:
-        st.subheader('短期目標')
-        try:
-            target = safe_float(df_c.loc['短期財務目標', col_val]) if '短期財務目標' in df_c.index else 0
-            gap = safe_float(df_c.loc['短期財務目標差距', col_val]) if '短期財務目標差距' in df_c.index else 0
-            pct = 0.0
-            curr = 0
-            if target > 0:
-                curr = target - gap
-                pct = max(0.0, min(1.0, curr/target))
-            
+    # Right Column: Cards & Mindset
+    with c_right:
+        # Top Row of Right Column: 3 Cards
+        rc1, rc2, rc3 = st.columns(3)
+        
+        # Card 1: Exposure
+        with rc1:
+            st.subheader('曝險指標')
             st.markdown(f"""
-            <div style="background-color:#f8f9fa; padding:15px; border-radius:10px; margin-bottom:10px; border:1px solid #e9ecef; height: 100%; display: flex; flex-direction: column; justify-content: center;">
-                <div style="font-size:1.0em; color:#6c757d; margin-bottom:5px;">短期目標達成率</div>
-                <div style="font-size:2.2em; font-weight:bold; color:#007bff; line-height:1.1;">
-                    {pct*100:.1f}%
+            <div class='custom-metric-card'>
+                <div class='metric-badge' style='background-color: {style['bg']}; color: {style['t']};'>
+                    {style['e']} {risk}
                 </div>
-                <div style="margin-top:8px; font-size:0.85em; display:flex; justify-content:space-between; color:#495057;">
-                    <span>目標: <b>{fmt_int(target)}</b></span>
-                </div>
-                 <div style="text-align:right; font-size:0.8em; color:#dc3545; margin-top:2px;">
-                    (差 {fmt_int(gap)})
-                </div>
+                <div class='metric-label'>曝險倍數</div>
+                <div class='metric-value'>{lev:.2f}</div>
             </div>
             """, unsafe_allow_html=True)
-        except: pass
 
-    # 4. Buying Plan (Updated Style)
-    with c4:
-        st.subheader('買房計畫')
-        try:
-            dp_target = 0
-            if '頭期款目標' in df_c.index:
-                dp_target = safe_float(df_c.loc['頭期款目標', col_val])
-            elif '頭期款' in df_c.index:
-                dp_target = safe_float(df_c.loc['頭期款', col_val])
-            
-            r_val_raw = None
-            if '目標房屋準備度R' in df_c.index:
-                r_val_raw = df_c.loc['目標房屋準備度R', col_val]
-            elif '房屋準備度R' in df_c.index:
-                r_val_raw = df_c.loc['房屋準備度R', col_val]
+        # Card 2: Short Term Goal
+        with rc2:
+            st.subheader('短期目標')
+            try:
+                target = safe_float(df_c.loc['短期財務目標', col_val]) if '短期財務目標' in df_c.index else 0
+                gap = safe_float(df_c.loc['短期財務目標差距', col_val]) if '短期財務目標差距' in df_c.index else 0
+                pct = 0.0
+                curr = 0
+                if target > 0:
+                    curr = target - gap
+                    pct = max(0.0, min(1.0, curr/target))
                 
-            est_year = "N/A"
-            if '預估買房年份' in df_c.index:
-                est_year = str(df_c.loc['預估買房年份', col_val])
-            
-            r_display = "N/A"
-            if r_val_raw is not None:
-                if isinstance(r_val_raw, str) and '%' in r_val_raw:
-                    r_display = r_val_raw
-                else:
-                    r_float = safe_float(r_val_raw)
-                    if r_float != 0: 
-                        if abs(r_float) <= 5.0:
-                             r_display = f"{r_float*100:.2f}%"
-                        else:
-                             r_display = f"{r_float:.2f}%"
-                    else:
-                        r_display = str(r_val_raw)
+                st.markdown(f"""
+                <div style="background-color:#f8f9fa; padding:15px; border-radius:10px; margin-bottom:10px; border:1px solid #e9ecef; height: 100%; display: flex; flex-direction: column; justify-content: center;">
+                    <div style="font-size:1.0em; color:#6c757d; margin-bottom:5px;">達成進度</div>
+                    <div style="font-size:2.2em; font-weight:bold; color:#007bff; line-height:1.1;">
+                        {pct*100:.1f}%
+                    </div>
+                    <div style="margin-top:8px; font-size:0.85em; display:flex; justify-content:space-between; color:#495057;">
+                        <span>目標: <b>{fmt_int(target)}</b></span>
+                    </div>
+                     <div style="text-align:right; font-size:0.8em; color:#dc3545; margin-top:2px;">
+                        (差 {fmt_int(gap)})
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+            except: pass
 
-            st.markdown(f"""
-            <div style="background-color:#f8f9fa; padding:15px; border-radius:10px; margin-bottom:10px; border:1px solid #e9ecef; height: 100%; display: flex; flex-direction: column; justify-content: center;">
-                <div style="font-size:1.0em; color:#6c757d; margin-bottom:5px;">房屋準備度 R</div>
-                <div style="font-size:2.2em; font-weight:bold; color:#007bff; line-height:1.1;">
-                    {r_display}
+        # Card 3: Buying Plan
+        with rc3:
+            st.subheader('買房計畫')
+            try:
+                dp_target = 0
+                if '頭期款目標' in df_c.index: dp_target = safe_float(df_c.loc['頭期款目標', col_val])
+                elif '頭期款' in df_c.index: dp_target = safe_float(df_c.loc['頭期款', col_val])
+                
+                r_val_raw = None
+                if '目標房屋準備度R' in df_c.index: r_val_raw = df_c.loc['目標房屋準備度R', col_val]
+                elif '房屋準備度R' in df_c.index: r_val_raw = df_c.loc['房屋準備度R', col_val]
+                    
+                est_year = "N/A"
+                if '預估買房年份' in df_c.index: est_year = str(df_c.loc['預估買房年份', col_val])
+                
+                r_display = "N/A"
+                if r_val_raw is not None:
+                    if isinstance(r_val_raw, str) and '%' in r_val_raw: r_display = r_val_raw
+                    else:
+                        r_float = safe_float(r_val_raw)
+                        if r_float != 0: 
+                            if abs(r_float) <= 5.0: r_display = f"{r_float*100:.2f}%"
+                            else: r_display = f"{r_float:.2f}%"
+                        else: r_display = str(r_val_raw)
+
+                st.markdown(f"""
+                <div style="background-color:#f8f9fa; padding:15px; border-radius:10px; margin-bottom:10px; border:1px solid #e9ecef; height: 100%; display: flex; flex-direction: column; justify-content: center;">
+                    <div style="font-size:1.0em; color:#6c757d; margin-bottom:5px;">房屋準備度 R</div>
+                    <div style="font-size:2.2em; font-weight:bold; color:#007bff; line-height:1.1;">
+                        {r_display}
+                    </div>
+                    <div style="margin-top:8px; font-size:0.85em; display:flex; justify-content:space-between; color:#495057;">
+                        <span>頭期款: <b>{fmt_int(dp_target)}</b></span>
+                    </div>
+                     <div style="text-align:right; font-size:0.8em; color:#6c757d; margin-top:2px;">
+                        (預估 {est_year} 年)
+                    </div>
                 </div>
-                <div style="margin-top:8px; font-size:0.85em; display:flex; justify-content:space-between; color:#495057;">
-                    <span>頭期款: <b>{fmt_int(dp_target)}</b></span>
-                </div>
-                 <div style="text-align:right; font-size:0.8em; color:#6c757d; margin-top:2px;">
-                    (預估 {est_year} 年)
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
-        except: 
-            st.error("資料讀取錯誤")
+                """, unsafe_allow_html=True)
+            except: st.error("資料讀取錯誤")
+            
+        # Bottom of Right Column: Mindset Reminder
+        if not df_H.empty:
+            try:
+                df_h_temp = df_H.copy()
+                date_col = next((c for c in df_h_temp.columns if '日期' in c), None)
+                if date_col:
+                    df_h_temp['dt'] = pd.to_datetime(df_h_temp[date_col], errors='coerce')
+                    latest_row = df_h_temp.sort_values('dt', ascending=False).iloc[0]
+                    mindset_col = next((c for c in df_h_temp.columns if '心態' in str(c) or '提醒' in str(c)), None)
+                    if not mindset_col and len(df_h_temp.columns) > 10: mindset_col = df_h_temp.columns[10]
+                    if mindset_col:
+                        mindset_text = str(latest_row.get(mindset_col, '')).strip()
+                        if mindset_text:
+                            st.markdown(f"""
+                            <div class="mindset-card">
+                                💡 <b>心態提醒：</b> {mindset_text}
+                            </div>
+                            """, unsafe_allow_html=True)
+            except: pass
 
     # ... (Rest of the app remains same: Daily Judgment, Holdings, Transactions, Wealth Blueprint)
     
