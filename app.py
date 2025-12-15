@@ -79,7 +79,7 @@ div[data-testid="stSidebar"] .stButton button {
     margin-bottom: 10px; /* 增加下方間距 */
 }
 
-/* 心態提醒卡片樣式 (調整為填滿) */
+/* 心態提醒卡片樣式 */
 .mindset-card {
     background-color: #e8f4f8; /* 淺藍色底 */
     border-left: 5px solid #17a2b8; /* 左側藍色線條 */
@@ -509,34 +509,6 @@ with st.sidebar.expander("🛠️ 連線狀態檢查"):
 
 st.sidebar.markdown("---")
 
-# --- 新增：心態提醒區塊 ---
-if not df_H.empty:
-    try:
-        # 先轉換日期以取得最新資料
-        df_h_temp = df_H.copy()
-        date_col = next((c for c in df_h_temp.columns if '日期' in c), None)
-        if date_col:
-            df_h_temp['dt'] = pd.to_datetime(df_h_temp[date_col], errors='coerce')
-            latest_row = df_h_temp.sort_values('dt', ascending=False).iloc[0]
-            
-            # 優先搜尋包含「心態」或「提醒」的欄位
-            mindset_col = next((c for c in df_h_temp.columns if '心態' in str(c) or '提醒' in str(c)), None)
-            
-            # 如果找不到，嘗試使用第 11 欄 (索引 10, 即 K 欄)
-            if not mindset_col and len(df_h_temp.columns) > 10:
-                mindset_col = df_h_temp.columns[10]
-            
-            if mindset_col:
-                mindset_text = str(latest_row.get(mindset_col, '')).strip()
-                if mindset_text:
-                    st.markdown(f"""
-                    <div class="mindset-card">
-                        💡 <b>心態提醒：</b> {mindset_text}
-                    </div>
-                    """, unsafe_allow_html=True)
-    except Exception as e:
-        pass # 失敗則不顯示，保持版面乾淨
-
 # 1. 投資總覽
 st.header('1. 投資總覽')
 if not df_C.empty:
@@ -657,7 +629,8 @@ if not df_C.empty:
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
-            except: st.error("資料讀取錯誤")
+            except: 
+                st.error("資料讀取錯誤")
             
         # Bottom of Right Column: Mindset Reminder
         if not df_H.empty:
