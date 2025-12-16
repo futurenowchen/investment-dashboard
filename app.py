@@ -373,7 +373,7 @@ def get_gsheet_connection():
         st.error(f"❌ 連線錯誤: {e}")
         return None, None
 
-@st.cache_data(ttl=10) 
+@st.cache_data(ttl=300) 
 def load_data(sheet_name): 
     max_retries = 3
     for attempt in range(max_retries):
@@ -967,4 +967,5 @@ else:
     st.info("無財富藍圖資料")
 
 # ... rest of the code ...
+
 
