@@ -196,36 +196,32 @@ def generate_daily_report(df_A, df_C, df_D, df_E, df_F, df_H):
     if not df_H.empty:
         try:
             df_h = df_H.copy()
-            date_col = next((c for c in df_h.columns if '日期' in c), None)
-            if date_col:
-                df_h['dt'] = pd.to_datetime(df_h[date_col], errors='coerce')
-                latest = df_h.sort_values('dt', ascending=False).iloc[0]
-                
-                # 使用 fuzzy search
-                col_ldr = find_col(df_h.columns, 'LDR')
-                col_risk = find_col(df_h.columns, '風險')
-                col_pledge = find_col(df_h.columns, '質押')
-                col_unwind = find_col(df_h.columns, '拆倉')
-                col_fw = find_col(df_h.columns, '飛輪')
-                col_cmd = find_col(df_h.columns, '指令')
+            # 直接抓最後一筆
+            latest = df_h.iloc[-1]
+            
+            # 使用 fuzzy search
+            col_ldr = find_col(df_h.columns, 'LDR')
+            col_risk = find_col(df_h.columns, '風險')
+            col_pledge = find_col(df_h.columns, '質押')
+            col_unwind = find_col(df_h.columns, '拆倉')
+            col_fw = find_col(df_h.columns, '飛輪')
+            col_cmd = find_col(df_h.columns, '指令')
 
-                ldr = str(latest.get(col_ldr, 'N/A')) if col_ldr else 'N/A'
-                risk = str(latest.get(col_risk, 'N/A')) if col_risk else 'N/A'
-                pledge = fmt_pct(latest.get(col_pledge, 0)) if col_pledge else '0%'
-                unwind = fmt_pct(latest.get(col_unwind, 0)) if col_unwind else '0%'
-                flywheel = str(latest.get(col_fw, 'N/A')) if col_fw else 'N/A'
-                
-                cmd_val = str(latest.get(col_cmd, 'N/A')) if col_cmd else 'N/A'
-                cmd = re.sub(r"【Debug.*?】", "", cmd_val, flags=re.DOTALL).strip()
-                
-                lines.append(f"LDR：{ldr}")
-                lines.append(f"風險等級：{risk}")
-                lines.append(f"質押率：{pledge}")
-                lines.append(f"建議拆倉：{unwind}")
-                lines.append(f"飛輪階段：{flywheel}")
-                lines.append(f"指令：{cmd}")
-            else:
-                 lines.append("表H無日期欄位")
+            ldr = str(latest.get(col_ldr, 'N/A')) if col_ldr else 'N/A'
+            risk = str(latest.get(col_risk, 'N/A')) if col_risk else 'N/A'
+            pledge = fmt_pct(latest.get(col_pledge, 0)) if col_pledge else '0%'
+            unwind = fmt_pct(latest.get(col_unwind, 0)) if col_unwind else '0%'
+            flywheel = str(latest.get(col_fw, 'N/A')) if col_fw else 'N/A'
+            
+            cmd_val = str(latest.get(col_cmd, 'N/A')) if col_cmd else 'N/A'
+            cmd = re.sub(r"【Debug.*?】", "", cmd_val, flags=re.DOTALL).strip()
+            
+            lines.append(f"LDR：{ldr}")
+            lines.append(f"風險等級：{risk}")
+            lines.append(f"質押率：{pledge}")
+            lines.append(f"建議拆倉：{unwind}")
+            lines.append(f"飛輪階段：{flywheel}")
+            lines.append(f"指令：{cmd}")
         except: lines.append("表H解析錯誤")
 
     # --- 表A 持股 ---
@@ -364,7 +360,6 @@ def get_gsheet_connection():
         st.error(f"❌ 連線錯誤: {e}")
         return None, None
 
-# 修正：縮短 TTL 至 10 秒，確保資料更新
 @st.cache_data(ttl=10) 
 def load_data(sheet_name): 
     max_retries = 3
@@ -453,8 +448,8 @@ def write_prices_to_sheet(df_A, updates):
     except: return False
 
 # === 主程式 ===
+st.title('💰 投資組合儀表板')
 
-# 載入所有資料 (先讀取資料才能決定標題日期)
 df_A = load_data('表A_持股總表')
 df_B = load_data('表B_持股比例')
 df_C = load_data('表C_總覽')
@@ -465,22 +460,6 @@ df_G = load_data('表G_財富藍圖')
 df_H = load_data('表H_每日判斷')
 df_Market = load_data('Market')
 df_Global = load_data('Global')
-
-# 決定標題日期字串
-date_str = ""
-if not df_F.empty:
-    try:
-        # 尋找包含「日期」的欄位
-        d_col = next((c for c in df_F.columns if '日期' in c), None)
-        if d_col:
-            dt_series = pd.to_datetime(df_F[d_col], errors='coerce')
-            latest_dt = dt_series.max()
-            if pd.notna(latest_dt):
-                date_str = f" - {latest_dt.year}年{latest_dt.month}月{latest_dt.day}日"
-    except:
-        pass
-
-st.title(f'💰 投資組合儀表板{date_str}')
 
 lev = 0.0
 
@@ -520,34 +499,6 @@ with st.sidebar.expander("🛠️ 連線狀態檢查"):
 
 st.sidebar.markdown("---")
 
-# --- 新增：心態提醒區塊 ---
-if not df_H.empty:
-    try:
-        # 先轉換日期以取得最新資料
-        df_h_temp = df_H.copy()
-        date_col = next((c for c in df_h_temp.columns if '日期' in c), None)
-        if date_col:
-            df_h_temp['dt'] = pd.to_datetime(df_h_temp[date_col], errors='coerce')
-            latest_row = df_h_temp.sort_values('dt', ascending=False).iloc[0]
-            
-            # 優先搜尋包含「心態」或「提醒」的欄位
-            mindset_col = next((c for c in df_h_temp.columns if '心態' in str(c) or '提醒' in str(c)), None)
-            
-            # 如果找不到，嘗試使用第 11 欄 (索引 10, 即 K 欄)
-            if not mindset_col and len(df_h_temp.columns) > 10:
-                mindset_col = df_h_temp.columns[10]
-            
-            if mindset_col:
-                mindset_text = str(latest_row.get(mindset_col, '')).strip()
-                if mindset_text:
-                    st.markdown(f"""
-                    <div class="mindset-card">
-                        💡 <b>心態提醒：</b> {mindset_text}
-                    </div>
-                    """, unsafe_allow_html=True)
-    except Exception as e:
-        pass # 失敗則不顯示，保持版面乾淨
-
 # 1. 投資總覽
 st.header('1. 投資總覽')
 if not df_C.empty:
@@ -567,11 +518,11 @@ if not df_C.empty:
     elif '警戒' in risk_txt or '警示' in risk_txt: style = {'e':'⚠️', 'bg':'#ffc107', 't':'black'}
     elif '危險' in risk_txt: style = {'e':'🚨', 'bg':'#dc3545', 't':'white'}
 
-    # Layout: 2 Columns [1, 3] -> Left: Table, Right: Cards & Mindset
-    c_left, c_right = st.columns([1, 3])
+    # Layout: 4 Columns [1, 1, 1, 1] 等寬
+    c1, c2, c3, c4 = st.columns([1, 1, 1, 1])
     
-    # Left Column: Core Assets Table
-    with c_left:
+    # 1. Core Assets Table (Clean Look)
+    with c1:
         st.subheader('核心資產')
         mask = ~df_c.index.isin([
             'β風險燈號', 'E風險燈號', '槓桿倍數β', '曝險指標 E',
@@ -587,256 +538,417 @@ if not df_C.empty:
         
         st.dataframe(df_show, use_container_width=True, hide_index=True)
 
-    # Right Column: Cards & Mindset
-    with c_right:
-        # Top Row of Right Column: 3 Cards
-        rc1, rc2, rc3 = st.columns(3)
-        
-        # Card 1: Exposure
-        with rc1:
-            st.subheader('曝險指標')
+    # 2. Exposure Indicator (Optimized)
+    with c2:
+        st.subheader('曝險指標')
+        st.markdown(f"""
+        <div class='custom-metric-card'>
+            <div class='metric-badge' style='background-color: {style['bg']}; color: {style['t']};'>
+                {style['e']} {risk}
+            </div>
+            <div class='metric-label'>曝險倍數</div>
+            <div class='metric-value'>{lev:.2f}</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    # 3. Short Term Goal
+    with c3:
+        st.subheader('短期目標')
+        try:
+            target = safe_float(df_c.loc['短期財務目標', col_val]) if '短期財務目標' in df_c.index else 0
+            gap = safe_float(df_c.loc['短期財務目標差距', col_val]) if '短期財務目標差距' in df_c.index else 0
+            pct = 0.0
+            curr = 0
+            if target > 0:
+                curr = target - gap
+                pct = max(0.0, min(1.0, curr/target))
+            
+            # 使用 inline style 建立與右側一致的卡片風格
             st.markdown(f"""
-            <div class='custom-metric-card'>
-                <div class='metric-badge' style='background-color: {style['bg']}; color: {style['t']};'>
-                    {style['e']} {risk}
+            <div style="background-color:#f8f9fa; padding:15px; border-radius:10px; margin-bottom:10px; border:1px solid #e9ecef; height: 100%; display: flex; flex-direction: column; justify-content: center;">
+                <div style="font-size:1.0em; color:#6c757d; margin-bottom:5px;">短期目標達成率</div>
+                <div style="font-size:2.2em; font-weight:bold; color:#007bff; line-height:1.1;">
+                    {pct*100:.1f}%
                 </div>
-                <div class='metric-label'>曝險倍數</div>
-                <div class='metric-value'>{lev:.2f}</div>
+                <div style="margin-top:8px; font-size:0.85em; display:flex; justify-content:space-between; color:#495057;">
+                    <span>目標: <b>{fmt_int(target)}</b></span>
+                </div>
+                 <div style="text-align:right; font-size:0.8em; color:#dc3545; margin-top:2px;">
+                    (差 {fmt_int(gap)})
+                </div>
             </div>
             """, unsafe_allow_html=True)
+        except: pass
 
-        # Card 2: Short Term Goal
-        with rc2:
-            st.subheader('短期目標')
-            try:
-                target = safe_float(df_c.loc['短期財務目標', col_val]) if '短期財務目標' in df_c.index else 0
-                gap = safe_float(df_c.loc['短期財務目標差距', col_val]) if '短期財務目標差距' in df_c.index else 0
-                pct = 0.0
-                curr = 0
-                if target > 0:
-                    curr = target - gap
-                    pct = max(0.0, min(1.0, curr/target))
-                
-                # 使用 inline style 建立與右側一致的卡片風格
-                st.markdown(f"""
-                <div style="background-color:#f8f9fa; padding:15px; border-radius:10px; margin-bottom:10px; border:1px solid #e9ecef; height: 100%; display: flex; flex-direction: column; justify-content: center;">
-                    <div style="font-size:1.0em; color:#6c757d; margin-bottom:5px;">短期目標達成率</div>
-                    <div style="font-size:2.2em; font-weight:bold; color:#007bff; line-height:1.1;">
-                        {pct*100:.1f}%
-                    </div>
-                    <div style="margin-top:8px; font-size:0.85em; display:flex; justify-content:space-between; color:#495057;">
-                        <span>目標: <b>{fmt_int(target)}</b></span>
-                    </div>
-                     <div style="text-align:right; font-size:0.8em; color:#dc3545; margin-top:2px;">
-                        (差 {fmt_int(gap)})
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
-            except: pass
-
-        # Card 3: Buying Plan
-        with rc3:
-            st.subheader('買房計畫')
-            try:
-                # 使用明確的 key，並檢查去除空白後的索引
-                # 注意：這裡直接使用 df_c (index已去除空白)
-                # 優先嘗試 "頭期款目標" 或 "頭期款"
-                dp_target = 0
-                if '頭期款目標' in df_c.index:
-                    dp_target = safe_float(df_c.loc['頭期款目標', col_val])
-                elif '頭期款' in df_c.index:
-                    dp_target = safe_float(df_c.loc['頭期款', col_val])
-                
-                # 優先嘗試 "目標房屋準備度R" 或 "房屋準備度R"
-                r_val_raw = None
-                if '目標房屋準備度R' in df_c.index:
-                    r_val_raw = df_c.loc['目標房屋準備度R', col_val]
-                elif '房屋準備度R' in df_c.index:
-                    r_val_raw = df_c.loc['房屋準備度R', col_val]
-                    
-                # 優先嘗試 "預估買房年份"
-                est_year = "N/A"
-                if '預估買房年份' in df_c.index:
-                    est_year = str(df_c.loc['預估買房年份', col_val])
-                
-                # R 值顯示邏輯
-                r_display = "N/A"
-                if r_val_raw is not None:
-                    if isinstance(r_val_raw, str) and '%' in r_val_raw:
-                        r_display = r_val_raw
-                    else:
-                        r_float = safe_float(r_val_raw)
-                        if r_float != 0: 
-                            if abs(r_float) <= 5.0:
-                                 r_display = f"{r_float*100:.2f}%"
-                            else:
-                                 r_display = f"{r_float:.2f}%"
-                        else:
-                            r_display = str(r_val_raw)
-
-                # 套用與短期目標一致的卡片風格，確保高度與對齊一致
-                st.markdown(f"""
-                <div style="background-color:#f8f9fa; padding:15px; border-radius:10px; margin-bottom:10px; border:1px solid #e9ecef; height: 100%; display: flex; flex-direction: column; justify-content: center;">
-                    <div style="font-size:1.0em; color:#6c757d; margin-bottom:5px;">房屋準備度 R</div>
-                    <div style="font-size:2.2em; font-weight:bold; color:#007bff; line-height:1.1;">
-                        {r_display}
-                    </div>
-                    <div style="margin-top:8px; font-size:0.85em; display:flex; justify-content:space-between; color:#495057;">
-                        <span>頭期款: <b>{fmt_int(dp_target)}</b></span>
-                    </div>
-                     <div style="text-align:right; font-size:0.8em; color:#6c757d; margin-top:2px;">
-                        (預估 {est_year} 年)
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
-            except: 
-                st.error("資料讀取錯誤")
+    # 4. Buying Plan (Fixed Missing Data)
+    with c4:
+        st.subheader('買房計畫')
+        try:
+            # 使用明確的 key，並檢查去除空白後的索引
+            # 注意：這裡直接使用 df_c (index已去除空白)
+            # 優先嘗試 "頭期款目標" 或 "頭期款"
+            dp_target = 0
+            if '頭期款目標' in df_c.index:
+                dp_target = safe_float(df_c.loc['頭期款目標', col_val])
+            elif '頭期款' in df_c.index:
+                dp_target = safe_float(df_c.loc['頭期款', col_val])
             
-        # Bottom of Right Column: Mindset Reminder
-        if not df_H.empty:
-            try:
-                df_h_temp = df_H.copy()
-                date_col = next((c for c in df_h_temp.columns if '日期' in c), None)
-                if date_col:
-                    df_h_temp['dt'] = pd.to_datetime(df_h_temp[date_col], errors='coerce')
-                    latest_row = df_h_temp.sort_values('dt', ascending=False).iloc[0]
-                    mindset_col = next((c for c in df_h_temp.columns if '心態' in str(c) or '提醒' in str(c)), None)
-                    if not mindset_col and len(df_h_temp.columns) > 10: mindset_col = df_h_temp.columns[10]
-                    if mindset_col:
-                        mindset_text = str(latest_row.get(mindset_col, '')).strip()
-                        if mindset_text:
-                            st.markdown(f"""
-                            <div class="mindset-card">
-                                💡 <b>心態提醒：</b> {mindset_text}
-                            </div>
-                            """, unsafe_allow_html=True)
-            except: pass
+            # 優先嘗試 "目標房屋準備度R" 或 "房屋準備度R"
+            r_val_raw = None
+            if '目標房屋準備度R' in df_c.index:
+                r_val_raw = df_c.loc['目標房屋準備度R', col_val]
+            elif '房屋準備度R' in df_c.index:
+                r_val_raw = df_c.loc['房屋準備度R', col_val]
+                
+            # 優先嘗試 "預估買房年份"
+            est_year = "N/A"
+            if '預估買房年份' in df_c.index:
+                est_year = str(df_c.loc['預估買房年份', col_val])
+            
+            # R 值顯示邏輯
+            r_display = "N/A"
+            if r_val_raw is not None:
+                if isinstance(r_val_raw, str) and '%' in r_val_raw:
+                    r_display = r_val_raw
+                else:
+                    r_float = safe_float(r_val_raw)
+                    if r_float != 0: 
+                        if abs(r_float) <= 5.0:
+                             r_display = f"{r_float*100:.2f}%"
+                        else:
+                             r_display = f"{r_float:.2f}%"
+                    else:
+                        r_display = str(r_val_raw)
 
-    st.subheader(f'📅 今日判斷 & 市場狀態 (資料日期: {date_str.replace(" - ", "")})')
+            st.markdown(f"""
+            <div style="background-color:#f8f9fa; padding:15px; border-radius:10px; margin-bottom:10px; border:1px solid #e9ecef; height: 100%; display: flex; flex-direction: column; justify-content: center;">
+                <div style="font-size:1.0em; color:#6c757d; margin-bottom:5px;">房屋準備度 R</div>
+                <div style="font-size:2.2em; font-weight:bold; color:#007bff; line-height:1.1;">
+                    {r_display}
+                </div>
+                <div style="margin-top:8px; font-size:0.85em; display:flex; justify-content:space-between; color:#495057;">
+                    <span>頭期款: <b>{fmt_int(dp_target)}</b></span>
+                </div>
+                 <div style="text-align:right; font-size:0.8em; color:#6c757d; margin-top:2px;">
+                    (預估 {est_year} 年)
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+        except: 
+            st.error("資料讀取錯誤")
+            
+    # Bottom of Right Column: Mindset Reminder
+    if not df_H.empty:
+        try:
+            df_h_temp = df_H.copy()
+            # 強制讀取最後一筆
+            latest_row = df_h_temp.iloc[-1]
+            mindset_col = next((c for c in df_h_temp.columns if '心態' in str(c) or '提醒' in str(c)), None)
+            if not mindset_col and len(df_h_temp.columns) > 10: mindset_col = df_h_temp.columns[10]
+            if mindset_col:
+                mindset_text = str(latest_row.get(mindset_col, '')).strip()
+                if mindset_text:
+                    st.markdown(f"""
+                    <div class="mindset-card">
+                        💡 <b>心態提醒：</b> {mindset_text}
+                    </div>
+                    """, unsafe_allow_html=True)
+        except: pass
+
+    st.subheader('📅 今日判斷 & 市場狀態')
 
     if not df_H.empty:
         try:
             df_h = df_H.copy()
-            date_col = next((c for c in df_h.columns if '日期' in c), None)
-            if date_col:
-                df_h['dt'] = pd.to_datetime(df_h[date_col], errors='coerce')
-                latest = df_h.sort_values('dt', ascending=False).iloc[0]
-                
-                ldr_raw = str(latest.get('LDR', 'N/A'))
-                risk_today = str(latest.get('今日風險等級', 'N/A'))
-                cmd = str(latest.get('今日指令', 'N/A'))
-                cmd = re.sub(r"【Debug.*?】", "", cmd, flags=re.DOTALL).strip()
-                market_pos = str(latest.get('盤勢位置', 'N/A'))
-                
-                ldr_val_num = safe_float(ldr_raw)
-                ldr_ratio = ldr_val_num / 100.0 if ldr_val_num > 5 else ldr_val_num
-                e_ratio = lev / 100.0 if lev > 5 else lev 
-                
-                if e_ratio < 0.95: safe_l, hot_l = 1.05, 1.08
-                elif e_ratio < 1.05: safe_l, hot_l = 1.03, 1.06
-                else: safe_l, hot_l = 1.01, 1.03
-                
-                if ldr_ratio <= 1.0: ldr_status_txt, ldr_color = "黃金結構", "#28a745"
-                elif ldr_ratio <= safe_l: ldr_status_txt, ldr_color = "偏熱", "#ffc107"
-                elif ldr_ratio <= hot_l: ldr_status_txt, ldr_color = "過熱", "#fd7e14"
-                else: ldr_status_txt, ldr_color = "危險", "#dc3545"
-                
-                ldr_display = f"{ldr_val_num:.2f}%<div style='font-size: 1rem; line-height: 1.0; margin-top: 2px;'>{ldr_status_txt}</div>"
+            # 強制讀取最後一筆，不進行日期排序
+            latest = df_h.iloc[-1]
+            
+            ldr_raw = str(latest.get('LDR', 'N/A'))
+            risk_today = str(latest.get('今日風險等級', 'N/A'))
+            cmd = str(latest.get('今日指令', 'N/A'))
+            cmd = re.sub(r"【Debug.*?】", "", cmd, flags=re.DOTALL).strip()
+            market_pos = str(latest.get('盤勢位置', 'N/A'))
+            
+            ldr_val_num = safe_float(ldr_raw)
+            ldr_ratio = ldr_val_num / 100.0 if ldr_val_num > 5 else ldr_val_num
+            e_ratio = lev / 100.0 if lev > 5 else lev 
+            
+            if e_ratio < 0.95: safe_l, hot_l = 1.05, 1.08
+            elif e_ratio < 1.05: safe_l, hot_l = 1.03, 1.06
+            else: safe_l, hot_l = 1.01, 1.03
+            
+            if ldr_ratio <= 1.0: ldr_status_txt, ldr_color = "黃金結構", "#28a745"
+            elif ldr_ratio <= safe_l: ldr_status_txt, ldr_color = "偏熱", "#ffc107"
+            elif ldr_ratio <= hot_l: ldr_status_txt, ldr_color = "過熱", "#fd7e14"
+            else: ldr_status_txt, ldr_color = "危險", "#dc3545"
+            
+            ldr_display = f"{ldr_val_num:.2f}%<div style='font-size: 1rem; line-height: 1.0; margin-top: 2px;'>{ldr_status_txt}</div>"
 
-                raw_pledge = safe_float(latest.get('質押率', 0))
-                pledge_val = raw_pledge * 100 if abs(raw_pledge) <= 5.0 else raw_pledge
-                
-                sheet_pledge_status = ""
-                if not df_C.empty:
-                     p_status_raw = fuzzy_get(df_C.set_index(df_C.columns[0]), '質押率燈號')
-                     if p_status_raw: sheet_pledge_status = str(p_status_raw).strip()
+            raw_pledge = safe_float(latest.get('質押率', 0))
+            pledge_val = raw_pledge * 100 if abs(raw_pledge) <= 5.0 else raw_pledge
+            
+            sheet_pledge_status = ""
+            if not df_C.empty:
+                 p_status_raw = fuzzy_get(df_C.set_index(df_C.columns[0]), '質押率燈號')
+                 if p_status_raw: sheet_pledge_status = str(p_status_raw).strip()
 
-                if sheet_pledge_status:
-                     p_status = sheet_pledge_status
-                     if "安全" in p_status: p_color = "#28a745"
-                     elif "謹慎" in p_status: p_color = "#17a2b8"
-                     elif "高警戒" in p_status: p_color = "#fd7e14"
-                     elif "警戒" in p_status: p_color = "#ffc107"
-                     elif "危險" in p_status: p_color = "#dc3545"
-                     else: p_color = "black"
-                else:
-                    if pledge_val < 30: p_status, p_color = "安全（絕對安全區）", "#28a745"
-                    elif pledge_val < 35: p_status, p_color = "謹慎可開火區", "#17a2b8"
-                    elif pledge_val < 40: p_status, p_color = "警戒（火力鎖定區）", "#ffc107"
-                    elif pledge_val < 45: p_status, p_color = "高警戒", "#fd7e14"
-                    else: p_status, p_color = "危險", "#dc3545"
-                
-                pledge_display = f"{pledge_val:.2f}%<div style='font-size: 1rem; line-height: 1.0; margin-top: 2px; white-space: normal; word-break: break-word;'>{p_status}</div>"
-                unwind_rate = fmt_pct(latest.get('建議拆倉比例', 0))
-                fw_col = next((c for c in df_h.columns if '飛輪' in c), None)
-                flywheel_stage = str(latest.get(fw_col, 'N/A')) if fw_col else 'N/A'
-                
-                bias_val = "N/A"
-                if not df_Market.empty:
-                    b_col = next((c for c in df_Market.columns if '乖離' in c), None)
-                    if b_col:
-                        valid_rows = df_Market[df_Market[b_col].astype(str).str.strip() != '']
-                        if not valid_rows.empty: bias_val = valid_rows.iloc[-1][b_col]
-                
-                vix_val, vix_status = "N/A", ""
-                if not df_Global.empty:
-                    code_col = next((c for c in df_Global.columns if '代碼' in c), None)
-                    if code_col:
-                        vix_row = df_Global[df_Global[code_col].astype(str).str.strip().str.upper() == 'VIX']
-                        if not vix_row.empty:
-                            p_col = next((c for c in df_Global.columns if '價格' in c), None)
-                            s_col = next((c for c in df_Global.columns if '狀態' in c), None)
-                            if p_col: vix_val = vix_row.iloc[0].get(p_col, 'N/A')
-                            if s_col: vix_status = vix_row.iloc[0].get(s_col, '')
+            if sheet_pledge_status:
+                 p_status = sheet_pledge_status
+                 if "安全" in p_status: p_color = "#28a745"
+                 elif "謹慎" in p_status: p_color = "#17a2b8"
+                 elif "高警戒" in p_status: p_color = "#fd7e14"
+                 elif "警戒" in p_status: p_color = "#ffc107"
+                 elif "危險" in p_status: p_color = "#dc3545"
+                 else: p_color = "black"
+            else:
+                if pledge_val < 30: p_status, p_color = "安全（絕對安全區）", "#28a745"
+                elif pledge_val < 35: p_status, p_color = "謹慎可開火區", "#17a2b8"
+                elif pledge_val < 40: p_status, p_color = "警戒（火力鎖定區）", "#ffc107"
+                elif pledge_val < 45: p_status, p_color = "高警戒", "#fd7e14"
+                else: p_status, p_color = "危險", "#dc3545"
+            
+            pledge_display = f"{pledge_val:.2f}%<div style='font-size: 1rem; line-height: 1.0; margin-top: 2px; white-space: normal; word-break: break-word;'>{p_status}</div>"
+            unwind_rate = fmt_pct(latest.get('建議拆倉比例', 0))
+            fw_col = next((c for c in df_h.columns if '飛輪' in c), None)
+            flywheel_stage = str(latest.get(fw_col, 'N/A')) if fw_col else 'N/A'
+            
+            bias_val = "N/A"
+            if not df_Market.empty:
+                b_col = next((c for c in df_Market.columns if '乖離' in c), None)
+                if b_col:
+                    valid_rows = df_Market[df_Market[b_col].astype(str).str.strip() != '']
+                    if not valid_rows.empty: bias_val = valid_rows.iloc[-1][b_col]
+            
+            vix_val, vix_status = "N/A", ""
+            if not df_Global.empty:
+                code_col = next((c for c in df_Global.columns if '代碼' in c), None)
+                if code_col:
+                    vix_row = df_Global[df_Global[code_col].astype(str).str.strip().str.upper() == 'VIX']
+                    if not vix_row.empty:
+                        p_col = next((c for c in df_Global.columns if '價格' in c), None)
+                        s_col = next((c for c in df_Global.columns if '狀態' in c), None)
+                        if p_col: vix_val = vix_row.iloc[0].get(p_col, 'N/A')
+                        if s_col: vix_status = vix_row.iloc[0].get(s_col, '')
 
-                risk_color = "black"
-                if "紅" in risk_today: risk_color = "#dc3545"
-                elif "橘" in risk_today: risk_color = "#fd7e14"
-                elif "黃" in risk_today: risk_color = "#ffc107"
-                elif "綠" in risk_today: risk_color = "#28a745"
+            risk_color = "black"
+            if "紅" in risk_today: risk_color = "#dc3545"
+            elif "橘" in risk_today: risk_color = "#fd7e14"
+            elif "黃" in risk_today: risk_color = "#ffc107"
+            elif "綠" in risk_today: risk_color = "#28a745"
 
-                m_cols = st.columns(7)
-                def make_metric(label, value, color="black"):
-                        return f"<div style='margin-bottom:0px;'><div style='font-size:1.1rem; color:gray; margin-bottom:2px; white-space: nowrap;'>{label}</div><div style='font-size:1.8rem; font-weight:bold; color:{color}; line-height:1.2; white-space: normal; word-break: break-word;'>{value}</div></div>"
+            m_cols = st.columns(7)
+            def make_metric(label, value, color="black"):
+                    return f"<div style='margin-bottom:0px;'><div style='font-size:1.1rem; color:gray; margin-bottom:2px; white-space: nowrap;'>{label}</div><div style='font-size:1.8rem; font-weight:bold; color:{color}; line-height:1.2; white-space: normal; word-break: break-word;'>{value}</div></div>"
 
-                with m_cols[0]: st.markdown(make_metric("LDR", ldr_display, ldr_color), unsafe_allow_html=True)
-                with m_cols[1]:
-                    match = re.search(r"(.+?)\s*([\(（].+?[\)）])", risk_today)
-                    if match:
-                        r_main = match.group(1).strip()
-                        r_sub = match.group(2).strip()
-                        r_sub_clean = re.sub(r"[（）\(\)]", "", r_sub)
-                        risk_display_html = f"{r_main}<div style='font-size: 1rem; line-height: 1.0; margin-top: 2px; white-space: normal; word-break: break-word;'>{r_sub_clean}</div>"
-                    else: risk_display_html = risk_today
-                    st.markdown(make_metric("風險等級", risk_display_html, risk_color), unsafe_allow_html=True)
-                    
-                with m_cols[2]: st.markdown(make_metric("質押率", pledge_display, p_color), unsafe_allow_html=True)
-                with m_cols[3]: st.markdown(make_metric("建議拆倉", unwind_rate, "#dc3545" if safe_float(unwind_rate) > 0 else "black"), unsafe_allow_html=True)
-                with m_cols[4]:
-                    bias_display = "N/A"
-                    if bias_val != "N/A":
-                            bv = safe_float(bias_val)
-                            if abs(bv) >= 1.0: bias_display = f"{bv:.2f}%"
-                            else: bias_display = f"{bv*100:.2f}%"
-                    val_str = f"{market_pos}<div style='font-size: 1rem; line-height: 1.0; margin-top: 2px;'>{bias_display}</div>"
-                    st.markdown(make_metric("盤勢", val_str), unsafe_allow_html=True)
-                with m_cols[5]: st.markdown(make_metric("飛輪階段", flywheel_stage), unsafe_allow_html=True)
-                with m_cols[6]:
-                    v_html = vix_status
-                    match = re.search(r"(.+?)\s*([\(（].+?[\)）])", vix_status, re.DOTALL)
-                    if match:
-                        v_main = match.group(1).strip()
-                        v_sub = match.group(2).strip()
-                        v_sub_clean = re.sub(r"[（）\(\)]", "", v_sub).replace('\n', ' ')
-                        v_html = f"{v_main}<div style='font-size: 1rem; line-height: 1.3; margin-top: 2px; white-space: normal; color: gray;'>{v_sub_clean}</div>"
-                    vix_display_html = f"{vix_val}<div style='font-size: 1rem; line-height: 1.2; margin-top: 2px;'>{v_html}</div>"
-                    st.markdown(make_metric("VIX", vix_display_html), unsafe_allow_html=True) 
+            with m_cols[0]: st.markdown(make_metric("LDR", ldr_display, ldr_color), unsafe_allow_html=True)
+            with m_cols[1]:
+                match = re.search(r"(.+?)\s*([\(（].+?[\)）])", risk_today)
+                if match:
+                    r_main = match.group(1).strip()
+                    r_sub = match.group(2).strip()
+                    r_sub_clean = re.sub(r"[（）\(\)]", "", r_sub)
+                    risk_display_html = f"{r_main}<div style='font-size: 1rem; line-height: 1.0; margin-top: 2px; white-space: normal; word-break: break-word;'>{r_sub_clean}</div>"
+                else: risk_display_html = risk_today
+                st.markdown(make_metric("風險等級", risk_display_html, risk_color), unsafe_allow_html=True)
                 
-                st.markdown(f"<div style='font-size:1.1em;color:gray;margin-top:2px;margin-bottom:2px'>📊 操作指令 (60日乖離: {bias_val})</div>", unsafe_allow_html=True)
-                st.info(f"{cmd}")
+            with m_cols[2]: st.markdown(make_metric("質押率", pledge_display, p_color), unsafe_allow_html=True)
+            with m_cols[3]: st.markdown(make_metric("建議拆倉", unwind_rate, "#dc3545" if safe_float(unwind_rate) > 0 else "black"), unsafe_allow_html=True)
+            with m_cols[4]:
+                bias_display = "N/A"
+                if bias_val != "N/A":
+                        bv = safe_float(bias_val)
+                        if abs(bv) >= 1.0: bias_display = f"{bv:.2f}%"
+                        else: bias_display = f"{bv*100:.2f}%"
+                val_str = f"{market_pos}<div style='font-size: 1rem; line-height: 1.0; margin-top: 2px;'>{bias_display}</div>"
+                st.markdown(make_metric("盤勢", val_str), unsafe_allow_html=True)
+            with m_cols[5]: st.markdown(make_metric("飛輪階段", flywheel_stage), unsafe_allow_html=True)
+            with m_cols[6]:
+                v_html = vix_status
+                match = re.search(r"(.+?)\s*([\(（].+?[\)）])", vix_status, re.DOTALL)
+                if match:
+                    v_main = match.group(1).strip()
+                    v_sub = match.group(2).strip()
+                    v_sub_clean = re.sub(r"[（）\(\)]", "", v_sub).replace('\n', ' ')
+                    v_html = f"{v_main}<div style='font-size: 1rem; line-height: 1.3; margin-top: 2px; white-space: normal; color: gray;'>{v_sub_clean}</div>"
+                vix_display_html = f"{vix_val}<div style='font-size: 1rem; line-height: 1.2; margin-top: 2px;'>{v_html}</div>"
+                st.markdown(make_metric("VIX", vix_display_html), unsafe_allow_html=True) 
+            
+            st.markdown(f"<div style='font-size:1.1em;color:gray;margin-top:2px;margin-bottom:2px'>📊 操作指令 (60日乖離: {bias_val})</div>", unsafe_allow_html=True)
+            st.info(f"{cmd}")
         except Exception as e: st.error(f"解析判斷數據時發生錯誤: {e}")
 
 else: st.warning('總覽數據載入失敗。請檢查 Secrets 設定或試算表網址。')
 
-# ... rest of the code ... (2. 持股, 3. 交易紀錄, 4. 財富藍圖)
-# ... same as before ...
+# 2. 持股
+st.header('2. 持股分析')
+c1, c2 = st.columns([3, 1])
+with c1:
+    st.markdown("### 📝 持股明細") 
+    if not df_A.empty:
+        df_show = df_A.copy()
+        if st.session_state['live_prices']:
+            df_show['即時價'] = df_show['股票'].map(st.session_state['live_prices']).fillna('')
+        
+        for c in ['持有數量（股）', '市值（元）', '浮動損益']: 
+            if c in df_show.columns: df_show[c] = df_show[c].apply(fmt_int)
+        for c in ['平均成本', '收盤價', '即時價']:
+            if c in df_show.columns: df_show[c] = df_show[c].apply(fmt_money)
+            
+        height_val = (len(df_show) + 1) * 35 + 20
+        st.dataframe(df_show, use_container_width=True, height=height_val, hide_index=True)
+
+with c2:
+    st.markdown("<h3 style='text-align: center;'>🍰 資產配置</h3>", unsafe_allow_html=True) 
+    if not df_B.empty and '市值（元）' in df_B.columns:
+        df_B['num'] = df_B['市值（元）'].apply(safe_float)
+        chart_data = df_B[(df_B['num'] > 0) & (~df_B['股票'].str.contains('總資產|Total', na=False))]
+        if not chart_data.empty:
+            fig = px.pie(chart_data, values='num', names='股票')
+            fig.update_layout(
+                margin=dict(t=10, b=10, l=10, r=10),
+                legend=dict(orientation="h", yanchor="bottom", y=-0.2, xanchor="center", x=0.5)
+            )
+            st.plotly_chart(fig, use_container_width=True)
+
+# 3. 交易紀錄
+st.header('3. 交易紀錄與淨值')
+t1, t2, t3 = st.tabs(['現金流', '已實現損益', '每日淨值'])
+
+with t1:
+    if not df_D.empty:
+        df_calc = df_D.copy()
+        if '日期' in df_calc.columns:
+            df_calc['dt'] = pd.to_datetime(df_calc['日期'], errors='coerce')
+            df_calc.sort_values('dt', ascending=False, inplace=True)
+        cats = df_calc['動作'].unique().tolist()
+        sel = st.multiselect('篩選動作', cats, default=cats)
+        df_calc = df_calc[df_calc['動作'].isin(sel)]
+        total = df_calc['淨收／支出'].apply(safe_float).sum() if '淨收／支出' in df_calc.columns else 0
+        c_a, c_b = st.columns(2)
+        c_a.metric("篩選淨額", fmt_money(total))
+        c_b.markdown(f"**筆數：** {len(df_calc)}")
+        df_view = df_calc.drop(columns=['dt'], errors='ignore').copy()
+        if '日期' in df_view.columns: df_view['日期'] = df_view['日期'].apply(fmt_date)
+        for c in ['淨收／支出', '累積現金', '成交價']:
+            if c in df_view.columns: df_view[c] = df_view[c].apply(fmt_money)
+        if '數量' in df_view.columns: df_view['數量'] = df_view['數量'].apply(fmt_int)
+        st.dataframe(df_view, use_container_width=True, height=400)
+        if not df_calc.empty: st.caption(f"📅 {df_calc['dt'].min().date()} ~ {df_calc['dt'].max().date()}")
+
+with t2:
+    if not df_E.empty:
+        df_calc = df_E.copy()
+        d_col = next((c for c in df_calc.columns if '日期' in c), None)
+        if d_col:
+            df_calc['dt'] = pd.to_datetime(df_calc[d_col], errors='coerce')
+            df_calc.sort_values('dt', ascending=False, inplace=True)
+        stocks = df_calc['股票'].unique().tolist()
+        c_sel, c_all, c_clr = st.columns([4, 1, 1])
+        with c_sel: sel_s = st.multiselect('篩選股票', stocks, default=stocks, key='pnl_s', label_visibility="collapsed")
+        with c_all:
+            st.markdown('<div style="height: 28px"></div>', unsafe_allow_html=True)
+            if st.button("全選"): del st.session_state['pnl_s']; st.rerun()
+        with c_clr:
+            st.markdown('<div style="height: 28px"></div>', unsafe_allow_html=True)
+            if st.button("清除"): st.session_state['pnl_s'] = []; st.rerun()
+        if sel_s: df_calc = df_calc[df_calc['股票'].isin(sel_s)]
+        total = df_calc['已實現損益'].apply(safe_float).sum() if '已實現損益' in df_calc.columns else 0
+        st.metric("總實現損益", fmt_money(total))
+        df_view = df_calc.drop(columns=['dt'], errors='ignore').copy()
+        if d_col: df_view[d_col] = df_view[d_col].apply(fmt_date)
+        for c in ['已實現損益', '投資成本', '帳面收入', '成交均價']:
+             if c in df_view.columns: df_view[c] = df_view[c].apply(fmt_money)
+        st.dataframe(df_view, use_container_width=True, height=400)
+
+with t3:
+    if not df_F.empty:
+        df_calc = df_F.copy()
+        if '實質NAV' in df_calc.columns and '日期' in df_calc.columns:
+            df_calc['dt'] = pd.to_datetime(df_calc['日期'], errors='coerce')
+            df_calc['nav'] = df_calc['實質NAV'].apply(safe_float)
+            df_chart = df_calc.sort_values('dt')
+            fig = px.line(df_chart, x='dt', y='nav', title='NAV 趨勢', hover_data={'dt': '|%Y-%m-%d', 'nav': ':,.0f'})
+            fig.update_traces(hovertemplate='<b>日期</b>: %{x|%Y-%m-%d}<br><b>淨值</b>: %{y:,.0f}<extra></extra>')
+            fig.update_layout(hovermode="x unified", yaxis_tickformat=",.0f")
+            st.plotly_chart(fig, use_container_width=True)
+            with st.expander("詳細數據"):
+                df_disp = df_calc.sort_values('dt', ascending=False).drop(columns=['dt', 'nav']).copy()
+                df_disp['日期'] = df_disp['日期'].apply(fmt_date)
+                for c in ['實質NAV', '股票市值', '現金']:
+                    if c in df_disp.columns: df_disp[c] = df_disp[c].apply(fmt_money)
+                st.dataframe(df_disp, use_container_width=True)
+                if not df_calc.empty: st.caption(f"📅 紀錄: {df_calc['dt'].min().date()} ~ {df_calc['dt'].max().date()}")
+
+st.markdown('---')
+# 4. 財富藍圖
+st.header('4. 財富藍圖')
+if not df_G.empty:
+    try:
+        all_rows = [df_G.columns.tolist()] + df_G.values.tolist()
+        current_title = None
+        current_data = []
+        found_sections = False 
+        
+        for row in all_rows:
+            first_cell = str(row[0]).strip()
+            if first_cell.startswith(('一、', '二、', '三、', '四、', '五、')):
+                found_sections = True
+                if current_title:
+                    title_match = re.search(r"(.+?)\s*[（\(](.+)[）\)]", current_title)
+                    if title_match:
+                        main_t = title_match.group(1).strip()
+                        sub_t = title_match.group(2).strip()
+                        st.markdown(f"### {main_t}")
+                        st.markdown(f"<div style='font-size: 0.9em; color: gray; margin-top: -0.5rem; margin-bottom: 0.8rem;'>（{sub_t}）</div>", unsafe_allow_html=True)
+                    else:
+                        st.subheader(current_title)
+                        
+                    if len(current_data) > 0:
+                        headers = current_data[0]
+                        body = current_data[1:] if len(current_data) > 1 else []
+                        u_heads = []
+                        seen = {}
+                        for h in headers:
+                            h_str = str(h).strip()
+                            if not h_str: h_str = "-" 
+                            if h_str in seen: seen[h_str] += 1; u_heads.append(f"{h_str}_{seen[h_str]}")
+                            else: seen[h_str] = 0; u_heads.append(h_str)
+                        if body:
+                            st.dataframe(pd.DataFrame(body, columns=u_heads), use_container_width=True, hide_index=True)
+                current_title = first_cell
+                current_data = []
+            elif any(str(c).strip() for c in row):
+                if current_title is not None:
+                    current_data.append(row)
+        
+        # Render last
+        if current_title:
+            title_match = re.search(r"(.+?)\s*[（\(](.+)[）\)]", current_title)
+            if title_match:
+                main_t = title_match.group(1).strip()
+                sub_t = title_match.group(2).strip()
+                st.markdown(f"### {main_t}")
+                st.markdown(f"<div style='font-size: 0.9em; color: gray; margin-top: -0.5rem; margin-bottom: 0.8rem;'>（{sub_t}）</div>", unsafe_allow_html=True)
+            else:
+                st.subheader(current_title)
+            
+            if len(current_data) > 0:
+                headers = current_data[0]
+                body = current_data[1:] if len(current_data) > 1 else []
+                u_heads = []
+                seen = {}
+                for h in headers:
+                    h_str = str(h).strip()
+                    if not h_str: h_str = "-" 
+                    if h_str in seen: seen[h_str] += 1; u_heads.append(f"{h_str}_{seen[h_str]}")
+                    else: seen[h_str] = 0; u_heads.append(h_str)
+                if body:
+                    st.dataframe(pd.DataFrame(body, columns=u_heads), use_container_width=True, hide_index=True)
+        
+        if not found_sections:
+            st.dataframe(df_G, use_container_width=True)
+
+    except:
+        st.dataframe(df_G, use_container_width=True)
+else:
+    st.info("無財富藍圖資料")
