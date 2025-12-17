@@ -258,12 +258,12 @@ def generate_daily_report(df_A, df_C, df_D, df_E, df_F, df_H, live_prices_dict):
             live_p = live_prices_dict.get(ticker)
             close_val = 0.0
             
-            # 修正順序：API > 即時收盤價 > 收盤價 > 成交價
+            # 修正順序：表A 收盤價 (手動最優先) > 表A 即時收盤價 > API 價格 > 成交價
             price_candidates = [
-                live_p, 
-                row.get('即時收盤價'), # 優先檢查這個
-                row.get('收盤價'),     # 其次才是這個
-                row.get('成交價')
+                row.get('收盤價'),     # 最高優先 (User 手動 key)
+                row.get('即時收盤價'), # Google Finance
+                live_p,               # Yahoo Finance API
+                row.get('成交價')      # 最後備援
             ]
             for p in price_candidates:
                 v = safe_float(p)
