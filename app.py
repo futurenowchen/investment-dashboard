@@ -281,8 +281,8 @@ if not df_C.empty:
                 bias_display = "N/A"
                 if bias_val != "N/A":
                         bv = dm.safe_float(bias_val)
-                        if abs(bv) >= 1.0: bias_display = f"{bv:.2f}%"
-                        else: bias_display = f"{bv*100:.2f}%"
+                        # 資料已是百分比格式，直接顯示
+                        bias_display = f"{bv:.2f}%"
                 val_str = f"{market_pos}<div style='font-size: 1rem; line-height: 1.0; margin-top: 2px;'>{bias_display}</div>"
                 st.markdown(vis.render_mini_metric("盤勢", val_str), unsafe_allow_html=True)
             with m_cols[5]: st.markdown(vis.render_mini_metric("飛輪階段", flywheel_stage), unsafe_allow_html=True)
