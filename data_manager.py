@@ -160,10 +160,11 @@ def write_prices_to_sheet(df_A, updates):
     except: return False
 
 # --- 文字日報生成函式 ---
-def generate_daily_report(df_A, df_C, df_D, df_E, df_F, df_H, live_prices_dict):
+def generate_daily_report(df_A, df_C, df_D, df_E, df_F, df_H, live_prices_dict, df_Global=pd.DataFrame()):
     """
     生成文字日報
     注意：live_prices_dict 需由外部傳入 st.session_state['live_prices']
+    df_Global: 傳入 Global 表格資料以讀取指數資訊
     """
     lines = []
     today = datetime.now().strftime('%Y/%m/%d')
@@ -245,6 +246,21 @@ def generate_daily_report(df_A, df_C, df_D, df_E, df_F, df_H, live_prices_dict):
             lines.append(f"建議拆倉：{unwind}")
             lines.append(f"飛輪階段：{flywheel}")
             lines.append(f"季線乖離：{bias}")
+            
+            # --- 新增：台灣加權指數 (C9, D9) ---
+            # Excel Row 9 is Index 7 in DataFrame (Header is Row 1)
+            # Col C is index 2, Col D is index 3
+            if not df_Global.empty and len(df_Global) >= 8:
+                try:
+                    row_data = df_Global.iloc[7] 
+                    idx_val = row_data.iloc[2]
+                    chg_val = row_data.iloc[3]
+                    
+                    idx_str = fmt_money(idx_val).replace('.00', '') # 去除多餘小數點
+                    chg_str = fmt_pct(chg_val)
+                    lines.append(f"臺灣加權指數：{idx_str} ({chg_str})")
+                except: pass
+
             lines.append(f"指令：{cmd}")
         except: lines.append("表H解析錯誤")
 
