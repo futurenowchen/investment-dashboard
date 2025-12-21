@@ -257,7 +257,11 @@ def generate_daily_report(df_A, df_C, df_D, df_E, df_F, df_H, live_prices_dict, 
                     chg_val = row_data.iloc[3]
                     
                     idx_str = fmt_money(idx_val).replace('.00', '') # 去除多餘小數點
-                    chg_str = fmt_pct(chg_val)
+                    
+                    # 修正：直接將數值加上 %，不進行倍率轉換
+                    c_val = safe_float(chg_val)
+                    chg_str = f"{c_val:.2f}%"
+                    
                     lines.append(f"臺灣加權指數：{idx_str} ({chg_str})")
                 except: pass
 
