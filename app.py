@@ -69,8 +69,8 @@ if st.sidebar.button("💾 更新股價至 Google Sheets", type="primary"):
 st.sidebar.markdown("---")
 st.sidebar.subheader("📋 匯出功能")
 if st.sidebar.button("產生文字日報"):
-    # 呼叫 data_manager 中的生成函式
-    report_text = dm.generate_daily_report(df_A, df_C, df_D, df_E, df_F, df_H, st.session_state['live_prices'])
+    # 呼叫 data_manager 中的生成函式，加入 df_Global
+    report_text = dm.generate_daily_report(df_A, df_C, df_D, df_E, df_F, df_H, st.session_state['live_prices'], df_Global)
     st.sidebar.markdown("請點擊下方代碼區塊右上角的 **複製按鈕**：")
     st.sidebar.code(report_text, language='text')
 
