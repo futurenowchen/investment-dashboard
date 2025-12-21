@@ -226,6 +226,7 @@ def generate_daily_report(df_A, df_C, df_D, df_E, df_F, df_H, live_prices_dict):
             col_pledge = find_col(df_h.columns, '質押')
             col_unwind = find_col(df_h.columns, '拆倉')
             col_fw = find_col(df_h.columns, '飛輪')
+            col_bias = find_col(df_h.columns, '乖離')
             col_cmd = find_col(df_h.columns, '指令')
 
             ldr = str(latest.get(col_ldr, 'N/A')) if col_ldr else 'N/A'
@@ -233,6 +234,7 @@ def generate_daily_report(df_A, df_C, df_D, df_E, df_F, df_H, live_prices_dict):
             pledge = fmt_pct(latest.get(col_pledge, 0)) if col_pledge else '0%'
             unwind = fmt_pct(latest.get(col_unwind, 0)) if col_unwind else '0%'
             flywheel = str(latest.get(col_fw, 'N/A')) if col_fw else 'N/A'
+            bias = str(latest.get(col_bias, 'N/A')) if col_bias else 'N/A'
             
             cmd_val = str(latest.get(col_cmd, 'N/A')) if col_cmd else 'N/A'
             cmd = re.sub(r"【Debug.*?】", "", cmd_val, flags=re.DOTALL).strip()
@@ -242,6 +244,7 @@ def generate_daily_report(df_A, df_C, df_D, df_E, df_F, df_H, live_prices_dict):
             lines.append(f"質押率：{pledge}")
             lines.append(f"建議拆倉：{unwind}")
             lines.append(f"飛輪階段：{flywheel}")
+            lines.append(f"季線乖離：{bias}")
             lines.append(f"指令：{cmd}")
         except: lines.append("表H解析錯誤")
 
