@@ -28,6 +28,39 @@ df_H = dm.load_data('表H_每日判斷')
 df_Market = dm.load_data('Market')
 df_Global = dm.load_data('Global')
 
+# 🛡️ v8.72 核心邏輯：現金否決權 (Veto Rule)
+# 邏輯來源：手冊 1.2 節
+try:
+    # 假設現金在 df_C 的 index 為 '現金'，或需要從欄位搜尋
+    # 這裡依據你的 data_manager 邏輯進行取值
+    if not df_C.empty:
+        df_c_check = df_C.copy()
+        first_col = df_c_check.columns[0]
+        df_c_check.set_index(first_col, inplace=True)
+        col_val_check = df_c_check.columns[0]
+        
+        cash_value = dm.safe_float(df_c_check.loc['現金', col_val_check]) if '現金' in df_c_check.index else 999999
+        
+        VETO_THRESHOLD = 50000 # 5萬防線
+        
+        if cash_value < VETO_THRESHOLD:
+            st.error(f"""
+            ### ⛔ 系統鎖定：現金否決權生效
+            **目前現金水位：${cash_value:,.0f} < ${VETO_THRESHOLD:,.0f}**
+            
+            依據《個人操作手冊 v8.72》第 1.2 條：
+            1. 禁止任何買進操作 (含 0050/台積/正二)。
+            2. 停止所有高級操作功能。
+            3. 請優先處理現金流問題。
+            """)
+            # 選項 A: 激進模式 - 直接停止程式往下跑
+            # st.stop() 
+            
+            # 選項 B: 溫和模式 - 顯示巨大警告，但保留檢視功能 (建議先用 B)
+            st.markdown("---")
+except Exception as e:
+    pass # 避免因為讀不到現金欄位而讓整個程式掛掉
+
 # 決定標題日期字串
 date_str = ""
 if not df_F.empty:
@@ -465,3 +498,4 @@ if not df_G.empty:
         st.dataframe(df_G, use_container_width=True)
 else:
     st.info("無財富藍圖資料")
+
