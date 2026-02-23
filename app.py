@@ -28,39 +28,6 @@ df_H = dm.load_data('表H_每日判斷')
 df_Market = dm.load_data('Market')
 df_Global = dm.load_data('Global')
 
-# 🛡️ v8.72 核心邏輯：現金否決權 (Veto Rule)
-# 邏輯來源：手冊 1.2 節
-try:
-    # 假設現金在 df_C 的 index 為 '現金'，或需要從欄位搜尋
-    # 這裡依據你的 data_manager 邏輯進行取值
-    if not df_C.empty:
-        df_c_check = df_C.copy()
-        first_col = df_c_check.columns[0]
-        df_c_check.set_index(first_col, inplace=True)
-        col_val_check = df_c_check.columns[0]
-        
-        cash_value = dm.safe_float(df_c_check.loc['現金', col_val_check]) if '現金' in df_c_check.index else 999999
-        
-        VETO_THRESHOLD = 50000 # 5萬防線
-        
-        if cash_value < VETO_THRESHOLD:
-            st.error(f"""
-            ### ⛔ 系統鎖定：現金否決權生效
-            **目前現金水位：${cash_value:,.0f} < ${VETO_THRESHOLD:,.0f}**
-            
-            依據《個人操作手冊 v8.72》第 1.2 條：
-            1. 禁止任何買進操作 (含 0050/台積/正二)。
-            2. 停止所有高級操作功能。
-            3. 請優先處理現金流問題。
-            """)
-            # 選項 A: 激進模式 - 直接停止程式往下跑
-            # st.stop() 
-            
-            # 選項 B: 溫和模式 - 顯示巨大警告，但保留檢視功能 (建議先用 B)
-            st.markdown("---")
-except Exception as e:
-    pass # 避免因為讀不到現金欄位而讓整個程式掛掉
-
 # 決定標題日期字串
 date_str = ""
 if not df_F.empty:
@@ -230,15 +197,10 @@ if not df_C.empty:
             
             ldr_val_num = dm.safe_float(ldr_raw)
             ldr_ratio = ldr_val_num / 100.0 if ldr_val_num > 5 else ldr_val_num
-            e_ratio = lev / 100.0 if lev > 5 else lev 
-            
-            if e_ratio < 0.95: safe_l, hot_l = 1.05, 1.08
-            elif e_ratio < 1.05: safe_l, hot_l = 1.03, 1.06
-            else: safe_l, hot_l = 1.01, 1.03
             
             if ldr_ratio <= 1.0: ldr_status_txt, ldr_color = "黃金結構", "#28a745"
-            elif ldr_ratio <= safe_l: ldr_status_txt, ldr_color = "偏熱", "#ffc107"
-            elif ldr_ratio <= hot_l: ldr_status_txt, ldr_color = "過熱", "#fd7e14"
+            elif ldr_ratio <= 1.05: ldr_status_txt, ldr_color = "偏熱", "#ffc107"
+            elif ldr_ratio < 1.08: ldr_status_txt, ldr_color = "過熱", "#fd7e14"
             else: ldr_status_txt, ldr_color = "危險", "#dc3545"
             
             ldr_display = f"{ldr_val_num:.2f}%<div style='font-size: 1rem; line-height: 1.0; margin-top: 2px;'>{ldr_status_txt}</div>"
@@ -267,7 +229,7 @@ if not df_C.empty:
                 else: p_status, p_color = "危險", "#dc3545"
             
             pledge_display = f"{pledge_val:.2f}%<div style='font-size: 1rem; line-height: 1.0; margin-top: 2px; white-space: normal; word-break: break-word;'>{p_status}</div>"
-            unwind_rate = dm.fmt_pct(latest.get('建議拆倉比例', 0))
+            
             fw_col = next((c for c in df_h.columns if '飛輪' in c), None)
             flywheel_stage = str(latest.get(fw_col, 'N/A')) if fw_col else 'N/A'
             
@@ -295,7 +257,8 @@ if not df_C.empty:
             elif "黃" in risk_today: risk_color = "#ffc107"
             elif "綠" in risk_today: risk_color = "#28a745"
 
-            m_cols = st.columns(7)
+            # 將欄位數量從 7 改為 6，並移除建議拆倉
+            m_cols = st.columns(6)
             
             with m_cols[0]: st.markdown(vis.render_mini_metric("LDR", ldr_display, ldr_color), unsafe_allow_html=True)
             with m_cols[1]:
@@ -309,8 +272,7 @@ if not df_C.empty:
                 st.markdown(vis.render_mini_metric("風險等級", risk_display_html, risk_color), unsafe_allow_html=True)
                 
             with m_cols[2]: st.markdown(vis.render_mini_metric("質押率", pledge_display, p_color), unsafe_allow_html=True)
-            with m_cols[3]: st.markdown(vis.render_mini_metric("建議拆倉", unwind_rate, "#dc3545" if dm.safe_float(unwind_rate) > 0 else "black"), unsafe_allow_html=True)
-            with m_cols[4]:
+            with m_cols[3]:
                 bias_display = "N/A"
                 if bias_val != "N/A":
                         bv = dm.safe_float(bias_val)
@@ -318,8 +280,8 @@ if not df_C.empty:
                         bias_display = f"{bv:.2f}%"
                 val_str = f"{market_pos}<div style='font-size: 1rem; line-height: 1.0; margin-top: 2px;'>{bias_display}</div>"
                 st.markdown(vis.render_mini_metric("盤勢", val_str), unsafe_allow_html=True)
-            with m_cols[5]: st.markdown(vis.render_mini_metric("飛輪階段", flywheel_stage), unsafe_allow_html=True)
-            with m_cols[6]:
+            with m_cols[4]: st.markdown(vis.render_mini_metric("飛輪階段", flywheel_stage), unsafe_allow_html=True)
+            with m_cols[5]:
                 v_html = vix_status
                 match = re.search(r"(.+?)\s*([\(（].+?[\)）])", vix_status, re.DOTALL)
                 if match:
@@ -498,4 +460,3 @@ if not df_G.empty:
         st.dataframe(df_G, use_container_width=True)
 else:
     st.info("無財富藍圖資料")
-
