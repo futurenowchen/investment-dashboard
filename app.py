@@ -233,23 +233,18 @@ if not df_C.empty:
             fw_col = next((c for c in df_h.columns if '飛輪' in c), None)
             flywheel_stage = str(latest.get(fw_col, 'N/A')) if fw_col else 'N/A'
             
-            bias_val = "N/A"
-            if not df_Market.empty:
-                b_col = next((c for c in df_Market.columns if '乖離' in c), None)
-                if b_col:
-                    valid_rows = df_Market[df_Market[b_col].astype(str).str.strip() != '']
-                    if not valid_rows.empty: bias_val = valid_rows.iloc[-1][b_col]
+            bias_col = next((c for c in df_h.columns if '乖離' in c), None)
+            bias_val = str(latest.get(bias_col, 'N/A')) if bias_col else 'N/A'
             
             vix_val, vix_status = "N/A", ""
-            if not df_Global.empty:
-                code_col = next((c for c in df_Global.columns if '代碼' in c), None)
-                if code_col:
-                    vix_row = df_Global[df_Global[code_col].astype(str).str.strip().str.upper() == 'VIX']
-                    if not vix_row.empty:
-                        p_col = next((c for c in df_Global.columns if '價格' in c), None)
-                        s_col = next((c for c in df_Global.columns if '狀態' in c), None)
-                        if p_col: vix_val = vix_row.iloc[0].get(p_col, 'N/A')
-                        if s_col: vix_status = vix_row.iloc[0].get(s_col, '')
+            if not df_Market.empty:
+                idx_col = df_Market.columns[0]
+                vix_row = df_Market[df_Market[idx_col].astype(str).str.strip().str.upper() == 'VIX']
+                if not vix_row.empty:
+                    if len(df_Market.columns) >= 2:
+                        vix_val = str(vix_row.iloc[0].iloc[1]).strip()
+                    if len(df_Market.columns) >= 4:
+                        vix_status = str(vix_row.iloc[0].iloc[3]).strip()
 
             risk_color = "black"
             if "紅" in risk_today: risk_color = "#dc3545"
