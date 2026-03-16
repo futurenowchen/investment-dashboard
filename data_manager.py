@@ -216,54 +216,71 @@ def generate_daily_report(df_A, df_C, df_D, df_E, df_F, df_H, live_prices_dict, 
     else:
         lines.append("無數據")
     
-    # --- 即時監控面板 (取代原表H與表F即時資料) ---
-    lines.append("\n[即時監控面板]")
+# --- 即時監控面板 (取代原表H與表F即時資料) ---
+    lines.append("\n[即時狀態監控]")
     if not df_LiveBoard.empty:
         try:
             df_live = df_LiveBoard.copy()
-            # 假設即時面板為橫向資料，取最後一筆狀態列
-            latest = df_live.iloc[-1] 
             
-            col_ldr = find_col(df_live.columns, 'LDR')
-            col_risk = find_col(df_live.columns, '風險')
-            col_pledge = find_col(df_live.columns, '質押')
-            col_unwind = find_col(df_live.columns, '拆倉')
-            col_fw = find_col(df_live.columns, '飛輪')
-            col_bias = find_col(df_live.columns, '乖離')
-            col_cmd = find_col(df_live.columns, '指令')
+            # --- 尋找「每日判斷」的標題錨點 (Row 9) 與數值 (Row 10) ---
+            found_idx = None
+            for idx, row in df_live.iterrows():
+                # 若該列包含這些關鍵字，即判定為標題列
+                if any(isinstance(val, str) and ('LDR' in val or '風險' in val or '指令' in val) for val in row.values):
+                    found_idx = idx
+                    break
+            
+            if found_idx is not None and found_idx + 1 < len(df_live):
+                headers = df_live.iloc[found_idx].values
+                latest = df_live.iloc[found_idx + 1].values
+                
+                # 建立搜尋小工具
+                def get_val(keyword):
+                    for i, h in enumerate(headers):
+                        if isinstance(h, str) and keyword in h:
+                            return latest[i]
+                    return 'N/A'
+                
+                ldr = str(get_val('LDR'))
+                risk = str(get_val('風險'))
+                
+                raw_pledge = safe_float(get_val('質押'))
+                pledge = fmt_pct(raw_pledge) if raw_pledge else '0%'
+                
+                raw_unwind = safe_float(get_val('拆倉'))
+                unwind = fmt_pct(raw_unwind) if raw_unwind else '0%'
+                
+                flywheel = str(get_val('飛輪'))
+                bias = str(get_val('乖離'))
+                
+                cmd_val = str(get_val('指令'))
+                cmd = re.sub(r"【Debug.*?】", "", cmd_val, flags=re.DOTALL).strip()
+                
+                lines.append(f"LDR：{ldr}")
+                lines.append(f"風險等級：{risk}")
+                lines.append(f"質押率：{pledge}")
+                lines.append(f"建議拆倉：{unwind}")
+                lines.append(f"飛輪階段：{flywheel}")
+                lines.append(f"季線乖離：{bias}")
+                
+                # --- 新增：台灣加權指數 (維持從 Global 讀取) ---
+                if not df_Global.empty and len(df_Global) >= 8:
+                    try:
+                        row_data = df_Global.iloc[7] 
+                        idx_val = row_data.iloc[2]
+                        chg_val = row_data.iloc[3]
+                        
+                        idx_str = fmt_money(idx_val).replace('.00', '')
+                        c_val = safe_float(chg_val)
+                        chg_str = f"{c_val:.2f}%"
+                        
+                        lines.append(f"臺灣加權指數：{idx_str} ({chg_str})")
+                    except: pass
 
-            ldr = str(latest.get(col_ldr, 'N/A')) if col_ldr else 'N/A'
-            risk = str(latest.get(col_risk, 'N/A')) if col_risk else 'N/A'
-            pledge = fmt_pct(latest.get(col_pledge, 0)) if col_pledge else '0%'
-            unwind = fmt_pct(latest.get(col_unwind, 0)) if col_unwind else '0%'
-            flywheel = str(latest.get(col_fw, 'N/A')) if col_fw else 'N/A'
-            bias = str(latest.get(col_bias, 'N/A')) if col_bias else 'N/A'
-            
-            cmd_val = str(latest.get(col_cmd, 'N/A')) if col_cmd else 'N/A'
-            cmd = re.sub(r"【Debug.*?】", "", cmd_val, flags=re.DOTALL).strip()
-            
-            lines.append(f"LDR：{ldr}")
-            lines.append(f"風險等級：{risk}")
-            lines.append(f"質押率：{pledge}")
-            lines.append(f"建議拆倉：{unwind}")
-            lines.append(f"飛輪階段：{flywheel}")
-            lines.append(f"季線乖離：{bias}")
-            
-            # --- 新增：台灣加權指數 (C9, D9) ---
-            if not df_Global.empty and len(df_Global) >= 8:
-                try:
-                    row_data = df_Global.iloc[7] 
-                    idx_val = row_data.iloc[2]
-                    chg_val = row_data.iloc[3]
-                    
-                    idx_str = fmt_money(idx_val).replace('.00', '')
-                    c_val = safe_float(chg_val)
-                    chg_str = f"{c_val:.2f}%"
-                    
-                    lines.append(f"臺灣加權指數：{idx_str} ({chg_str})")
-                except: pass
-
-            lines.append(f"指令：{cmd}")
+                lines.append(f"指令：{cmd}")
+            else:
+                lines.append("找不到即時面板的判斷資料錨點")
+                
         except Exception as e: 
             lines.append(f"即時面板解析錯誤: {e}")
 
