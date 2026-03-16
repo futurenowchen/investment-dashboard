@@ -176,123 +176,162 @@ if not df_C.empty:
                 st.error("資料讀取錯誤")
             
         # Bottom Row: Mindset Reminder
-        if not df_LiveBoard.empty: # 改從 LiveBoard 抓取心態
+        if not df_LiveBoard.empty:
             try:
                 df_live_temp = df_LiveBoard.copy()
-                latest_row = df_live_temp.iloc[-1]
-                mindset_col = next((c for c in df_live_temp.columns if '心態' in str(c) or '提醒' in str(c)), None)
-                if not mindset_col and len(df_live_temp.columns) > 10: mindset_col = df_live_temp.columns[10]
-                if mindset_col:
-                    mindset_text = str(latest_row.get(mindset_col, '')).strip()
-                    if mindset_text:
-                        st.markdown(vis.render_mindset_card(mindset_text), unsafe_allow_html=True)
+                # 使用自動定位邏輯尋找心態欄位，若沒有則直接取最後一列的特定欄位作為備案
+                mindset_text = ""
+                
+                # 尋找「每日判斷」的標題錨點
+                found_idx = None
+                for idx, row in df_live_temp.iterrows():
+                    if any(isinstance(val, str) and ('LDR' in val or '風險' in val or '指令' in val) for val in row.values):
+                        found_idx = idx
+                        break
+                        
+                if found_idx is not None and found_idx + 1 < len(df_live_temp):
+                    headers = df_live_temp.iloc[found_idx].values
+                    latest = df_live_temp.iloc[found_idx + 1].values
+                    
+                    for i, h in enumerate(headers):
+                         if isinstance(h, str) and ('心態' in h or '提醒' in h):
+                             mindset_text = str(latest[i]).strip()
+                             break
+                             
+                # 備案：如果上方沒找到，套用舊的 fallback 邏輯
+                if not mindset_text:
+                    latest_row = df_live_temp.iloc[-1]
+                    mindset_col = next((c for c in df_live_temp.columns if '心態' in str(c) or '提醒' in str(c)), None)
+                    if not mindset_col and len(df_live_temp.columns) > 10: mindset_col = df_live_temp.columns[10]
+                    if mindset_col:
+                        mindset_text = str(latest_row.get(mindset_col, '')).strip()
+
+                if mindset_text:
+                    st.markdown(vis.render_mindset_card(mindset_text), unsafe_allow_html=True)
             except: pass
 
     st.subheader('📅 今日判斷 & 市場狀態')
 
-    if not df_LiveBoard.empty: # 全面改為讀取 df_LiveBoard
+    if not df_LiveBoard.empty:
         try:
             df_live = df_LiveBoard.copy()
-            latest = df_live.iloc[-1]
             
-            ldr_raw = str(latest.get('LDR', 'N/A'))
-            risk_today = str(latest.get('風險', 'N/A')) # 根據上方對接修改為 '風險'
-            cmd = str(latest.get('指令', 'N/A'))     # 根據上方對接修改為 '指令'
-            cmd = re.sub(r"【Debug.*?】", "", cmd, flags=re.DOTALL).strip()
-            market_pos = str(latest.get('盤勢位置', 'N/A'))
+            # --- 尋找「每日判斷」的標題錨點 (Row 9) 與數值 (Row 10) ---
+            found_idx = None
+            for idx, row in df_live.iterrows():
+                if any(isinstance(val, str) and ('LDR' in val or '風險' in val or '指令' in val) for val in row.values):
+                    found_idx = idx
+                    break
             
-            ldr_val_num = dm.safe_float(ldr_raw)
-            ldr_ratio = ldr_val_num / 100.0 if ldr_val_num > 5 else ldr_val_num
-            
-            if ldr_ratio <= 1.0: ldr_status_txt, ldr_color = "黃金結構", "#28a745"
-            elif ldr_ratio <= 1.05: ldr_status_txt, ldr_color = "偏熱", "#ffc107"
-            elif ldr_ratio < 1.08: ldr_status_txt, ldr_color = "過熱", "#fd7e14"
-            else: ldr_status_txt, ldr_color = "危險", "#dc3545"
-            
-            ldr_display = f"{ldr_val_num:.2f}%<div style='font-size: 1rem; line-height: 1.0; margin-top: 2px;'>{ldr_status_txt}</div>"
-
-            raw_pledge = dm.safe_float(latest.get('質押率', 0))
-            pledge_val = raw_pledge * 100 if abs(raw_pledge) <= 5.0 else raw_pledge
-            
-            sheet_pledge_status = ""
-            if not df_C.empty:
-                 p_status_raw = dm.fuzzy_get(df_C.set_index(df_C.columns[0]), '質押率燈號')
-                 if p_status_raw: sheet_pledge_status = str(p_status_raw).strip()
-
-            if sheet_pledge_status:
-                 p_status = sheet_pledge_status
-                 if "安全" in p_status: p_color = "#28a745"
-                 elif "謹慎" in p_status: p_color = "#17a2b8"
-                 elif "高警戒" in p_status: p_color = "#fd7e14"
-                 elif "警戒" in p_status: p_color = "#ffc107"
-                 elif "危險" in p_status: p_color = "#dc3545"
-                 else: p_color = "black"
-            else:
-                if pledge_val < 30: p_status, p_color = "安全（絕對安全區）", "#28a745"
-                elif pledge_val < 35: p_status, p_color = "謹慎可開火區", "#17a2b8"
-                elif pledge_val < 40: p_status, p_color = "警戒（火力鎖定區）", "#ffc107"
-                elif pledge_val < 45: p_status, p_color = "高警戒", "#fd7e14"
-                else: p_status, p_color = "危險", "#dc3545"
-            
-            pledge_display = f"{pledge_val:.2f}%<div style='font-size: 1rem; line-height: 1.0; margin-top: 2px; white-space: normal; word-break: break-word;'>{p_status}</div>"
-            
-            fw_col = next((c for c in df_live.columns if '飛輪' in c), None)
-            flywheel_stage = str(latest.get(fw_col, 'N/A')) if fw_col else 'N/A'
-            
-            bias_col = next((c for c in df_live.columns if '乖離' in c), None)
-            bias_val = str(latest.get(bias_col, 'N/A')) if bias_col else 'N/A'
-            
-            vix_val, vix_status = "N/A", ""
-            if not df_Market.empty:
-                idx_col = df_Market.columns[0]
-                vix_row = df_Market[df_Market[idx_col].astype(str).str.strip().str.upper() == 'VIX']
-                if not vix_row.empty:
-                    if len(df_Market.columns) >= 2:
-                        vix_val = str(vix_row.iloc[0].iloc[1]).strip()
-                    if len(df_Market.columns) >= 4:
-                        vix_status = str(vix_row.iloc[0].iloc[3]).strip()
-
-            risk_color = "black"
-            if "紅" in risk_today: risk_color = "#dc3545"
-            elif "橘" in risk_today: risk_color = "#fd7e14"
-            elif "黃" in risk_today: risk_color = "#ffc107"
-            elif "綠" in risk_today: risk_color = "#28a745"
-
-            m_cols = st.columns(6)
-            
-            with m_cols[0]: st.markdown(vis.render_mini_metric("LDR", ldr_display, ldr_color), unsafe_allow_html=True)
-            with m_cols[1]:
-                match = re.search(r"(.+?)\s*([\(（].+?[\)）])", risk_today)
-                if match:
-                    r_main = match.group(1).strip()
-                    r_sub = match.group(2).strip()
-                    r_sub_clean = re.sub(r"[（）\(\)]", "", r_sub)
-                    risk_display_html = f"{r_main}<div style='font-size: 1rem; line-height: 1.0; margin-top: 2px; white-space: normal; word-break: break-word;'>{r_sub_clean}</div>"
-                else: risk_display_html = risk_today
-                st.markdown(vis.render_mini_metric("風險等級", risk_display_html, risk_color), unsafe_allow_html=True)
+            if found_idx is not None and found_idx + 1 < len(df_live):
+                headers = df_live.iloc[found_idx].values
+                latest = df_live.iloc[found_idx + 1].values
                 
-            with m_cols[2]: st.markdown(vis.render_mini_metric("質押率", pledge_display, p_color), unsafe_allow_html=True)
-            with m_cols[3]:
-                bias_display = "N/A"
-                if bias_val != "N/A":
-                        bv = dm.safe_float(bias_val)
-                        bias_display = f"{bv:.2f}%"
-                val_str = f"{market_pos}<div style='font-size: 1rem; line-height: 1.0; margin-top: 2px;'>{bias_display}</div>"
-                st.markdown(vis.render_mini_metric("盤勢", val_str), unsafe_allow_html=True)
-            with m_cols[4]: st.markdown(vis.render_mini_metric("飛輪階段", flywheel_stage), unsafe_allow_html=True)
-            with m_cols[5]:
-                v_html = vix_status
-                match = re.search(r"(.+?)\s*([\(（].+?[\)）])", vix_status, re.DOTALL)
-                if match:
-                    v_main = match.group(1).strip()
-                    v_sub = match.group(2).strip()
-                    v_sub_clean = re.sub(r"[（）\(\)]", "", v_sub).replace('\n', ' ')
-                    v_html = f"{v_main}<div style='font-size: 1rem; line-height: 1.3; margin-top: 2px; white-space: normal; color: gray;'>{v_sub_clean}</div>"
-                vix_display_html = f"{vix_val}<div style='font-size: 1rem; line-height: 1.2; margin-top: 2px;'>{v_html}</div>"
-                st.markdown(vis.render_mini_metric("VIX", vix_display_html), unsafe_allow_html=True) 
-            
-            st.markdown(f"<div style='font-size:1.1em;color:gray;margin-top:2px;margin-bottom:2px'>📊 操作指令 (60日乖離: {bias_val})</div>", unsafe_allow_html=True)
-            st.info(f"{cmd}")
+                # 建立搜尋小工具
+                def get_val(keyword):
+                    for i, h in enumerate(headers):
+                        if isinstance(h, str) and keyword in h:
+                            return latest[i]
+                    return 'N/A'
+
+                ldr_raw = str(get_val('LDR'))
+                risk_today = str(get_val('風險')) 
+                cmd = str(get_val('指令'))     
+                cmd = re.sub(r"【Debug.*?】", "", cmd, flags=re.DOTALL).strip()
+                market_pos = str(get_val('盤勢位置'))
+                
+                ldr_val_num = dm.safe_float(ldr_raw)
+                ldr_ratio = ldr_val_num / 100.0 if ldr_val_num > 5 else ldr_val_num
+                
+                if ldr_ratio <= 1.0: ldr_status_txt, ldr_color = "黃金結構", "#28a745"
+                elif ldr_ratio <= 1.05: ldr_status_txt, ldr_color = "偏熱", "#ffc107"
+                elif ldr_ratio < 1.08: ldr_status_txt, ldr_color = "過熱", "#fd7e14"
+                else: ldr_status_txt, ldr_color = "危險", "#dc3545"
+                
+                ldr_display = f"{ldr_val_num:.2f}%<div style='font-size: 1rem; line-height: 1.0; margin-top: 2px;'>{ldr_status_txt}</div>"
+
+                raw_pledge = dm.safe_float(get_val('質押率'))
+                if raw_pledge == 0: raw_pledge = dm.safe_float(get_val('質押')) # 容錯
+                pledge_val = raw_pledge * 100 if abs(raw_pledge) <= 5.0 else raw_pledge
+                
+                sheet_pledge_status = ""
+                if not df_C.empty:
+                     p_status_raw = dm.fuzzy_get(df_C.set_index(df_C.columns[0]), '質押率燈號')
+                     if p_status_raw: sheet_pledge_status = str(p_status_raw).strip()
+
+                if sheet_pledge_status:
+                     p_status = sheet_pledge_status
+                     if "安全" in p_status: p_color = "#28a745"
+                     elif "謹慎" in p_status: p_color = "#17a2b8"
+                     elif "高警戒" in p_status: p_color = "#fd7e14"
+                     elif "警戒" in p_status: p_color = "#ffc107"
+                     elif "危險" in p_status: p_color = "#dc3545"
+                     else: p_color = "black"
+                else:
+                    if pledge_val < 30: p_status, p_color = "安全（絕對安全區）", "#28a745"
+                    elif pledge_val < 35: p_status, p_color = "謹慎可開火區", "#17a2b8"
+                    elif pledge_val < 40: p_status, p_color = "警戒（火力鎖定區）", "#ffc107"
+                    elif pledge_val < 45: p_status, p_color = "高警戒", "#fd7e14"
+                    else: p_status, p_color = "危險", "#dc3545"
+                
+                pledge_display = f"{pledge_val:.2f}%<div style='font-size: 1rem; line-height: 1.0; margin-top: 2px; white-space: normal; word-break: break-word;'>{p_status}</div>"
+                
+                flywheel_stage = str(get_val('飛輪'))
+                bias_val = str(get_val('乖離'))
+                
+                vix_val, vix_status = "N/A", ""
+                if not df_Market.empty:
+                    idx_col = df_Market.columns[0]
+                    vix_row = df_Market[df_Market[idx_col].astype(str).str.strip().str.upper() == 'VIX']
+                    if not vix_row.empty:
+                        if len(df_Market.columns) >= 2:
+                            vix_val = str(vix_row.iloc[0].iloc[1]).strip()
+                        if len(df_Market.columns) >= 4:
+                            vix_status = str(vix_row.iloc[0].iloc[3]).strip()
+
+                risk_color = "black"
+                if "紅" in risk_today: risk_color = "#dc3545"
+                elif "橘" in risk_today: risk_color = "#fd7e14"
+                elif "黃" in risk_today: risk_color = "#ffc107"
+                elif "綠" in risk_today: risk_color = "#28a745"
+
+                m_cols = st.columns(6)
+                
+                with m_cols[0]: st.markdown(vis.render_mini_metric("LDR", ldr_display, ldr_color), unsafe_allow_html=True)
+                with m_cols[1]:
+                    match = re.search(r"(.+?)\s*([\(（].+?[\)）])", risk_today)
+                    if match:
+                        r_main = match.group(1).strip()
+                        r_sub = match.group(2).strip()
+                        r_sub_clean = re.sub(r"[（）\(\)]", "", r_sub)
+                        risk_display_html = f"{r_main}<div style='font-size: 1rem; line-height: 1.0; margin-top: 2px; white-space: normal; word-break: break-word;'>{r_sub_clean}</div>"
+                    else: risk_display_html = risk_today
+                    st.markdown(vis.render_mini_metric("風險等級", risk_display_html, risk_color), unsafe_allow_html=True)
+                    
+                with m_cols[2]: st.markdown(vis.render_mini_metric("質押率", pledge_display, p_color), unsafe_allow_html=True)
+                with m_cols[3]:
+                    bias_display = "N/A"
+                    if bias_val != "N/A":
+                            bv = dm.safe_float(bias_val)
+                            bias_display = f"{bv:.2f}%"
+                    val_str = f"{market_pos}<div style='font-size: 1rem; line-height: 1.0; margin-top: 2px;'>{bias_display}</div>"
+                    st.markdown(vis.render_mini_metric("盤勢", val_str), unsafe_allow_html=True)
+                with m_cols[4]: st.markdown(vis.render_mini_metric("飛輪階段", flywheel_stage), unsafe_allow_html=True)
+                with m_cols[5]:
+                    v_html = vix_status
+                    match = re.search(r"(.+?)\s*([\(（].+?[\)）])", vix_status, re.DOTALL)
+                    if match:
+                        v_main = match.group(1).strip()
+                        v_sub = match.group(2).strip()
+                        v_sub_clean = re.sub(r"[（）\(\)]", "", v_sub).replace('\n', ' ')
+                        v_html = f"{v_main}<div style='font-size: 1rem; line-height: 1.3; margin-top: 2px; white-space: normal; color: gray;'>{v_sub_clean}</div>"
+                    vix_display_html = f"{vix_val}<div style='font-size: 1rem; line-height: 1.2; margin-top: 2px;'>{v_html}</div>"
+                    st.markdown(vis.render_mini_metric("VIX", vix_display_html), unsafe_allow_html=True) 
+                
+                st.markdown(f"<div style='font-size:1.1em;color:gray;margin-top:2px;margin-bottom:2px'>📊 操作指令 (60日乖離: {bias_val})</div>", unsafe_allow_html=True)
+                st.info(f"{cmd}")
+            else:
+                st.warning("⚠️ 找不到即時監控面板中的判斷資料錨點 (Row 9)。請檢查 Google Sheets 中是否包含 LDR、風險或指令的標題列。")
         except Exception as e: st.error(f"解析判斷數據時發生錯誤: {e}")
 
 else: st.warning('總覽數據載入失敗。請檢查 Secrets 設定或試算表網址。')
