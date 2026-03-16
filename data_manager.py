@@ -217,7 +217,7 @@ def generate_daily_report(df_A, df_C, df_D, df_E, df_F, df_H, live_prices_dict, 
         lines.append("無數據")
     
 # --- 即時監控面板 (取代原表H與表F即時資料) ---
-    lines.append("\n[即時狀態監控]")
+    lines.append("\n[即時監控面板]")
     if not df_LiveBoard.empty:
         try:
             df_live = df_LiveBoard.copy()
