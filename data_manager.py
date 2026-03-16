@@ -160,11 +160,12 @@ def write_prices_to_sheet(df_A, updates):
     except: return False
 
 # --- 文字日報生成函式 ---
-def generate_daily_report(df_A, df_C, df_D, df_E, df_F, df_H, live_prices_dict, df_Global=pd.DataFrame()):
+def generate_daily_report(df_A, df_C, df_D, df_E, df_F, df_H, live_prices_dict, df_Global=pd.DataFrame(), df_LiveBoard=pd.DataFrame()):
     """
     生成文字日報
     注意：live_prices_dict 需由外部傳入 st.session_state['live_prices']
     df_Global: 傳入 Global 表格資料以讀取指數資訊
+    df_LiveBoard: 傳入即時監控面板資料
     """
     lines = []
     today = datetime.now().strftime('%Y/%m/%d')
@@ -215,20 +216,21 @@ def generate_daily_report(df_A, df_C, df_D, df_E, df_F, df_H, live_prices_dict, 
     else:
         lines.append("無數據")
     
-    # --- 表H 每日判斷 ---
-    lines.append("\n[表H_每日判斷]")
-    if not df_H.empty:
+    # --- 即時監控面板 (取代原表H與表F即時資料) ---
+    lines.append("\n[即時狀態監控]")
+    if not df_LiveBoard.empty:
         try:
-            df_h = df_H.copy()
-            latest = df_h.iloc[-1]
+            df_live = df_LiveBoard.copy()
+            # 假設即時面板為橫向資料，取最後一筆狀態列
+            latest = df_live.iloc[-1] 
             
-            col_ldr = find_col(df_h.columns, 'LDR')
-            col_risk = find_col(df_h.columns, '風險')
-            col_pledge = find_col(df_h.columns, '質押')
-            col_unwind = find_col(df_h.columns, '拆倉')
-            col_fw = find_col(df_h.columns, '飛輪')
-            col_bias = find_col(df_h.columns, '乖離')
-            col_cmd = find_col(df_h.columns, '指令')
+            col_ldr = find_col(df_live.columns, 'LDR')
+            col_risk = find_col(df_live.columns, '風險')
+            col_pledge = find_col(df_live.columns, '質押')
+            col_unwind = find_col(df_live.columns, '拆倉')
+            col_fw = find_col(df_live.columns, '飛輪')
+            col_bias = find_col(df_live.columns, '乖離')
+            col_cmd = find_col(df_live.columns, '指令')
 
             ldr = str(latest.get(col_ldr, 'N/A')) if col_ldr else 'N/A'
             risk = str(latest.get(col_risk, 'N/A')) if col_risk else 'N/A'
@@ -248,17 +250,13 @@ def generate_daily_report(df_A, df_C, df_D, df_E, df_F, df_H, live_prices_dict, 
             lines.append(f"季線乖離：{bias}")
             
             # --- 新增：台灣加權指數 (C9, D9) ---
-            # Excel Row 9 is Index 7 in DataFrame (Header is Row 1)
-            # Col C is index 2, Col D is index 3
             if not df_Global.empty and len(df_Global) >= 8:
                 try:
                     row_data = df_Global.iloc[7] 
                     idx_val = row_data.iloc[2]
                     chg_val = row_data.iloc[3]
                     
-                    idx_str = fmt_money(idx_val).replace('.00', '') # 去除多餘小數點
-                    
-                    # 修正：直接將數值加上 %，不進行倍率轉換
+                    idx_str = fmt_money(idx_val).replace('.00', '')
                     c_val = safe_float(chg_val)
                     chg_str = f"{c_val:.2f}%"
                     
@@ -266,7 +264,8 @@ def generate_daily_report(df_A, df_C, df_D, df_E, df_F, df_H, live_prices_dict, 
                 except: pass
 
             lines.append(f"指令：{cmd}")
-        except: lines.append("表H解析錯誤")
+        except Exception as e: 
+            lines.append(f"即時面板解析錯誤: {e}")
 
     # --- 表A 持股 ---
     lines.append("\n[表A]")
@@ -283,7 +282,7 @@ def generate_daily_report(df_A, df_C, df_D, df_E, df_F, df_H, live_prices_dict, 
             
             # 修正順序：表A 收盤價 (手動最優先) > 表A 即時收盤價 > API 價格 > 成交價
             price_candidates = [
-                row.get('收盤價'),     # 最高優先 (User 手動 key)
+                row.get('收盤價'),      # 最高優先 (User 手動 key)
                 row.get('即時收盤價'), # Google Finance
                 live_p,               # Yahoo Finance API
                 row.get('成交價')      # 最後備援
