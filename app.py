@@ -16,7 +16,7 @@ if 'live_prices' not in st.session_state:
 
 # === 主程式 ===
 
-# 載入所有資料
+# 載入所有資料 (新增即時監控面板)
 df_A = dm.load_data('表A_持股總表')
 df_B = dm.load_data('表B_持股比例')
 df_C = dm.load_data('表C_總覽')
@@ -27,6 +27,7 @@ df_G = dm.load_data('表G_財富藍圖')
 df_H = dm.load_data('表H_每日判斷')
 df_Market = dm.load_data('Market')
 df_Global = dm.load_data('Global')
+df_LiveBoard = dm.load_data('即時監控面板') # 新增這行
 
 # 決定標題日期字串
 date_str = ""
@@ -69,8 +70,13 @@ if st.sidebar.button("💾 更新股價至 Google Sheets", type="primary"):
 st.sidebar.markdown("---")
 st.sidebar.subheader("📋 匯出功能")
 if st.sidebar.button("產生文字日報"):
-    # 呼叫 data_manager 中的生成函式，加入 df_Global
-    report_text = dm.generate_daily_report(df_A, df_C, df_D, df_E, df_F, df_H, st.session_state['live_prices'], df_Global)
+    # 呼叫 data_manager 中的生成函式，加入 df_LiveBoard
+    report_text = dm.generate_daily_report(
+        df_A, df_C, df_D, df_E, df_F, df_H, 
+        st.session_state['live_prices'], 
+        df_Global, 
+        df_LiveBoard # 新增這行
+    )
     st.sidebar.markdown("請點擊下方代碼區塊右上角的 **複製按鈕**：")
     st.sidebar.code(report_text, language='text')
 
@@ -170,12 +176,12 @@ if not df_C.empty:
                 st.error("資料讀取錯誤")
             
         # Bottom Row: Mindset Reminder
-        if not df_H.empty:
+        if not df_LiveBoard.empty: # 改從 LiveBoard 抓取心態
             try:
-                df_h_temp = df_H.copy()
-                latest_row = df_h_temp.iloc[-1]
-                mindset_col = next((c for c in df_h_temp.columns if '心態' in str(c) or '提醒' in str(c)), None)
-                if not mindset_col and len(df_h_temp.columns) > 10: mindset_col = df_h_temp.columns[10]
+                df_live_temp = df_LiveBoard.copy()
+                latest_row = df_live_temp.iloc[-1]
+                mindset_col = next((c for c in df_live_temp.columns if '心態' in str(c) or '提醒' in str(c)), None)
+                if not mindset_col and len(df_live_temp.columns) > 10: mindset_col = df_live_temp.columns[10]
                 if mindset_col:
                     mindset_text = str(latest_row.get(mindset_col, '')).strip()
                     if mindset_text:
@@ -184,14 +190,14 @@ if not df_C.empty:
 
     st.subheader('📅 今日判斷 & 市場狀態')
 
-    if not df_H.empty:
+    if not df_LiveBoard.empty: # 全面改為讀取 df_LiveBoard
         try:
-            df_h = df_H.copy()
-            latest = df_h.iloc[-1]
+            df_live = df_LiveBoard.copy()
+            latest = df_live.iloc[-1]
             
             ldr_raw = str(latest.get('LDR', 'N/A'))
-            risk_today = str(latest.get('今日風險等級', 'N/A'))
-            cmd = str(latest.get('今日指令', 'N/A'))
+            risk_today = str(latest.get('風險', 'N/A')) # 根據上方對接修改為 '風險'
+            cmd = str(latest.get('指令', 'N/A'))     # 根據上方對接修改為 '指令'
             cmd = re.sub(r"【Debug.*?】", "", cmd, flags=re.DOTALL).strip()
             market_pos = str(latest.get('盤勢位置', 'N/A'))
             
@@ -230,10 +236,10 @@ if not df_C.empty:
             
             pledge_display = f"{pledge_val:.2f}%<div style='font-size: 1rem; line-height: 1.0; margin-top: 2px; white-space: normal; word-break: break-word;'>{p_status}</div>"
             
-            fw_col = next((c for c in df_h.columns if '飛輪' in c), None)
+            fw_col = next((c for c in df_live.columns if '飛輪' in c), None)
             flywheel_stage = str(latest.get(fw_col, 'N/A')) if fw_col else 'N/A'
             
-            bias_col = next((c for c in df_h.columns if '乖離' in c), None)
+            bias_col = next((c for c in df_live.columns if '乖離' in c), None)
             bias_val = str(latest.get(bias_col, 'N/A')) if bias_col else 'N/A'
             
             vix_val, vix_status = "N/A", ""
@@ -252,7 +258,6 @@ if not df_C.empty:
             elif "黃" in risk_today: risk_color = "#ffc107"
             elif "綠" in risk_today: risk_color = "#28a745"
 
-            # 將欄位數量從 7 改為 6，並移除建議拆倉
             m_cols = st.columns(6)
             
             with m_cols[0]: st.markdown(vis.render_mini_metric("LDR", ldr_display, ldr_color), unsafe_allow_html=True)
@@ -271,7 +276,6 @@ if not df_C.empty:
                 bias_display = "N/A"
                 if bias_val != "N/A":
                         bv = dm.safe_float(bias_val)
-                        # 資料已是百分比格式，直接顯示
                         bias_display = f"{bv:.2f}%"
                 val_str = f"{market_pos}<div style='font-size: 1rem; line-height: 1.0; margin-top: 2px;'>{bias_display}</div>"
                 st.markdown(vis.render_mini_metric("盤勢", val_str), unsafe_allow_html=True)
