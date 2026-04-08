@@ -160,12 +160,10 @@ def write_prices_to_sheet(df_A, updates):
     except: return False
 
 # --- 文字日報生成函式 ---
-def generate_daily_report(df_A, df_C, df_D, df_E, df_F, df_H, live_prices_dict, df_Global=pd.DataFrame(), df_LiveBoard=pd.DataFrame()):
+def generate_daily_report(df_A, df_C, df_D, df_E, df_F, df_H, live_prices_dict, df_Market=pd.DataFrame()):
     """
     生成文字日報
-    注意：live_prices_dict 需由外部傳入 st.session_state['live_prices']
-    df_Global: 傳入 Global 表格資料以讀取指數資訊
-    df_LiveBoard: 傳入即時監控面板資料
+    df_Market: 傳入 Market 表格資料以讀取指數資訊
     """
     lines = []
     today = datetime.now().strftime('%Y/%m/%d')
@@ -216,73 +214,68 @@ def generate_daily_report(df_A, df_C, df_D, df_E, df_F, df_H, live_prices_dict, 
     else:
         lines.append("無數據")
     
-# --- 即時監控面板 (取代原表H與表F即時資料) ---
-    lines.append("\n[即時監控面板]")
-    if not df_LiveBoard.empty:
+    # --- 表H 每日判斷 ---
+    lines.append("\n[表H_每日判斷]")
+    if not df_H.empty:
         try:
-            df_live = df_LiveBoard.copy()
+            df_h = df_H.copy()
+            latest = df_h.iloc[-1]
             
-            # --- 尋找「每日判斷」的標題錨點 (Row 9) 與數值 (Row 10) ---
-            found_idx = None
-            for idx, row in df_live.iterrows():
-                # 若該列包含這些關鍵字，即判定為標題列
-                if any(isinstance(val, str) and ('LDR' in val or '風險' in val or '指令' in val) for val in row.values):
-                    found_idx = idx
-                    break
-            
-            if found_idx is not None and found_idx + 1 < len(df_live):
-                headers = df_live.iloc[found_idx].values
-                latest = df_live.iloc[found_idx + 1].values
-                
-                # 建立搜尋小工具
-                def get_val(keyword):
-                    for i, h in enumerate(headers):
-                        if isinstance(h, str) and keyword in h:
-                            return latest[i]
-                    return 'N/A'
-                
-                ldr = str(get_val('LDR'))
-                risk = str(get_val('風險'))
-                
-                raw_pledge = safe_float(get_val('質押'))
-                pledge = fmt_pct(raw_pledge) if raw_pledge else '0%'
-                
-                raw_unwind = safe_float(get_val('拆倉'))
-                unwind = fmt_pct(raw_unwind) if raw_unwind else '0%'
-                
-                flywheel = str(get_val('飛輪'))
-                bias = str(get_val('乖離'))
-                
-                cmd_val = str(get_val('指令'))
-                cmd = re.sub(r"【Debug.*?】", "", cmd_val, flags=re.DOTALL).strip()
-                
-                lines.append(f"LDR：{ldr}")
-                lines.append(f"風險等級：{risk}")
-                lines.append(f"質押率：{pledge}")
-                lines.append(f"建議拆倉：{unwind}")
-                lines.append(f"飛輪階段：{flywheel}")
-                lines.append(f"季線乖離：{bias}")
-                
-                # --- 新增：台灣加權指數 (維持從 Global 讀取) ---
-                if not df_Global.empty and len(df_Global) >= 8:
-                    try:
-                        row_data = df_Global.iloc[7] 
-                        idx_val = row_data.iloc[2]
-                        chg_val = row_data.iloc[3]
-                        
-                        idx_str = fmt_money(idx_val).replace('.00', '')
-                        c_val = safe_float(chg_val)
-                        chg_str = f"{c_val:.2f}%"
-                        
-                        lines.append(f"臺灣加權指數：{idx_str} ({chg_str})")
-                    except: pass
+            col_ldr = find_col(df_h.columns, 'LDR')
+            col_risk = find_col(df_h.columns, '風險')
+            col_pledge = find_col(df_h.columns, '質押')
+            col_fw = find_col(df_h.columns, '飛輪')
+            col_bias = find_col(df_h.columns, '乖離')
+            col_cmd = find_col(df_h.columns, '指令')
+            col_volr = find_col(df_h.columns, 'volR') or find_col(df_h.columns, '量能比')
+            col_rz = find_col(df_h.columns, 'RZ_Level')
 
-                lines.append(f"指令：{cmd}")
-            else:
-                lines.append("找不到即時面板的判斷資料錨點")
-                
-        except Exception as e: 
-            lines.append(f"即時面板解析錯誤: {e}")
+            ldr = str(latest.get(col_ldr, 'N/A')) if col_ldr else 'N/A'
+            risk = str(latest.get(col_risk, 'N/A')) if col_risk else 'N/A'
+            pledge = fmt_pct(latest.get(col_pledge, 0)) if col_pledge else '0%'
+            flywheel = str(latest.get(col_fw, 'N/A')) if col_fw else 'N/A'
+            bias = str(latest.get(col_bias, 'N/A')) if col_bias else 'N/A'
+            volr = str(latest.get(col_volr, 'N/A')) if col_volr else 'N/A'
+            rz = str(latest.get(col_rz, 'N/A')) if col_rz else 'N/A'
+            
+            cmd_val = str(latest.get(col_cmd, 'N/A')) if col_cmd else 'N/A'
+            cmd = re.sub(r"【Debug.*?】", "", cmd_val, flags=re.DOTALL).strip()
+            
+            # 從 df_F 獲取當日淨變動與當日波動率
+            net_change_str = "N/A"
+            vol_str = "N/A"
+            if not df_F.empty:
+                last_f = df_F.iloc[-1]
+                nc_val = safe_float(last_f.get('當日淨變動', 0))
+                net_change_str = f"+{fmt_int(nc_val)}" if nc_val > 0 else fmt_int(nc_val)
+                v_val = last_f.get('當日波動率', '0%')
+                vol_str = v_val if isinstance(v_val, str) and '%' in v_val else fmt_pct(v_val)
+
+            # 從 df_Market 獲取大盤指數與漲跌幅
+            idx_str = "N/A"
+            chg_str = "N/A"
+            if not df_Market.empty:
+                twse_row = df_Market[df_Market[df_Market.columns[0]].astype(str).str.strip() == '臺灣加權指數']
+                if not twse_row.empty:
+                    idx_val = twse_row.iloc[0].iloc[1]
+                    chg_val = twse_row.iloc[0].iloc[2]
+                    idx_str = fmt_money(idx_val).replace('.00', '') # 去除多餘小數點
+                    c_val = safe_float(chg_val)
+                    chg_str = f"{c_val:.2f}%"
+
+            # 組合輸出文字
+            lines.append(f"LDR：{ldr}")
+            lines.append(f"風險等級：{risk}")
+            lines.append(f"質押率：{pledge}")
+            lines.append(f"飛輪階段：{flywheel}")
+            lines.append(f"季線乖離：{bias}")
+            lines.append(f"當日淨變動：{net_change_str}")
+            lines.append(f"當日波動率：{vol_str}")
+            lines.append(f"量能比 (volR)：{volr}")
+            lines.append(f"RZ_Level：{rz}")
+            lines.append(f"大盤指數：{idx_str} ({chg_str})")
+            lines.append(f"指令：{cmd}")
+        except: lines.append("表H解析錯誤")
 
     # --- 表A 持股 ---
     lines.append("\n[表A]")
@@ -297,9 +290,9 @@ def generate_daily_report(df_A, df_C, df_D, df_E, df_F, df_H, live_prices_dict, 
             live_p = live_prices_dict.get(ticker)
             close_val = 0.0
             
-            # 修正順序：表A 收盤價 (手動最優先) > 表A 即時收盤價 > API 價格 > 成交價
+            # 順序：表A 收盤價 (手動最優先) > 表A 即時收盤價 > API 價格 > 成交價
             price_candidates = [
-                row.get('收盤價'),      # 最高優先 (User 手動 key)
+                row.get('收盤價'),     # 最高優先 (User 手動 key)
                 row.get('即時收盤價'), # Google Finance
                 live_p,               # Yahoo Finance API
                 row.get('成交價')      # 最後備援
