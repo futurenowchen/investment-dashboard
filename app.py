@@ -81,7 +81,111 @@ with st.sidebar.expander("🛠️ 連線狀態檢查"):
 st.sidebar.markdown("---")
 
 # ==========================================
-# 📅 今日判斷 & 市場狀態 (最優先顯示)
+# 1. 投資總覽 (八張卡片優先呈現)
+# ==========================================
+st.header('1. 投資總覽')
+
+# 準備總覽卡片數據
+tot_asset_str = "0"
+cash_str = "0"
+net_change_str = "0"
+vol_str = "0%"
+nc_color = "#212529"
+stock_value_str = "0"
+
+if not df_Monitor.empty:
+    tot_asset_str = dm.fmt_int(df_Monitor['總資產'].iloc[0]) if '總資產' in df_Monitor.columns else "0"
+    cash_str = dm.fmt_int(df_Monitor['現金'].iloc[0]) if '現金' in df_Monitor.columns else "0"
+    stock_value_str = dm.fmt_int(df_Monitor['股票市值'].iloc[0]) if '股票市值' in df_Monitor.columns else "0"
+    
+    nc_val = dm.safe_float(df_Monitor['當日淨變動'].iloc[0]) if '當日淨變動' in df_Monitor.columns else 0
+    net_change_str = f"+{dm.fmt_int(nc_val)}" if nc_val > 0 else dm.fmt_int(nc_val)
+    if nc_val > 0: nc_color = "#dc3545" 
+    elif nc_val < 0: nc_color = "#28a745"
+    
+    v_val = df_Monitor['當日波動率'].iloc[0] if '當日波動率' in df_Monitor.columns else '0%'
+    vol_str = v_val if isinstance(v_val, str) and '%' in v_val else dm.fmt_pct(v_val)
+
+risk = '未知'
+risk_txt = '未知'
+style = {'e':'❓', 'bg':'#6c757d', 't':'white'}
+target = 0
+gap = 0
+pct = 0.0
+dp_target = 0
+est_year = "N/A"
+r_display = "N/A"
+
+if not df_C.empty:
+    df_c = df_C.copy()
+    first_col = df_c.columns[0]
+    df_c[first_col] = df_c[first_col].astype(str).str.strip()
+    df_c.set_index(first_col, inplace=True)
+    col_val = df_c.columns[0]
+    
+    risk = str(df_c.loc['E風險燈號', col_val]) if 'E風險燈號' in df_c.index else str(df_c.loc['β風險燈號', col_val]) if 'β風險燈號' in df_c.index else '未知'
+    risk_txt = re.sub(r'\s+', '', risk)
+    val_lev = df_c.loc['曝險指標 E', col_val] if '曝險指標 E' in df_c.index else df_c.loc['槓桿倍數β', col_val] if '槓桿倍數β' in df_c.index else 0
+    lev = dm.safe_float(val_lev)
+
+    if '安全' in risk_txt: style = {'e':'✅', 'bg':'#28a745', 't':'white'}
+    elif '警戒' in risk_txt or '警示' in risk_txt: style = {'e':'⚠️', 'bg':'#ffc107', 't':'black'}
+    elif '危險' in risk_txt: style = {'e':'🚨', 'bg':'#dc3545', 't':'white'}
+
+    target = dm.safe_float(df_c.loc['短期財務目標', col_val]) if '短期財務目標' in df_c.index else 0
+    gap = dm.safe_float(df_c.loc['短期財務目標差距', col_val]) if '短期財務目標差距' in df_c.index else 0
+    if target > 0:
+        curr = target - gap
+        pct = max(0.0, min(1.0, curr/target))
+
+    if '頭期款目標' in df_c.index: dp_target = dm.safe_float(df_c.loc['頭期款目標', col_val])
+    elif '頭期款' in df_c.index: dp_target = dm.safe_float(df_c.loc['頭期款', col_val])
+    
+    r_val_raw = None
+    if '目標房屋準備度R' in df_c.index: r_val_raw = df_c.loc['目標房屋準備度R', col_val]
+    elif '房屋準備度R' in df_c.index: r_val_raw = df_c.loc['房屋準備度R', col_val]
+        
+    if '預估買房年份' in df_c.index: est_year = str(df_c.loc['預估買房年份', col_val])
+    
+    if r_val_raw is not None:
+        if isinstance(r_val_raw, str) and '%' in r_val_raw: r_display = r_val_raw
+        else:
+            r_float = dm.safe_float(r_val_raw)
+            if r_float != 0: 
+                if abs(r_float) <= 5.0: r_display = f"{r_float*100:.2f}%"
+                else: r_display = f"{r_float:.2f}%"
+            else: r_display = str(r_val_raw)
+
+# 第一排卡片：總資產、現金、當日淨變動、當日波動率
+row1_col1, row1_col2, row1_col3, row1_col4 = st.columns(4)
+
+with row1_col1:
+    st.markdown(vis.render_simple_card('總資產', tot_asset_str), unsafe_allow_html=True)
+with row1_col2:
+    st.markdown(vis.render_simple_card('現金', cash_str), unsafe_allow_html=True)
+with row1_col3:
+    st.markdown(vis.render_simple_card('當日淨變動', net_change_str, nc_color), unsafe_allow_html=True)
+with row1_col4:
+    st.markdown(vis.render_simple_card('當日波動率', vol_str), unsafe_allow_html=True)
+
+st.write("") # 增加一點間距
+
+# 第二排卡片：股票市值、曝險指標、短期目標、買房計畫
+row2_col1, row2_col2, row2_col3, row2_col4 = st.columns(4)
+
+with row2_col1:
+    st.markdown(vis.render_simple_card('股票市值', stock_value_str), unsafe_allow_html=True)
+with row2_col2:
+    st.markdown(vis.render_risk_metric_card(risk, lev, style), unsafe_allow_html=True)
+with row2_col3:
+    st.markdown(vis.render_goal_progress_card(target, gap, pct), unsafe_allow_html=True)
+with row2_col4:
+    st.markdown(vis.render_house_plan_card(r_display, dp_target, est_year), unsafe_allow_html=True)
+
+st.markdown("---")
+
+# ==========================================
+# 📅 今日判斷 & 市場狀態
 # ==========================================
 st.subheader('📅 今日判斷 & 市場狀態')
 
@@ -211,110 +315,6 @@ if monitor_bottom_dict:
             
     except Exception as e: st.error(f"解析判斷數據時發生錯誤: {e}")
 else: st.warning('總覽數據載入失敗。請檢查 Secrets 設定或試算表網址。')
-
-st.markdown("---")
-
-# ==========================================
-# 1. 投資總覽
-# ==========================================
-st.header('1. 投資總覽')
-
-# 準備總覽卡片數據
-tot_asset_str = "0"
-cash_str = "0"
-net_change_str = "0"
-vol_str = "0%"
-nc_color = "#212529"
-stock_value_str = "0"
-
-if not df_Monitor.empty:
-    tot_asset_str = dm.fmt_int(df_Monitor['總資產'].iloc[0]) if '總資產' in df_Monitor.columns else "0"
-    cash_str = dm.fmt_int(df_Monitor['現金'].iloc[0]) if '現金' in df_Monitor.columns else "0"
-    stock_value_str = dm.fmt_int(df_Monitor['股票市值'].iloc[0]) if '股票市值' in df_Monitor.columns else "0"
-    
-    nc_val = dm.safe_float(df_Monitor['當日淨變動'].iloc[0]) if '當日淨變動' in df_Monitor.columns else 0
-    net_change_str = f"+{dm.fmt_int(nc_val)}" if nc_val > 0 else dm.fmt_int(nc_val)
-    if nc_val > 0: nc_color = "#dc3545" 
-    elif nc_val < 0: nc_color = "#28a745"
-    
-    v_val = df_Monitor['當日波動率'].iloc[0] if '當日波動率' in df_Monitor.columns else '0%'
-    vol_str = v_val if isinstance(v_val, str) and '%' in v_val else dm.fmt_pct(v_val)
-
-risk = '未知'
-risk_txt = '未知'
-style = {'e':'❓', 'bg':'#6c757d', 't':'white'}
-target = 0
-gap = 0
-pct = 0.0
-dp_target = 0
-est_year = "N/A"
-r_display = "N/A"
-
-if not df_C.empty:
-    df_c = df_C.copy()
-    first_col = df_c.columns[0]
-    df_c[first_col] = df_c[first_col].astype(str).str.strip()
-    df_c.set_index(first_col, inplace=True)
-    col_val = df_c.columns[0]
-    
-    risk = str(df_c.loc['E風險燈號', col_val]) if 'E風險燈號' in df_c.index else str(df_c.loc['β風險燈號', col_val]) if 'β風險燈號' in df_c.index else '未知'
-    risk_txt = re.sub(r'\s+', '', risk)
-    val_lev = df_c.loc['曝險指標 E', col_val] if '曝險指標 E' in df_c.index else df_c.loc['槓桿倍數β', col_val] if '槓桿倍數β' in df_c.index else 0
-    lev = dm.safe_float(val_lev)
-
-    if '安全' in risk_txt: style = {'e':'✅', 'bg':'#28a745', 't':'white'}
-    elif '警戒' in risk_txt or '警示' in risk_txt: style = {'e':'⚠️', 'bg':'#ffc107', 't':'black'}
-    elif '危險' in risk_txt: style = {'e':'🚨', 'bg':'#dc3545', 't':'white'}
-
-    target = dm.safe_float(df_c.loc['短期財務目標', col_val]) if '短期財務目標' in df_c.index else 0
-    gap = dm.safe_float(df_c.loc['短期財務目標差距', col_val]) if '短期財務目標差距' in df_c.index else 0
-    if target > 0:
-        curr = target - gap
-        pct = max(0.0, min(1.0, curr/target))
-
-    if '頭期款目標' in df_c.index: dp_target = dm.safe_float(df_c.loc['頭期款目標', col_val])
-    elif '頭期款' in df_c.index: dp_target = dm.safe_float(df_c.loc['頭期款', col_val])
-    
-    r_val_raw = None
-    if '目標房屋準備度R' in df_c.index: r_val_raw = df_c.loc['目標房屋準備度R', col_val]
-    elif '房屋準備度R' in df_c.index: r_val_raw = df_c.loc['房屋準備度R', col_val]
-        
-    if '預估買房年份' in df_c.index: est_year = str(df_c.loc['預估買房年份', col_val])
-    
-    if r_val_raw is not None:
-        if isinstance(r_val_raw, str) and '%' in r_val_raw: r_display = r_val_raw
-        else:
-            r_float = dm.safe_float(r_val_raw)
-            if r_float != 0: 
-                if abs(r_float) <= 5.0: r_display = f"{r_float*100:.2f}%"
-                else: r_display = f"{r_float:.2f}%"
-            else: r_display = str(r_val_raw)
-
-# 第一排卡片：總資產、現金、當日淨變動、當日波動率
-row1_col1, row1_col2, row1_col3, row1_col4 = st.columns(4)
-
-with row1_col1:
-    st.markdown(vis.render_simple_card('總資產', tot_asset_str), unsafe_allow_html=True)
-with row1_col2:
-    st.markdown(vis.render_simple_card('現金', cash_str), unsafe_allow_html=True)
-with row1_col3:
-    st.markdown(vis.render_simple_card('當日淨變動', net_change_str, nc_color), unsafe_allow_html=True)
-with row1_col4:
-    st.markdown(vis.render_simple_card('當日波動率', vol_str), unsafe_allow_html=True)
-
-st.write("") # 增加一點間距
-
-# 第二排卡片：股票市值、曝險指標、短期目標、買房計畫
-row2_col1, row2_col2, row2_col3, row2_col4 = st.columns(4)
-
-with row2_col1:
-    st.markdown(vis.render_simple_card('股票市值', stock_value_str), unsafe_allow_html=True)
-with row2_col2:
-    st.markdown(vis.render_risk_metric_card(risk, lev, style), unsafe_allow_html=True)
-with row2_col3:
-    st.markdown(vis.render_goal_progress_card(target, gap, pct), unsafe_allow_html=True)
-with row2_col4:
-    st.markdown(vis.render_house_plan_card(r_display, dp_target, est_year), unsafe_allow_html=True)
 
 st.markdown("---")
 
