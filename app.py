@@ -168,8 +168,6 @@ with row1_col3:
 with row1_col4:
     st.markdown(vis.render_simple_card('當日波動率', vol_str), unsafe_allow_html=True)
 
-st.write("") # 增加一點間距
-
 # 第二排卡片：股票市值、曝險指標、短期目標、買房計畫
 row2_col1, row2_col2, row2_col3, row2_col4 = st.columns(4)
 
@@ -182,12 +180,10 @@ with row2_col3:
 with row2_col4:
     st.markdown(vis.render_house_plan_card(r_display, dp_target, est_year), unsafe_allow_html=True)
 
-st.markdown("---")
-
 # ==========================================
 # 📅 今日判斷 & 市場狀態
 # ==========================================
-st.subheader('📅 今日判斷 & 市場狀態')
+st.markdown("<h3 style='margin-top: 0.5rem; margin-bottom: 0.5rem;'>📅 今日判斷 & 市場狀態</h3>", unsafe_allow_html=True)
 
 monitor_bottom_dict = {}
 if not df_Monitor.empty:
