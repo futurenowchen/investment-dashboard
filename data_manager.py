@@ -160,9 +160,10 @@ def write_prices_to_sheet(df_A, updates):
     except: return False
 
 # --- 文字日報生成函式 ---
-def generate_daily_report(df_A, df_C, df_D, df_E, df_F, df_H, live_prices_dict, df_Market=pd.DataFrame()):
+def generate_daily_report(df_A, df_C, df_D, df_E, df_F, df_Monitor, live_prices_dict, df_Market=pd.DataFrame()):
     """
     生成文字日報
+    df_Monitor: 傳入即時監控面板資料以讀取當日變動與判定
     df_Market: 傳入 Market 表格資料以讀取指數資訊
     """
     lines = []
@@ -214,43 +215,37 @@ def generate_daily_report(df_A, df_C, df_D, df_E, df_F, df_H, live_prices_dict, 
     else:
         lines.append("無數據")
     
-    # --- 表H 每日判斷 ---
-    lines.append("\n[表H_每日判斷]")
-    if not df_H.empty:
+    # --- 即時監控狀態 ---
+    lines.append("\n[即時監控狀態]")
+    if not df_Monitor.empty:
         try:
-            df_h = df_H.copy()
-            latest = df_h.iloc[-1]
-            
-            col_ldr = find_col(df_h.columns, 'LDR')
-            col_risk = find_col(df_h.columns, '風險')
-            col_pledge = find_col(df_h.columns, '質押')
-            col_fw = find_col(df_h.columns, '飛輪')
-            col_bias = find_col(df_h.columns, '乖離')
-            col_cmd = find_col(df_h.columns, '指令')
-            col_volr = find_col(df_h.columns, 'volR') or find_col(df_h.columns, '量能比')
-            col_rz = find_col(df_h.columns, 'RZ_Level')
+            # 提取上半部：淨變動與波動率
+            nc_val = safe_float(df_Monitor['當日淨變動'].iloc[0]) if '當日淨變動' in df_Monitor.columns else 0
+            net_change_str = f"+{fmt_int(nc_val)}" if nc_val > 0 else fmt_int(nc_val)
+            v_val = df_Monitor['當日波動率'].iloc[0] if '當日波動率' in df_Monitor.columns else '0%'
+            vol_str = v_val if isinstance(v_val, str) and '%' in v_val else fmt_pct(v_val)
 
-            ldr = str(latest.get(col_ldr, 'N/A')) if col_ldr else 'N/A'
-            risk = str(latest.get(col_risk, 'N/A')) if col_risk else 'N/A'
-            pledge = fmt_pct(latest.get(col_pledge, 0)) if col_pledge else '0%'
-            flywheel = str(latest.get(col_fw, 'N/A')) if col_fw else 'N/A'
-            bias = str(latest.get(col_bias, 'N/A')) if col_bias else 'N/A'
-            volr = str(latest.get(col_volr, 'N/A')) if col_volr else 'N/A'
-            rz = str(latest.get(col_rz, 'N/A')) if col_rz else 'N/A'
+            # 提取下半部：雙層表頭數據定位
+            monitor_bottom_dict = {}
+            for i, row in df_Monitor.iterrows():
+                if 'LDR' in row.values and '盤勢位置' in row.values:
+                    headers = row.astype(str).str.strip().tolist()
+                    if i + 1 < len(df_Monitor):
+                        values = df_Monitor.iloc[i + 1].tolist()
+                        monitor_bottom_dict = dict(zip(headers, values))
+                    break
+
+            ldr = str(monitor_bottom_dict.get('LDR', 'N/A'))
+            risk = str(monitor_bottom_dict.get('今日風險等級', 'N/A'))
+            pledge = fmt_pct(monitor_bottom_dict.get('總質押率', 0))
+            flywheel = str(monitor_bottom_dict.get('飛輪階段', 'N/A'))
+            bias = str(monitor_bottom_dict.get('季線乖離', 'N/A'))
+            volr = str(monitor_bottom_dict.get('量能比 (volR)', 'N/A'))
+            rz = str(monitor_bottom_dict.get('RZ_Level', 'N/A'))
             
-            cmd_val = str(latest.get(col_cmd, 'N/A')) if col_cmd else 'N/A'
+            cmd_val = str(monitor_bottom_dict.get('今日指令', 'N/A'))
             cmd = re.sub(r"【Debug.*?】", "", cmd_val, flags=re.DOTALL).strip()
             
-            # 從 df_F 獲取當日淨變動與當日波動率
-            net_change_str = "N/A"
-            vol_str = "N/A"
-            if not df_F.empty:
-                last_f = df_F.iloc[-1]
-                nc_val = safe_float(last_f.get('當日淨變動', 0))
-                net_change_str = f"+{fmt_int(nc_val)}" if nc_val > 0 else fmt_int(nc_val)
-                v_val = last_f.get('當日波動率', '0%')
-                vol_str = v_val if isinstance(v_val, str) and '%' in v_val else fmt_pct(v_val)
-
             # 從 df_Market 獲取大盤指數與漲跌幅
             idx_str = "N/A"
             chg_str = "N/A"
@@ -259,11 +254,10 @@ def generate_daily_report(df_A, df_C, df_D, df_E, df_F, df_H, live_prices_dict, 
                 if not twse_row.empty:
                     idx_val = twse_row.iloc[0].iloc[1]
                     chg_val = twse_row.iloc[0].iloc[2]
-                    idx_str = fmt_money(idx_val).replace('.00', '') # 去除多餘小數點
+                    idx_str = fmt_money(idx_val).replace('.00', '')
                     c_val = safe_float(chg_val)
                     chg_str = f"{c_val:.2f}%"
 
-            # 組合輸出文字
             lines.append(f"LDR：{ldr}")
             lines.append(f"風險等級：{risk}")
             lines.append(f"質押率：{pledge}")
@@ -275,7 +269,9 @@ def generate_daily_report(df_A, df_C, df_D, df_E, df_F, df_H, live_prices_dict, 
             lines.append(f"RZ_Level：{rz}")
             lines.append(f"大盤指數：{idx_str} ({chg_str})")
             lines.append(f"指令：{cmd}")
-        except: lines.append("表H解析錯誤")
+        except: lines.append("即時監控解析錯誤")
+    else:
+        lines.append("無即時監控數據")
 
     # --- 表A 持股 ---
     lines.append("\n[表A]")
