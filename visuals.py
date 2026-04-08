@@ -111,7 +111,7 @@ def plot_nav_trend(df_F):
             return fig
     return None
 
-# --- HTML 卡片產生器 (將複雜的 HTML 字串移出 app.py) ---
+# --- HTML 卡片產生器 ---
 def render_risk_metric_card(risk_text, lev_value, style_dict):
     return f"""
     <div class='custom-metric-card'>
@@ -151,6 +151,17 @@ def render_house_plan_card(r_display, dp_target, est_year):
         </div>
           <div style="text-align:right; font-size:0.8em; color:#6c757d; margin-top:2px;">
             (預估 {est_year} 年)
+        </div>
+    </div>
+    """
+
+def render_simple_card(title, value, value_color="#212529"):
+    """通用數值展示卡片"""
+    return f"""
+    <div style="background-color:#f8f9fa; padding:15px; border-radius:10px; margin-bottom:10px; border:1px solid #e9ecef; height: 100%; display: flex; flex-direction: column; justify-content: center;">
+        <div style="font-size:1.0em; color:#6c757d; margin-bottom:5px;">{title}</div>
+        <div style="font-size:2.2em; font-weight:bold; color:{value_color}; line-height:1.1;">
+            {value}
         </div>
     </div>
     """
