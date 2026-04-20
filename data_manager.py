@@ -219,11 +219,19 @@ def generate_daily_report(df_A, df_C, df_D, df_E, df_F, df_Monitor, live_prices_
     lines.append("\n[即時監控狀態]")
     if not df_Monitor.empty:
         try:
-            # 提取上半部：淨變動與波動率
-            nc_val = safe_float(df_Monitor['當日淨變動'].iloc[0]) if '當日淨變動' in df_Monitor.columns else 0
-            net_change_str = f"+{fmt_int(nc_val)}" if nc_val > 0 else fmt_int(nc_val)
-            v_val = df_Monitor['當日波動率'].iloc[0] if '當日波動率' in df_Monitor.columns else '0%'
-            vol_str = v_val if isinstance(v_val, str) and '%' in v_val else fmt_pct(v_val)
+            # 提取上半部：變動與波動率
+            snc_val = safe_float(df_Monitor['股市淨變動'].iloc[0]) if '股市淨變動' in df_Monitor.columns else 0
+            stock_nc_str = f"+{fmt_int(snc_val)}" if snc_val > 0 else fmt_int(snc_val)
+            sv_val = df_Monitor['股市波動率'].iloc[0] if '股市波動率' in df_Monitor.columns else '0%'
+            stock_vol_str = sv_val if isinstance(sv_val, str) and '%' in sv_val else fmt_pct(sv_val)
+            
+            nnc_val = safe_float(df_Monitor['NAV淨變動'].iloc[0]) if 'NAV淨變動' in df_Monitor.columns else 0
+            nav_nc_str = f"+{fmt_int(nnc_val)}" if nnc_val > 0 else fmt_int(nnc_val)
+            nv_val = df_Monitor['NAV波動率'].iloc[0] if 'NAV波動率' in df_Monitor.columns else '0%'
+            nav_vol_str = nv_val if isinstance(nv_val, str) and '%' in nv_val else fmt_pct(nv_val)
+
+            e_val = df_Monitor['曝險指標 E'].iloc[0] if '曝險指標 E' in df_Monitor.columns else '0%'
+            lev_str = e_val if isinstance(e_val, str) and '%' in e_val else fmt_pct(e_val)
 
             # 提取下半部：雙層表頭數據定位
             monitor_bottom_dict = {}
@@ -238,7 +246,6 @@ def generate_daily_report(df_A, df_C, df_D, df_E, df_F, df_Monitor, live_prices_
             ldr = str(monitor_bottom_dict.get('LDR', 'N/A'))
             risk = str(monitor_bottom_dict.get('今日風險等級', 'N/A'))
             pledge = fmt_pct(monitor_bottom_dict.get('總質押率', 0))
-            flywheel = str(monitor_bottom_dict.get('飛輪階段', 'N/A'))
             bias = str(monitor_bottom_dict.get('季線乖離', 'N/A'))
             volr = str(monitor_bottom_dict.get('量能比 (volR)', 'N/A'))
             rz = str(monitor_bottom_dict.get('RZ_Level', 'N/A'))
@@ -259,12 +266,14 @@ def generate_daily_report(df_A, df_C, df_D, df_E, df_F, df_Monitor, live_prices_
                     chg_str = f"{c_val:.2f}%"
 
             lines.append(f"LDR：{ldr}")
+            lines.append(f"曝險倍數：{lev_str}")
             lines.append(f"風險等級：{risk}")
             lines.append(f"質押率：{pledge}")
-            lines.append(f"飛輪階段：{flywheel}")
             lines.append(f"季線乖離：{bias}")
-            lines.append(f"當日淨變動：{net_change_str}")
-            lines.append(f"當日波動率：{vol_str}")
+            lines.append(f"股市淨變動：{stock_nc_str}")
+            lines.append(f"股市波動率：{stock_vol_str}")
+            lines.append(f"NAV淨變動：{nav_nc_str}")
+            lines.append(f"NAV波動率：{nav_vol_str}")
             lines.append(f"量能比 (volR)：{volr}")
             lines.append(f"RZ_Level：{rz}")
             lines.append(f"大盤指數：{idx_str} ({chg_str})")
