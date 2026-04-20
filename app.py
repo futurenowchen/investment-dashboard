@@ -40,6 +40,11 @@ if st.sidebar.button("🔄 重新載入資料"):
     dm.load_data.clear()
     st.rerun()
 
+# 加入自動刷新選項 (每60秒)
+auto_refresh = st.sidebar.checkbox("⏱️ 啟動 1 分鐘自動更新")
+if auto_refresh:
+    st.sidebar.info("🟢 自動同步模式：已啟動 (每 60 秒)")
+
 if st.sidebar.button("💾 更新股價至 Google Sheets", type="primary"):
     if not df_A.empty and '股票' in df_A.columns:
         tickers = [t for t in df_A['股票'].unique() if str(t).strip()]
@@ -59,7 +64,6 @@ if st.sidebar.button("💾 更新股價至 Google Sheets", type="primary"):
 st.sidebar.markdown("---")
 st.sidebar.subheader("📋 匯出功能")
 if st.sidebar.button("產生文字日報"):
-    # 將即時監控面板(df_Monitor)替換原本表H傳入日報產生器
     report_text = dm.generate_daily_report(df_A, df_C, df_D, df_E, df_F, df_Monitor, st.session_state['live_prices'], df_Market)
     st.sidebar.markdown("請點擊下方代碼區塊右上角的 **複製按鈕**：")
     st.sidebar.code(report_text, language='text')
@@ -238,7 +242,7 @@ if monitor_bottom_dict:
         elif "黃" in risk_today: risk_color = "#ffc107"
         elif "綠" in risk_today: risk_color = "#28a745"
 
-        # 6 columns for markets metrics (曝險倍數接於 LDR 之後)
+        # 6 columns for markets metrics
         m_cols = st.columns(6)
         
         with m_cols[0]: st.markdown(vis.render_mini_metric("LDR", ldr_display, ldr_color), unsafe_allow_html=True)
@@ -460,3 +464,8 @@ if not df_G.empty:
         st.dataframe(df_G, use_container_width=True)
 else:
     st.info("無財富藍圖資料")
+
+# 自動刷新引擎放置於腳本最末端
+if auto_refresh:
+    time.sleep(60)
+    st.rerun()
