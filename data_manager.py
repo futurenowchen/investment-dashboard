@@ -71,7 +71,8 @@ def get_gsheet_connection():
         st.error(f"❌ 連線錯誤: {e}")
         return None, None
 
-@st.cache_data(ttl=300) 
+# 戰術修改：將 TTL 從 300 秒降為 60 秒，允許每分鐘高頻更新
+@st.cache_data(ttl=60) 
 def load_data(sheet_name): 
     max_retries = 3
     for attempt in range(max_retries):
@@ -295,7 +296,7 @@ def generate_daily_report(df_A, df_C, df_D, df_E, df_F, df_Monitor, live_prices_
             live_p = live_prices_dict.get(ticker)
             close_val = 0.0
             
-            # 順序：表A 收盤價 (手動最優先) > 表A 即時收盤價 > API 價格 > 成交價
+            # 順序：表A 收盤價 (手動最優先) > 表A 即收盤價 > API 價格 > 成交價
             price_candidates = [
                 row.get('收盤價'),     # 最高優先 (User 手動 key)
                 row.get('即時收盤價'), # Google Finance
