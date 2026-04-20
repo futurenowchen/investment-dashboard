@@ -88,15 +88,16 @@ stock_nc_str = "0"
 stock_vol_str = "0%"
 stock_nc_color = "#212529"
 
-pct_str = "0%"
+pct_float = 0.0
 lev_str = "0%"
+e_val = "0%"
 
 if not df_Monitor.empty:
     tot_asset_str = dm.fmt_int(df_Monitor['總資產'].iloc[0]) if '總資產' in df_Monitor.columns else "0"
     cash_str = dm.fmt_int(df_Monitor['現金'].iloc[0]) if '現金' in df_Monitor.columns else "0"
     stock_value_str = dm.fmt_int(df_Monitor['股票市值'].iloc[0]) if '股票市值' in df_Monitor.columns else "0"
     
-    # NAV
+    # NAV淨變動 / 波動率
     nnc_val = dm.safe_float(df_Monitor['NAV淨變動'].iloc[0]) if 'NAV淨變動' in df_Monitor.columns else 0
     nav_nc_str = f"+{dm.fmt_int(nnc_val)}" if nnc_val > 0 else dm.fmt_int(nnc_val)
     if nnc_val > 0: nav_nc_color = "#dc3545" 
@@ -105,7 +106,7 @@ if not df_Monitor.empty:
     nv_val = df_Monitor['NAV波動率'].iloc[0] if 'NAV波動率' in df_Monitor.columns else '0%'
     nav_vol_str = nv_val if isinstance(nv_val, str) and '%' in nv_val else dm.fmt_pct(nv_val)
 
-    # 股市
+    # 股市淨變動 / 波動率
     snc_val = dm.safe_float(df_Monitor['股市淨變動'].iloc[0]) if '股市淨變動' in df_Monitor.columns else 0
     stock_nc_str = f"+{dm.fmt_int(snc_val)}" if snc_val > 0 else dm.fmt_int(snc_val)
     if snc_val > 0: stock_nc_color = "#dc3545" 
@@ -114,12 +115,27 @@ if not df_Monitor.empty:
     sv_val = df_Monitor['股市波動率'].iloc[0] if '股市波動率' in df_Monitor.columns else '0%'
     stock_vol_str = sv_val if isinstance(sv_val, str) and '%' in sv_val else dm.fmt_pct(sv_val)
     
-    # 其他
+    # 達成進度
     p_val = df_Monitor['達成進度'].iloc[0] if '達成進度' in df_Monitor.columns else '0%'
-    pct_str = p_val if isinstance(p_val, str) and '%' in p_val else dm.fmt_pct(p_val)
+    pct_float = dm.safe_float(p_val)
+    pct_float = pct_float / 100.0 if pct_float > 1 else pct_float
     
+    # 曝險指標 E (轉供下方今日狀態卡片使用)
     e_val = df_Monitor['曝險指標 E'].iloc[0] if '曝險指標 E' in df_Monitor.columns else '0%'
     lev_str = e_val if isinstance(e_val, str) and '%' in e_val else dm.fmt_pct(e_val)
+
+target = 0
+gap = 0
+
+if not df_C.empty:
+    df_c = df_C.copy()
+    first_col = df_c.columns[0]
+    df_c[first_col] = df_c[first_col].astype(str).str.strip()
+    df_c.set_index(first_col, inplace=True)
+    col_val = df_c.columns[0]
+
+    target = dm.safe_float(df_c.loc['短期財務目標', col_val]) if '短期財務目標' in df_c.index else 0
+    gap = dm.safe_float(df_c.loc['短期財務目標差距', col_val]) if '短期財務目標差距' in df_c.index else 0
 
 # 第一排卡片：總資產、現金、NAV淨變動、NAV波動率
 row1_col1, row1_col2, row1_col3, row1_col4 = st.columns(4)
@@ -128,12 +144,12 @@ with row1_col2: st.markdown(vis.render_simple_card('現金', cash_str), unsafe_a
 with row1_col3: st.markdown(vis.render_simple_card('NAV淨變動', nav_nc_str, nav_nc_color), unsafe_allow_html=True)
 with row1_col4: st.markdown(vis.render_simple_card('NAV波動率', nav_vol_str), unsafe_allow_html=True)
 
-# 第二排卡片：股票市值、股市淨變動、股市波動率、達成進度
+# 第二排卡片：股票市值、股市淨變動、股市波動率、達成進度 (恢復含差距金額顯示)
 row2_col1, row2_col2, row2_col3, row2_col4 = st.columns(4)
 with row2_col1: st.markdown(vis.render_simple_card('股票市值', stock_value_str), unsafe_allow_html=True)
 with row2_col2: st.markdown(vis.render_simple_card('股市淨變動', stock_nc_str, stock_nc_color), unsafe_allow_html=True)
 with row2_col3: st.markdown(vis.render_simple_card('股市波動率', stock_vol_str), unsafe_allow_html=True)
-with row2_col4: st.markdown(vis.render_simple_card('達成進度', pct_str), unsafe_allow_html=True)
+with row2_col4: st.markdown(vis.render_goal_progress_card(target, gap, pct_float), unsafe_allow_html=True)
 
 
 # ==========================================
@@ -168,6 +184,16 @@ if monitor_bottom_dict:
         else: ldr_status_txt, ldr_color = "危險", "#dc3545"
         
         ldr_display = f"{ldr_val_num:.2f}%<div style='font-size: 1rem; line-height: 1.0; margin-top: 2px;'>{ldr_status_txt}</div>"
+
+        # 曝險倍數狀態判定 (B13<1.1 安全, <=1.12 警戒, TRUE 危險)
+        e_val_num = dm.safe_float(e_val)
+        e_ratio = e_val_num / 100.0 if e_val_num > 5 else e_val_num
+        
+        if e_ratio < 1.10: e_status_txt, e_color = "安全", "#28a745"
+        elif e_ratio <= 1.12: e_status_txt, e_color = "警戒", "#ffc107"
+        else: e_status_txt, e_color = "危險", "#dc3545"
+        
+        e_display = f"{lev_str}<div style='font-size: 1rem; line-height: 1.0; margin-top: 2px;'>{e_status_txt}</div>"
 
         raw_pledge = dm.safe_float(monitor_bottom_dict.get('總質押率', 0))
         pledge_val = raw_pledge * 100 if abs(raw_pledge) <= 5.0 else raw_pledge
@@ -212,11 +238,11 @@ if monitor_bottom_dict:
         elif "黃" in risk_today: risk_color = "#ffc107"
         elif "綠" in risk_today: risk_color = "#28a745"
 
-        # 6 columns for markets metrics
+        # 6 columns for markets metrics (曝險倍數接於 LDR 之後)
         m_cols = st.columns(6)
         
         with m_cols[0]: st.markdown(vis.render_mini_metric("LDR", ldr_display, ldr_color), unsafe_allow_html=True)
-        with m_cols[1]: st.markdown(vis.render_mini_metric("曝險倍數", lev_str), unsafe_allow_html=True)
+        with m_cols[1]: st.markdown(vis.render_mini_metric("曝險倍數", e_display, e_color), unsafe_allow_html=True)
         with m_cols[2]:
             match = re.search(r"(.+?)\s*([\(（].+?[\)）])", risk_today)
             if match:
