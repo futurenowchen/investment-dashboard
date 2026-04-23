@@ -107,14 +107,14 @@ def plot_asset_allocation(df_B):
     return None
 
 def plot_nav_trend(df_F):
-    """繪製戰略級 NAV 趨勢與淨變動複合圖"""
+    """繪製戰略級 NAV 趨勢與淨變動複合圖 (強化魄力的銳利折線版)"""
     if not df_F.empty:
         df_calc = df_F.copy()
         if '實質NAV' in df_calc.columns and '日期' in df_calc.columns:
             df_calc['dt'] = pd.to_datetime(df_calc['日期'], errors='coerce')
             df_calc['nav'] = df_calc['實質NAV'].apply(dm.safe_float)
             
-            # 取出每日淨變動作為波動柱狀圖 (兼容新舊欄位)
+            # 取出每日淨變動作為波動柱狀圖
             if 'NAV淨變動' in df_calc.columns:
                 df_calc['net_change'] = df_calc['NAV淨變動'].apply(dm.safe_float)
             elif '當日淨變動' in df_calc.columns:
@@ -124,11 +124,11 @@ def plot_nav_trend(df_F):
                 
             df_chart = df_calc.sort_values('dt')
             
-            # 定義柔和的高級動能色彩 (玫瑰紅與薄荷綠)
+            # 定義戰略色彩 (玫瑰紅與薄荷綠)
             COLOR_RISE = '#e63946'
             COLOR_FALL = '#20c997'
             COLOR_NAV_MAIN = '#00b4d8'
-            COLOR_NAV_FILL = 'rgba(0, 180, 216, 0.15)'
+            COLOR_NAV_FILL = 'rgba(0, 180, 216, 0.08)' # 降低填滿透明度，增加線條對比
             
             colors = [COLOR_RISE if val > 0 else COLOR_FALL for val in df_chart['net_change']]
 
@@ -142,21 +142,30 @@ def plot_nav_trend(df_F):
                     y=df_chart['net_change'],
                     name="每日淨變動",
                     marker_color=colors,
-                    opacity=0.4, 
+                    opacity=0.3, 
                     hovertemplate='<b>日期</b>: %{x|%Y-%m-%d}<br><b>淨變動</b>: %{y:,.0f}<extra></extra>'
                 ),
                 secondary_y=True,
             )
 
-            # 2. NAV 面積圖 (主座標軸，平滑曲線，隱藏常態 marker)
+            # 2. NAV 折線面積圖 (主座標軸，銳利線性 Linear)
             fig.add_trace(
                 go.Scatter(
                     x=df_chart['dt'],
                     y=df_chart['nav'],
                     name="實質NAV",
                     fill='tozeroy',
-                    mode='lines', # 移除 '+markers' 使線條更乾淨
-                    line=dict(color=COLOR_NAV_MAIN, width=3, shape='spline'),
+                    mode='lines+markers', # 增加 markers 但將其尺寸縮小
+                    line=dict(
+                        color=COLOR_NAV_MAIN, 
+                        width=3.5, # 稍微加厚線條增加視覺存在感
+                        shape='linear' # 由 spline 改為 linear，展現魄力
+                    ),
+                    marker=dict(
+                        size=4, 
+                        color=COLOR_NAV_MAIN,
+                        line=dict(color='white', width=0.5) # 加上細微白邊讓點更精緻
+                    ),
                     fillcolor=COLOR_NAV_FILL,
                     hovertemplate='<b>日期</b>: %{x|%Y-%m-%d}<br><b>NAV</b>: %{y:,.0f}<extra></extra>'
                 ),
@@ -181,10 +190,12 @@ def plot_nav_trend(df_F):
             fig.update_xaxes(
                 showgrid=True, 
                 gridwidth=1, 
-                gridcolor='#f8f9fa',
-                showspikes=True, # 開啟十字準線
+                gridcolor='#f1f3f5', # 稍微加深格線，建立格點感
+                showspikes=True, 
                 spikemode="across",
                 spikesnap="cursor",
+                spikedash="dash",
+                spikethickness=1,
                 showline=True,
                 showticklabels=True
             )
@@ -195,7 +206,7 @@ def plot_nav_trend(df_F):
                 tickformat=",.0f", 
                 showgrid=True, 
                 gridwidth=1, 
-                gridcolor='#f8f9fa',
+                gridcolor='#f1f3f5',
             )
             
             # 隱藏次座標的 Y 軸刻度文字，僅保留 0 的絕對基準線
@@ -203,8 +214,8 @@ def plot_nav_trend(df_F):
                 showticklabels=False, 
                 showgrid=False, 
                 zeroline=True, 
-                zerolinecolor='#dee2e6', 
-                zerolinewidth=1.5, 
+                zerolinecolor='#adb5bd', 
+                zerolinewidth=2, # 加強 0 軸基準線，代表戰略底線
                 secondary_y=True
             )
 
