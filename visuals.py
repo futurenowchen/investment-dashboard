@@ -107,7 +107,7 @@ def plot_asset_allocation(df_B):
     return None
 
 def plot_nav_trend(df_F):
-    """繪製戰略級 NAV 趨勢與淨變動複合圖 (Tech Blue Pro Edition)"""
+    """繪製戰略級 NAV 趨勢與淨變動複合圖 (Light Tech Blue Edition)"""
     if not df_F.empty:
         df_calc = df_F.copy()
         if '實質NAV' in df_calc.columns and '日期' in df_calc.columns:
@@ -127,55 +127,47 @@ def plot_nav_trend(df_F):
             # 新增戰略生命線：20日移動平均 (這是使用者自身 NAV 的月線)
             df_chart['SMA20'] = df_chart['nav'].rolling(window=20, min_periods=1).mean()
             
-            # === 科技藍配色設定 (Tech Blue Palette) ===
-            BG_COLOR = '#0F172A'          # 沉穩科技藍灰 (Slate 900)
-            GRID_COLOR = '#1E293B'        # 低干擾網格線 (Slate 800)
-            COLOR_RISE = '#F87171'        # 警示紅 (台股漲)
-            COLOR_FALL = '#34D399'        # 薄荷綠 (台股跌)
-            COLOR_NAV_MAIN = '#38BDF8'    # 螢光科技青 (Sky 400)
-            COLOR_NAV_FILL = 'rgba(56, 189, 248, 0.15)' # 底部微光
+            # === 清爽科技藍配色設定 (Light Tech Cyan Palette) ===
+            BG_COLOR = '#FFFFFF'          # 純白基底，融入網頁
+            GRID_COLOR = '#F1F5F9'        # 極淺灰網格線 (Slate 100)
+            COLOR_RISE = '#EF4444'        # 亮紅 (台股漲)
+            COLOR_FALL = '#10B981'        # 翠綠 (台股跌)
+            COLOR_NAV_MAIN = '#00B4D8'    # 科技青
+            COLOR_NAV_FILL = 'rgba(0, 180, 216, 0.08)' # 底部微光
             COLOR_SMA = '#94A3B8'         # 戰略灰 (Slate 400)
-            TEXT_COLOR = '#CBD5E1'        # 介面冷冽灰 (Slate 300)
+            TEXT_COLOR = '#334155'        # 深灰字體 (Slate 700)
             
             colors = [COLOR_RISE if val > 0 else COLOR_FALL for val in df_chart['net_change']]
 
-            # 建立單圖雙 Y 軸複合圖表
-            fig = make_subplots(specs=[[{"secondary_y": True}]])
-
-            # 1. 動能柱狀圖 (次座標軸，墊於底層)
-            fig.add_trace(
-                go.Bar(
-                    x=df_chart['dt'],
-                    y=df_chart['net_change'],
-                    name="Daily Momentum",
-                    marker_color=colors,
-                    opacity=0.45, # 半透明使其成為背景氛圍
-                    marker_line_width=0, 
-                    hovertemplate='<span style="font-family: monospace;"><b>DATE:</b> %{x|%Y-%m-%d}<br><b>MOMENTUM:</b> %{y:,.0f}</span><extra></extra>'
-                ),
-                secondary_y=True,
+            # 建立上下分離的 Subplots (7:3 比例)
+            fig = make_subplots(
+                rows=2, cols=1, 
+                shared_xaxes=True, 
+                vertical_spacing=0.03,
+                row_heights=[0.75, 0.25]
             )
 
-            # 2. NAV 折線面積圖 (主座標軸，銳利線性 Linear)
+            # 1. 主圖：NAV 折線面積圖 (Row 1)
             fig.add_trace(
                 go.Scatter(
                     x=df_chart['dt'],
                     y=df_chart['nav'],
-                    name="Real NAV",
+                    name="每日淨值", # 精簡命名
                     fill='tozeroy',
                     mode='lines', 
                     line=dict(
                         color=COLOR_NAV_MAIN, 
                         width=2.5, 
-                        shape='linear' # 保持銳利的物理軌跡
+                        shape='spline', # 平滑曲線
+                        smoothing=0.8
                     ),
                     fillcolor=COLOR_NAV_FILL,
-                    hovertemplate='<span style="font-family: monospace;"><b>DATE:</b> %{x|%Y-%m-%d}<br><b>NAV :</b> %{y:,.0f}</span><extra></extra>'
+                    hovertemplate='<b>%{y:,.0f}</b><extra></extra>' # 移除贅字，統一日期待在 Header
                 ),
-                secondary_y=False,
+                row=1, col=1
             )
             
-            # 3. 戰略生命線：20日移動平均線 (主座標軸)
+            # 1.1 主圖：20日移動平均線 (Row 1)
             fig.add_trace(
                 go.Scatter(
                     x=df_chart['dt'],
@@ -183,16 +175,30 @@ def plot_nav_trend(df_F):
                     name="NAV 20MA",
                     mode='lines',
                     line=dict(color=COLOR_SMA, width=1.5, dash='dash'),
-                    hovertemplate='<span style="font-family: monospace;"><b>20MA:</b> %{y:,.0f}</span><extra></extra>'
+                    hovertemplate='<b>%{y:,.0f}</b><extra></extra>'
                 ),
-                secondary_y=False,
+                row=1, col=1
             )
 
-            # 版面優化設定 (Tech Blue Vibe)
+            # 2. 副圖：動能底槽柱狀圖 (Row 2)
+            fig.add_trace(
+                go.Bar(
+                    x=df_chart['dt'],
+                    y=df_chart['net_change'],
+                    name="淨值變化",
+                    marker_color=colors,
+                    opacity=0.75, 
+                    marker_line_width=0, 
+                    hovertemplate='<b>%{y:,.0f}</b><extra></extra>'
+                ),
+                row=2, col=1
+            )
+
+            # 版面優化設定 (Light Vibe)
             fig.update_layout(
-                template='plotly_dark',
+                template='plotly_white', # 改為亮色主題
                 hovermode="x unified",
-                margin=dict(t=40, b=20, l=10, r=10),
+                margin=dict(t=40, b=10, l=10, r=10),
                 plot_bgcolor=BG_COLOR,
                 paper_bgcolor=BG_COLOR,
                 font=dict(family="Courier New, monospace", size=12, color=TEXT_COLOR),
@@ -201,15 +207,15 @@ def plot_nav_trend(df_F):
                     font=dict(color=TEXT_COLOR)
                 ),
                 hoverlabel=dict(
-                    bgcolor="#1E293B",
+                    bgcolor="#FFFFFF",
                     bordercolor=COLOR_NAV_MAIN,
                     font_size=13,
                     font_family="Courier New, monospace",
-                    font_color="#ffffff"
+                    font_color="#334155"
                 )
             )
 
-            # X軸：消除垂直網格干擾，保留十字準線
+            # X軸：共用設定
             fig.update_xaxes(
                 showgrid=False, 
                 showspikes=True, 
@@ -217,42 +223,44 @@ def plot_nav_trend(df_F):
                 spikesnap="cursor",
                 spikedash="solid",
                 spikethickness=1,
-                spikecolor=COLOR_NAV_MAIN, 
+                spikecolor="#CBD5E1", # 淺灰十字準線
                 showline=True,
                 linecolor=GRID_COLOR,
-                showticklabels=True
+                row=1, col=1
+            )
+            fig.update_xaxes(
+                showgrid=False, 
+                showline=True,
+                linecolor=GRID_COLOR,
+                row=2, col=1
             )
             
+            # 戰略 Y 軸截斷邏輯：以 140 萬為底部基準線，若淨值低於 140 萬則動態下移
+            min_nav = df_chart['nav'].min()
+            y_bottom = 1400000 if min_nav > 1400000 else min_nav * 0.95
+            y_top = df_chart['nav'].max() * 1.05
+
             # Y軸 (主圖)：NAV
             fig.update_yaxes(
-                title_text="REAL NAV (TWD)", 
+                range=[y_bottom, y_top], # 實施 Y 軸壓縮，放大波動視覺
                 title_font=dict(color=TEXT_COLOR, size=11),
-                secondary_y=False, 
                 tickformat=",.0f", 
                 showgrid=True, 
                 gridwidth=1, 
                 gridcolor=GRID_COLOR,
                 showline=True,
                 linecolor=GRID_COLOR,
+                row=1, col=1
             )
             
             # Y軸 (副圖)：動能槽設定
-            # 透過放大 Y 軸 Range 來自動壓低柱狀圖的高度，使其不干擾主線
-            max_abs_change = df_chart['net_change'].abs().max()
-            if pd.notna(max_abs_change) and max_abs_change > 0:
-                fig.update_yaxes(
-                    range=[-max_abs_change * 3.5, max_abs_change * 3.5], # 壓縮在下方 1/3 處
-                    secondary_y=True
-                )
-
-            # 隱藏次座標的 Y 軸刻度，僅保留 0 軸絕對基準線
             fig.update_yaxes(
                 showticklabels=False, 
                 showgrid=False, 
                 zeroline=True, 
-                zerolinecolor='#334155', # 絕對基準線
+                zerolinecolor='#CBD5E1', # 絕對基準線 (淺灰)
                 zerolinewidth=1.5, 
-                secondary_y=True
+                row=2, col=1
             )
 
             return fig
