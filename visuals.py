@@ -127,7 +127,7 @@ def plot_nav_trend(df_F):
             # 新增戰略生命線：20日移動平均 (這是使用者自身 NAV 的月線)
             df_chart['SMA20'] = df_chart['nav'].rolling(window=20, min_periods=1).mean()
             
-            # === 清爽科技藍配色設定 (Light Tech Cyan Palette) ===
+            # === 清爽科技藍配色與現代黑體設定 ===
             BG_COLOR = '#FFFFFF'          # 純白基底，融入網頁
             GRID_COLOR = '#F1F5F9'        # 極淺灰網格線 (Slate 100)
             COLOR_RISE = '#EF4444'        # 亮紅 (台股漲)
@@ -136,6 +136,7 @@ def plot_nav_trend(df_F):
             COLOR_NAV_FILL = 'rgba(0, 180, 216, 0.08)' # 底部微光
             COLOR_SMA = '#94A3B8'         # 戰略灰 (Slate 400)
             TEXT_COLOR = '#334155'        # 深灰字體 (Slate 700)
+            MODERN_FONT = "Arial, 'Heiti TC', 'Microsoft JhengHei', sans-serif" # 高辨識度黑體
             
             colors = [COLOR_RISE if val > 0 else COLOR_FALL for val in df_chart['net_change']]
 
@@ -148,11 +149,12 @@ def plot_nav_trend(df_F):
             )
 
             # 1. 主圖：NAV 折線面積圖 (Row 1)
+            # 整合所有資訊至 customdata，達成單一彈出視窗
             fig.add_trace(
                 go.Scatter(
                     x=df_chart['dt'],
                     y=df_chart['nav'],
-                    name="每日淨值", # 精簡命名
+                    name="每日淨值", 
                     fill='tozeroy',
                     mode='lines', 
                     line=dict(
@@ -162,7 +164,14 @@ def plot_nav_trend(df_F):
                         smoothing=0.8
                     ),
                     fillcolor=COLOR_NAV_FILL,
-                    hovertemplate='<b>%{y:,.0f}</b><extra></extra>' # 移除贅字，統一日期待在 Header
+                    customdata=df_chart[['net_change', 'SMA20']].values, # 封裝其他數據供 hover 使用
+                    hovertemplate=(
+                        '<b>日期：%{x|%Y-%m-%d}</b><br><br>'
+                        '<b>每日淨值：</b> %{y:,.0f}<br>'
+                        '<b>淨值變化：</b> %{customdata[0]:+,.0f}<br>'
+                        '<b>NAV 20MA：</b> %{customdata[1]:,.0f}'
+                        '<extra></extra>' # 隱藏右側獨立的 trace 名稱標籤
+                    )
                 ),
                 row=1, col=1
             )
@@ -175,7 +184,7 @@ def plot_nav_trend(df_F):
                     name="NAV 20MA",
                     mode='lines',
                     line=dict(color=COLOR_SMA, width=1.5, dash='dash'),
-                    hovertemplate='<b>%{y:,.0f}</b><extra></extra>'
+                    hoverinfo='skip' # 關閉獨立 hover，已整合至主視窗
                 ),
                 row=1, col=1
             )
@@ -189,28 +198,28 @@ def plot_nav_trend(df_F):
                     marker_color=colors,
                     opacity=0.75, 
                     marker_line_width=0, 
-                    hovertemplate='<b>%{y:,.0f}</b><extra></extra>'
+                    hoverinfo='skip' # 關閉獨立 hover，已整合至主視窗
                 ),
                 row=2, col=1
             )
 
-            # 版面優化設定 (Light Vibe)
+            # 版面優化設定 (Light Vibe & Modern Font)
             fig.update_layout(
                 template='plotly_white', # 改為亮色主題
-                hovermode="x unified",
+                hovermode="x", # 採用單一 X 軸對齊，配合自定義 hovertemplate 達成最簡潔效果
                 margin=dict(t=40, b=10, l=10, r=10),
                 plot_bgcolor=BG_COLOR,
                 paper_bgcolor=BG_COLOR,
-                font=dict(family="Courier New, monospace", size=12, color=TEXT_COLOR),
+                font=dict(family=MODERN_FONT, size=13, color=TEXT_COLOR), # 應用清晰的無襯線字體
                 legend=dict(
                     orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1,
-                    font=dict(color=TEXT_COLOR)
+                    font=dict(family=MODERN_FONT, color=TEXT_COLOR)
                 ),
                 hoverlabel=dict(
                     bgcolor="#FFFFFF",
                     bordercolor=COLOR_NAV_MAIN,
-                    font_size=13,
-                    font_family="Courier New, monospace",
+                    font_size=14,
+                    font_family=MODERN_FONT,
                     font_color="#334155"
                 )
             )
@@ -243,7 +252,7 @@ def plot_nav_trend(df_F):
             # Y軸 (主圖)：NAV
             fig.update_yaxes(
                 range=[y_bottom, y_top], # 實施 Y 軸壓縮，放大波動視覺
-                title_font=dict(color=TEXT_COLOR, size=11),
+                title_font=dict(family=MODERN_FONT, color=TEXT_COLOR, size=12),
                 tickformat=",.0f", 
                 showgrid=True, 
                 gridwidth=1, 
