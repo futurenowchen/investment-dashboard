@@ -107,7 +107,7 @@ def plot_asset_allocation(df_B):
     return None
 
 def plot_nav_trend(df_F):
-    """繪製戰略級 NAV 趨勢與淨變動複合圖 (強化魄力的銳利折線版)"""
+    """繪製戰略級 NAV 趨勢與淨變動複合圖 (Wall Street Quant Terminal Edition)"""
     if not df_F.empty:
         df_calc = df_F.copy()
         if '實質NAV' in df_calc.columns and '日期' in df_calc.columns:
@@ -124,98 +124,109 @@ def plot_nav_trend(df_F):
                 
             df_chart = df_calc.sort_values('dt')
             
-            # 定義戰略色彩 (玫瑰紅與薄荷綠)
-            COLOR_RISE = '#e63946'
-            COLOR_FALL = '#20c997'
-            COLOR_NAV_MAIN = '#00b4d8'
-            COLOR_NAV_FILL = 'rgba(0, 180, 216, 0.08)' # 降低填滿透明度，增加線條對比
+            # === 機構級終端機配色設定 (Terminal Palette) ===
+            BG_COLOR = '#0B0E14'          # 深空終端黑
+            GRID_COLOR = '#1A212D'        # 極暗網格線
+            COLOR_RISE = '#00E676'        # 磷光綠 (機構多頭)
+            COLOR_FALL = '#FF1744'        # 猩紅 (機構空頭)
+            COLOR_NAV_MAIN = '#00E5FF'    # 螢光霓虹青
+            COLOR_NAV_FILL = 'rgba(0, 229, 255, 0.05)' # 幾近透明的微光底色
+            TEXT_COLOR = '#8B949E'        # 冷冽灰字體
             
             colors = [COLOR_RISE if val > 0 else COLOR_FALL for val in df_chart['net_change']]
 
             # 建立雙 Y 軸複合圖表
             fig = make_subplots(specs=[[{"secondary_y": True}]])
 
-            # 1. 動能柱狀圖 (次座標軸，半透明作為底層背景)
+            # 1. 動能柱狀圖 (次座標軸，作為底層 Tick 刻度)
             fig.add_trace(
                 go.Bar(
                     x=df_chart['dt'],
                     y=df_chart['net_change'],
-                    name="每日淨變動",
+                    name="Daily Momentum",
                     marker_color=colors,
-                    opacity=0.3, 
-                    hovertemplate='<b>日期</b>: %{x|%Y-%m-%d}<br><b>淨變動</b>: %{y:,.0f}<extra></extra>'
+                    opacity=0.85, 
+                    marker_line_width=0, # 移除柱子邊框，使其極度銳利
+                    hovertemplate='<span style="font-family: monospace;"><b>DATE:</b> %{x|%Y-%m-%d}<br><b>MOMENTUM:</b> %{y:,.0f}</span><extra></extra>'
                 ),
                 secondary_y=True,
             )
 
-            # 2. NAV 折線面積圖 (主座標軸，銳利線性 Linear)
+            # 2. NAV 折線面積圖 (主座標軸，極度銳利線性 Linear)
             fig.add_trace(
                 go.Scatter(
                     x=df_chart['dt'],
                     y=df_chart['nav'],
-                    name="實質NAV",
+                    name="Real NAV",
                     fill='tozeroy',
-                    mode='lines+markers', # 增加 markers 但將其尺寸縮小
+                    mode='lines', # 移除 markers，純粹展現刀鋒般的折線
                     line=dict(
                         color=COLOR_NAV_MAIN, 
-                        width=3.5, # 稍微加厚線條增加視覺存在感
-                        shape='linear' # 由 spline 改為 linear，展現魄力
-                    ),
-                    marker=dict(
-                        size=4, 
-                        color=COLOR_NAV_MAIN,
-                        line=dict(color='white', width=0.5) # 加上細微白邊讓點更精緻
+                        width=2.5, # 精確的線寬
+                        shape='linear' # 絕對銳利的物理軌跡
                     ),
                     fillcolor=COLOR_NAV_FILL,
-                    hovertemplate='<b>日期</b>: %{x|%Y-%m-%d}<br><b>NAV</b>: %{y:,.0f}<extra></extra>'
+                    hovertemplate='<span style="font-family: monospace;"><b>DATE:</b> %{x|%Y-%m-%d}<br><b>NAV:</b> %{y:,.0f}</span><extra></extra>'
                 ),
                 secondary_y=False,
             )
 
-            # 版面優化設定
+            # 版面優化設定 (Terminal Vibe)
             fig.update_layout(
+                template='plotly_dark',
                 hovermode="x unified",
-                margin=dict(t=30, b=10, l=10, r=10),
-                legend=dict(orientation="h", yanchor="bottom", y=1.05, xanchor="right", x=1),
-                plot_bgcolor='rgba(0,0,0,0)',
-                paper_bgcolor='rgba(0,0,0,0)',
+                margin=dict(t=40, b=20, l=10, r=10),
+                plot_bgcolor=BG_COLOR,
+                paper_bgcolor=BG_COLOR,
+                font=dict(family="Courier New, monospace", size=13, color=TEXT_COLOR), # 量化交易專用等寬字體
+                legend=dict(
+                    orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1,
+                    font=dict(color=TEXT_COLOR)
+                ),
                 hoverlabel=dict(
-                    bgcolor="white",
+                    bgcolor="#161B22",
+                    bordercolor=COLOR_NAV_MAIN,
                     font_size=14,
-                    font_family="sans-serif"
+                    font_family="Courier New, monospace",
+                    font_color="#C9D1D9"
                 )
             )
 
-            # 座標軸視覺處理與十字準線 (Spike Lines)
+            # 座標軸視覺處理與十字準線 (Surgical Crosshairs)
             fig.update_xaxes(
                 showgrid=True, 
                 gridwidth=1, 
-                gridcolor='#f1f3f5', # 稍微加深格線，建立格點感
+                gridcolor=GRID_COLOR, 
                 showspikes=True, 
                 spikemode="across",
                 spikesnap="cursor",
-                spikedash="dash",
+                spikedash="solid",
                 spikethickness=1,
+                spikecolor="#58A6FF", # 十字準線用高亮藍色
                 showline=True,
+                linecolor=GRID_COLOR,
                 showticklabels=True
             )
             
             fig.update_yaxes(
-                title_text="實質 NAV (元)", 
+                title_text="REAL NAV (TWD)", 
+                title_font=dict(color=TEXT_COLOR, size=11),
                 secondary_y=False, 
                 tickformat=",.0f", 
                 showgrid=True, 
                 gridwidth=1, 
-                gridcolor='#f1f3f5',
+                gridcolor=GRID_COLOR,
+                showline=True,
+                linecolor=GRID_COLOR,
             )
             
-            # 隱藏次座標的 Y 軸刻度文字，僅保留 0 的絕對基準線
+            # 隱藏次座標的 Y 軸刻度文字，保留血腥的 0 軸絕對基準線
             fig.update_yaxes(
                 showticklabels=False, 
                 showgrid=False, 
                 zeroline=True, 
-                zerolinecolor='#adb5bd', 
-                zerolinewidth=2, # 加強 0 軸基準線，代表戰略底線
+                zerolinecolor='#484F58', # 冰冷的灰色基準線
+                zerolinewidth=2, 
                 secondary_y=True
             )
 
