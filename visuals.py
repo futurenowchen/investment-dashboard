@@ -31,7 +31,7 @@ def get_custom_css():
 
     /* 進度條顏色 */
     .stProgress > div > div > div > div {
-        background-color: #007bff;
+        background-color: #00b4d8;
     }
 
     /* 自訂指標卡片樣式 (用於曝險指標優化) */
@@ -71,7 +71,7 @@ def get_custom_css():
     /* 心態提醒卡片樣式 */
     .mindset-card {
         background-color: #e8f4f8; /* 淺藍色底 */
-        border-left: 5px solid #17a2b8; /* 左側藍色線條 */
+        border-left: 5px solid #00b4d8; /* 左側藍色線條 */
         padding: 15px;
         border-radius: 5px;
         margin-top: 15px; /* 與上方卡片保持距離 */
@@ -91,7 +91,14 @@ def plot_asset_allocation(df_B):
         df_B['num'] = df_B['市值（元）'].apply(dm.safe_float)
         chart_data = df_B[(df_B['num'] > 0) & (~df_B['股票'].str.contains('總資產|Total', na=False))]
         if not chart_data.empty:
-            fig = px.pie(chart_data, values='num', names='股票')
+            # 使用更沉穩的科技藍色系
+            color_discrete_sequence = ['#0077b6', '#00b4d8', '#90e0ef', '#caf0f8']
+            fig = px.pie(
+                chart_data, 
+                values='num', 
+                names='股票',
+                color_discrete_sequence=color_discrete_sequence
+            )
             fig.update_layout(
                 margin=dict(t=10, b=10, l=10, r=10),
                 legend=dict(orientation="h", yanchor="bottom", y=-0.2, xanchor="center", x=0.5)
@@ -117,8 +124,13 @@ def plot_nav_trend(df_F):
                 
             df_chart = df_calc.sort_values('dt')
             
-            # 定義紅綠動能色彩 (台股慣例：正紅負綠)
-            colors = ['#dc3545' if val > 0 else '#28a745' for val in df_chart['net_change']]
+            # 定義柔和的高級動能色彩 (玫瑰紅與薄荷綠)
+            COLOR_RISE = '#e63946'
+            COLOR_FALL = '#20c997'
+            COLOR_NAV_MAIN = '#00b4d8'
+            COLOR_NAV_FILL = 'rgba(0, 180, 216, 0.15)'
+            
+            colors = [COLOR_RISE if val > 0 else COLOR_FALL for val in df_chart['net_change']]
 
             # 建立雙 Y 軸複合圖表
             fig = make_subplots(specs=[[{"secondary_y": True}]])
@@ -130,24 +142,23 @@ def plot_nav_trend(df_F):
                     y=df_chart['net_change'],
                     name="每日淨變動",
                     marker_color=colors,
-                    opacity=0.35, 
-                    hovertemplate='<b>淨變動</b>: %{y:,.0f}<extra></extra>'
+                    opacity=0.4, 
+                    hovertemplate='<b>日期</b>: %{x|%Y-%m-%d}<br><b>淨變動</b>: %{y:,.0f}<extra></extra>'
                 ),
                 secondary_y=True,
             )
 
-            # 2. NAV 面積圖 (主座標軸，平滑曲線)
+            # 2. NAV 面積圖 (主座標軸，平滑曲線，隱藏常態 marker)
             fig.add_trace(
                 go.Scatter(
                     x=df_chart['dt'],
                     y=df_chart['nav'],
                     name="實質NAV",
                     fill='tozeroy',
-                    mode='lines+markers',
-                    line=dict(color='#007bff', width=3, shape='spline'),
-                    marker=dict(size=6, color='#007bff'),
-                    fillcolor='rgba(0, 123, 255, 0.1)',
-                    hovertemplate='<b>NAV</b>: %{y:,.0f}<extra></extra>'
+                    mode='lines', # 移除 '+markers' 使線條更乾淨
+                    line=dict(color=COLOR_NAV_MAIN, width=3, shape='spline'),
+                    fillcolor=COLOR_NAV_FILL,
+                    hovertemplate='<b>日期</b>: %{x|%Y-%m-%d}<br><b>NAV</b>: %{y:,.0f}<extra></extra>'
                 ),
                 secondary_y=False,
             )
@@ -158,15 +169,44 @@ def plot_nav_trend(df_F):
                 margin=dict(t=30, b=10, l=10, r=10),
                 legend=dict(orientation="h", yanchor="bottom", y=1.05, xanchor="right", x=1),
                 plot_bgcolor='rgba(0,0,0,0)',
-                paper_bgcolor='rgba(0,0,0,0)'
+                paper_bgcolor='rgba(0,0,0,0)',
+                hoverlabel=dict(
+                    bgcolor="white",
+                    font_size=14,
+                    font_family="sans-serif"
+                )
             )
 
-            # 座標軸視覺處理
-            fig.update_xaxes(showgrid=True, gridwidth=1, gridcolor='#e9ecef')
-            fig.update_yaxes(title_text="實質 NAV (元)", secondary_y=False, tickformat=",.0f", showgrid=True, gridwidth=1, gridcolor='#e9ecef')
+            # 座標軸視覺處理與十字準線 (Spike Lines)
+            fig.update_xaxes(
+                showgrid=True, 
+                gridwidth=1, 
+                gridcolor='#f8f9fa',
+                showspikes=True, # 開啟十字準線
+                spikemode="across",
+                spikesnap="cursor",
+                showline=True,
+                showticklabels=True
+            )
+            
+            fig.update_yaxes(
+                title_text="實質 NAV (元)", 
+                secondary_y=False, 
+                tickformat=",.0f", 
+                showgrid=True, 
+                gridwidth=1, 
+                gridcolor='#f8f9fa',
+            )
             
             # 隱藏次座標的 Y 軸刻度文字，僅保留 0 的絕對基準線
-            fig.update_yaxes(showticklabels=False, showgrid=False, zeroline=True, zerolinecolor='#adb5bd', zerolinewidth=1.5, secondary_y=True)
+            fig.update_yaxes(
+                showticklabels=False, 
+                showgrid=False, 
+                zeroline=True, 
+                zerolinecolor='#dee2e6', 
+                zerolinewidth=1.5, 
+                secondary_y=True
+            )
 
             return fig
     return None
@@ -187,13 +227,13 @@ def render_goal_progress_card(target, gap, pct):
     return f"""
     <div style="background-color:#f8f9fa; padding:15px; border-radius:10px; margin-bottom:10px; border:1px solid #e9ecef; height: 100%; display: flex; flex-direction: column; justify-content: center;">
         <div style="font-size:1.0em; color:#6c757d; margin-bottom:5px;">達成進度</div>
-        <div style="font-size:2.2em; font-weight:bold; color:#007bff; line-height:1.1;">
+        <div style="font-size:2.2em; font-weight:bold; color:#00b4d8; line-height:1.1;">
             {pct*100:.1f}%
         </div>
         <div style="margin-top:8px; font-size:0.85em; display:flex; justify-content:space-between; color:#495057;">
             <span>目標: <b>{dm.fmt_int(target)}</b></span>
         </div>
-          <div style="text-align:right; font-size:0.8em; color:#dc3545; margin-top:2px;">
+          <div style="text-align:right; font-size:0.8em; color:#e63946; margin-top:2px;">
             (差 {dm.fmt_int(gap)})
         </div>
     </div>
@@ -203,7 +243,7 @@ def render_house_plan_card(r_display, dp_target, est_year):
     return f"""
     <div style="background-color:#f8f9fa; padding:15px; border-radius:10px; margin-bottom:10px; border:1px solid #e9ecef; height: 100%; display: flex; flex-direction: column; justify-content: center;">
         <div style="font-size:1.0em; color:#6c757d; margin-bottom:5px;">房屋準備度 R</div>
-        <div style="font-size:2.2em; font-weight:bold; color:#007bff; line-height:1.1;">
+        <div style="font-size:2.2em; font-weight:bold; color:#00b4d8; line-height:1.1;">
             {r_display}
         </div>
         <div style="margin-top:8px; font-size:0.85em; display:flex; justify-content:space-between; color:#495057;">
