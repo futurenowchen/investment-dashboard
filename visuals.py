@@ -1,6 +1,8 @@
 import plotly.express as px
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 import pandas as pd
-import data_manager as dm # 引用格式化工具
+import data_manager as dm
 
 # --- CSS 樣式 ---
 def get_custom_css():
@@ -98,16 +100,74 @@ def plot_asset_allocation(df_B):
     return None
 
 def plot_nav_trend(df_F):
-    """繪製 NAV 趨勢圖"""
+    """繪製戰略級 NAV 趨勢與淨變動複合圖"""
     if not df_F.empty:
         df_calc = df_F.copy()
         if '實質NAV' in df_calc.columns and '日期' in df_calc.columns:
             df_calc['dt'] = pd.to_datetime(df_calc['日期'], errors='coerce')
             df_calc['nav'] = df_calc['實質NAV'].apply(dm.safe_float)
+            
+            # 取出每日淨變動作為波動柱狀圖 (兼容新舊欄位)
+            if 'NAV淨變動' in df_calc.columns:
+                df_calc['net_change'] = df_calc['NAV淨變動'].apply(dm.safe_float)
+            elif '當日淨變動' in df_calc.columns:
+                df_calc['net_change'] = df_calc['當日淨變動'].apply(dm.safe_float)
+            else:
+                df_calc['net_change'] = 0.0
+                
             df_chart = df_calc.sort_values('dt')
-            fig = px.line(df_chart, x='dt', y='nav', title='NAV 趨勢', hover_data={'dt': '|%Y-%m-%d', 'nav': ':,.0f'})
-            fig.update_traces(hovertemplate='<b>日期</b>: %{x|%Y-%m-%d}<br><b>淨值</b>: %{y:,.0f}<extra></extra>')
-            fig.update_layout(hovermode="x unified", yaxis_tickformat=",.0f")
+            
+            # 定義紅綠動能色彩 (台股慣例：正紅負綠)
+            colors = ['#dc3545' if val > 0 else '#28a745' for val in df_chart['net_change']]
+
+            # 建立雙 Y 軸複合圖表
+            fig = make_subplots(specs=[[{"secondary_y": True}]])
+
+            # 1. 動能柱狀圖 (次座標軸，半透明作為底層背景)
+            fig.add_trace(
+                go.Bar(
+                    x=df_chart['dt'],
+                    y=df_chart['net_change'],
+                    name="每日淨變動",
+                    marker_color=colors,
+                    opacity=0.35, 
+                    hovertemplate='<b>淨變動</b>: %{y:,.0f}<extra></extra>'
+                ),
+                secondary_y=True,
+            )
+
+            # 2. NAV 面積圖 (主座標軸，平滑曲線)
+            fig.add_trace(
+                go.Scatter(
+                    x=df_chart['dt'],
+                    y=df_chart['nav'],
+                    name="實質NAV",
+                    fill='tozeroy',
+                    mode='lines+markers',
+                    line=dict(color='#007bff', width=3, shape='spline'),
+                    marker=dict(size=6, color='#007bff'),
+                    fillcolor='rgba(0, 123, 255, 0.1)',
+                    hovertemplate='<b>NAV</b>: %{y:,.0f}<extra></extra>'
+                ),
+                secondary_y=False,
+            )
+
+            # 版面優化設定
+            fig.update_layout(
+                hovermode="x unified",
+                margin=dict(t=30, b=10, l=10, r=10),
+                legend=dict(orientation="h", yanchor="bottom", y=1.05, xanchor="right", x=1),
+                plot_bgcolor='rgba(0,0,0,0)',
+                paper_bgcolor='rgba(0,0,0,0)'
+            )
+
+            # 座標軸視覺處理
+            fig.update_xaxes(showgrid=True, gridwidth=1, gridcolor='#e9ecef')
+            fig.update_yaxes(title_text="實質 NAV (元)", secondary_y=False, tickformat=",.0f", showgrid=True, gridwidth=1, gridcolor='#e9ecef')
+            
+            # 隱藏次座標的 Y 軸刻度文字，僅保留 0 的絕對基準線
+            fig.update_yaxes(showticklabels=False, showgrid=False, zeroline=True, zerolinecolor='#adb5bd', zerolinewidth=1.5, secondary_y=True)
+
             return fig
     return None
 
