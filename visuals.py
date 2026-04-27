@@ -250,8 +250,16 @@ def plot_nav_trend(df_F):
             y_bottom = 1400000 if min_nav > 1400000 else min_nav * 0.95
             y_top = max_nav * 1.05
 
-            # 若 NAV 小於 500 萬，刻度為 10 萬；大於等於 500 萬，刻度為 25 萬
-            nav_dtick = 100000 if max_nav < 5000000 else 250000
+            # 動態刻度設定邏輯：
+            # - 500萬以下：每 20萬一格
+            # - 500萬~1000萬：每 30萬一格
+            # - 1000萬以上：每 50萬一格
+            if max_nav < 5000000:
+                nav_dtick = 200000
+            elif max_nav < 10000000:
+                nav_dtick = 300000
+            else:
+                nav_dtick = 500000
 
             # Y軸 (主圖)：NAV
             fig.update_yaxes(
