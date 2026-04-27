@@ -244,16 +244,21 @@ def plot_nav_trend(df_F):
                 row=2, col=1
             )
             
-            # 戰略 Y 軸截斷邏輯：以 140 萬為底部基準線，若淨值低於 140 萬則動態下移
+            # 戰略 Y 軸截斷邏輯與動態刻度 (Dynamic Tick Intervals)
             min_nav = df_chart['nav'].min()
+            max_nav = df_chart['nav'].max()
             y_bottom = 1400000 if min_nav > 1400000 else min_nav * 0.95
-            y_top = df_chart['nav'].max() * 1.05
+            y_top = max_nav * 1.05
+
+            # 若 NAV 小於 500 萬，刻度為 10 萬；大於等於 500 萬，刻度為 25 萬
+            nav_dtick = 100000 if max_nav < 5000000 else 250000
 
             # Y軸 (主圖)：NAV
             fig.update_yaxes(
                 range=[y_bottom, y_top], # 實施 Y 軸壓縮，放大波動視覺
                 title_font=dict(family=MODERN_FONT, color=TEXT_COLOR, size=12),
                 tickformat=",.0f", 
+                dtick=nav_dtick, # 動態設定刻度間距
                 showgrid=True, 
                 gridwidth=1, 
                 gridcolor=GRID_COLOR,
