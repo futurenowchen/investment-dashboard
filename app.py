@@ -95,11 +95,13 @@ def render_live_monitoring_fragment():
     nav_nc_str = "0"
     nav_vol_str = "0%"
     nav_nc_color = "#212529"
+    nav_vol_color = "#212529"
 
     stock_value_str = "0"
     stock_nc_str = "0"
     stock_vol_str = "0%"
     stock_nc_color = "#212529"
+    stock_vol_color = "#212529"
 
     pct_float = 0.0
     lev_str = "0%"
@@ -110,23 +112,31 @@ def render_live_monitoring_fragment():
         cash_str = dm.fmt_int(df_Monitor['現金'].iloc[0]) if '現金' in df_Monitor.columns else "0"
         stock_value_str = dm.fmt_int(df_Monitor['股票市值'].iloc[0]) if '股票市值' in df_Monitor.columns else "0"
         
-        # NAV淨變動 / 波動率
+        # NAV淨變動
         nnc_val = dm.safe_float(df_Monitor['NAV淨變動'].iloc[0]) if 'NAV淨變動' in df_Monitor.columns else 0
         nav_nc_str = f"+{dm.fmt_int(nnc_val)}" if nnc_val > 0 else dm.fmt_int(nnc_val)
-        if nnc_val > 0: nav_nc_color = "#EF4444" 
-        elif nnc_val < 0: nav_nc_color = "#10B981"
+        if nnc_val > 0: nav_nc_color = "#FF0000" 
+        elif nnc_val < 0: nav_nc_color = "#009900"
         
-        nv_val = df_Monitor['NAV波動率'].iloc[0] if 'NAV波動率' in df_Monitor.columns else '0%'
-        nav_vol_str = nv_val if isinstance(nv_val, str) and '%' in nv_val else dm.fmt_pct(nv_val)
+        # NAV波動率
+        nv_raw = df_Monitor['NAV波動率'].iloc[0] if 'NAV波動率' in df_Monitor.columns else '0%'
+        nv_val = dm.safe_float(nv_raw)
+        nav_vol_str = nv_raw if isinstance(nv_raw, str) and '%' in nv_raw else dm.fmt_pct(nv_val)
+        if nv_val > 0: nav_vol_color = "#FF0000"
+        elif nv_val < 0: nav_vol_color = "#009900"
 
-        # 股市淨變動 / 波動率
+        # 股市淨變動
         snc_val = dm.safe_float(df_Monitor['股市淨變動'].iloc[0]) if '股市淨變動' in df_Monitor.columns else 0
         stock_nc_str = f"+{dm.fmt_int(snc_val)}" if snc_val > 0 else dm.fmt_int(snc_val)
-        if snc_val > 0: stock_nc_color = "#EF4444" 
-        elif snc_val < 0: stock_nc_color = "#10B981"
+        if snc_val > 0: stock_nc_color = "#FF0000" 
+        elif snc_val < 0: stock_nc_color = "#009900"
 
-        sv_val = df_Monitor['股市波動率'].iloc[0] if '股市波動率' in df_Monitor.columns else '0%'
-        stock_vol_str = sv_val if isinstance(sv_val, str) and '%' in sv_val else dm.fmt_pct(sv_val)
+        # 股市波動率
+        sv_raw = df_Monitor['股市波動率'].iloc[0] if '股市波動率' in df_Monitor.columns else '0%'
+        sv_val = dm.safe_float(sv_raw)
+        stock_vol_str = sv_raw if isinstance(sv_raw, str) and '%' in sv_raw else dm.fmt_pct(sv_val)
+        if sv_val > 0: stock_vol_color = "#FF0000"
+        elif sv_val < 0: stock_vol_color = "#009900"
         
         # 達成進度
         p_val = df_Monitor['達成進度'].iloc[0] if '達成進度' in df_Monitor.columns else '0%'
@@ -155,13 +165,13 @@ def render_live_monitoring_fragment():
     with row1_col1: st.markdown(vis.render_simple_card('總資產', tot_asset_str), unsafe_allow_html=True)
     with row1_col2: st.markdown(vis.render_simple_card('現金', cash_str), unsafe_allow_html=True)
     with row1_col3: st.markdown(vis.render_simple_card('NAV淨變動', nav_nc_str, nav_nc_color), unsafe_allow_html=True)
-    with row1_col4: st.markdown(vis.render_simple_card('NAV波動率', nav_vol_str), unsafe_allow_html=True)
+    with row1_col4: st.markdown(vis.render_simple_card('NAV波動率', nav_vol_str, nav_vol_color), unsafe_allow_html=True)
 
     # 第二排卡片：股票市值、股市淨變動、股市波動率、達成進度
     row2_col1, row2_col2, row2_col3, row2_col4 = st.columns(4)
     with row2_col1: st.markdown(vis.render_simple_card('股票市值', stock_value_str), unsafe_allow_html=True)
     with row2_col2: st.markdown(vis.render_simple_card('股市淨變動', stock_nc_str, stock_nc_color), unsafe_allow_html=True)
-    with row2_col3: st.markdown(vis.render_simple_card('股市波動率', stock_vol_str), unsafe_allow_html=True)
+    with row2_col3: st.markdown(vis.render_simple_card('股市波動率', stock_vol_str, stock_vol_color), unsafe_allow_html=True)
     with row2_col4: st.markdown(vis.render_goal_progress_card(target, gap, pct_float), unsafe_allow_html=True)
 
     # 📅 今日判斷 & 市場狀態
@@ -188,11 +198,11 @@ def render_live_monitoring_fragment():
             ldr_val_num = dm.safe_float(ldr_raw)
             ldr_ratio = ldr_val_num / 100.0 if ldr_val_num > 5 else ldr_val_num
             
-            # 修復：補上 "偏熱" 文字宣告，避免 Unpack Error
-            if ldr_ratio <= 1.0: ldr_status_txt, ldr_color = "黃金結構", "#10B981"
+            # 使用正紅/正綠
+            if ldr_ratio <= 1.0: ldr_status_txt, ldr_color = "黃金結構", "#009900"
             elif ldr_ratio <= 1.05: ldr_status_txt, ldr_color = "偏熱", "#F59E0B"
             elif ldr_ratio < 1.08: ldr_status_txt, ldr_color = "過熱", "#EA580C"
-            else: ldr_status_txt, ldr_color = "危險", "#EF4444"
+            else: ldr_status_txt, ldr_color = "危險", "#FF0000"
             
             ldr_display = f"{ldr_val_num:.2f}%<div style='font-size: 1rem; line-height: 1.0; margin-top: 2px;'>{ldr_status_txt}</div>"
 
@@ -200,9 +210,9 @@ def render_live_monitoring_fragment():
             e_val_num = dm.safe_float(e_val)
             e_ratio = e_val_num / 100.0 if e_val_num > 5 else e_val_num
             
-            if e_ratio < 1.10: e_status_txt, e_color = "安全", "#10B981"
+            if e_ratio < 1.10: e_status_txt, e_color = "安全", "#009900"
             elif e_ratio <= 1.12: e_status_txt, e_color = "警戒", "#F59E0B"
-            else: e_status_txt, e_color = "危險", "#EF4444"
+            else: e_status_txt, e_color = "危險", "#FF0000"
             
             e_display = f"{lev_str}<div style='font-size: 1rem; line-height: 1.0; margin-top: 2px;'>{e_status_txt}</div>"
 
@@ -216,18 +226,18 @@ def render_live_monitoring_fragment():
 
             if sheet_pledge_status:
                  p_status = sheet_pledge_status
-                 if "安全" in p_status: p_color = "#10B981"
+                 if "安全" in p_status: p_color = "#009900"
                  elif "謹慎" in p_status: p_color = "#0EA5E9"
                  elif "高警戒" in p_status: p_color = "#EA580C"
                  elif "警戒" in p_status: p_color = "#F59E0B"
-                 elif "危險" in p_status: p_color = "#EF4444"
+                 elif "危險" in p_status: p_color = "#FF0000"
                  else: p_color = "#334155"
             else:
-                if pledge_val < 30: p_status, p_color = "安全（絕對安全區）", "#10B981"
+                if pledge_val < 30: p_status, p_color = "安全（絕對安全區）", "#009900"
                 elif pledge_val < 35: p_status, p_color = "謹慎可開火區", "#0EA5E9"
                 elif pledge_val < 40: p_status, p_color = "警戒（火力鎖定區）", "#F59E0B"
                 elif pledge_val < 45: p_status, p_color = "高警戒", "#EA580C"
-                else: p_status, p_color = "危險", "#EF4444"
+                else: p_status, p_color = "危險", "#FF0000"
             
             pledge_display = f"{pledge_val:.2f}%<div style='font-size: 1rem; line-height: 1.0; margin-top: 2px; white-space: normal; word-break: break-word;'>{p_status}</div>"
             
@@ -244,10 +254,10 @@ def render_live_monitoring_fragment():
                         vix_status = str(vix_row.iloc[0].iloc[3]).strip()
 
             risk_color = "#334155"
-            if "紅" in risk_today: risk_color = "#EF4444"
+            if "紅" in risk_today: risk_color = "#FF0000"
             elif "橘" in risk_today: risk_color = "#EA580C"
             elif "黃" in risk_today: risk_color = "#F59E0B"
-            elif "綠" in risk_today: risk_color = "#10B981"
+            elif "綠" in risk_today: risk_color = "#009900"
 
             m_cols = st.columns(6)
             
@@ -478,3 +488,10 @@ if not df_G.empty:
         st.dataframe(df_G, use_container_width=True)
 else:
     st.info("無財富藍圖資料")
+
+st.markdown("---")
+st.subheader("🗺️ NEGENTROPIC ATARAXIA 10.0 財富路徑整合圖")
+try:
+    st.image("ChatGPT Image 2026年4月29日 下午01_11_02.jpg", use_container_width=True)
+except Exception as e:
+    st.warning("圖片尚未放置於專案資料夾。請將圖片儲存為 `ChatGPT Image 2026年4月29日 下午01_11_02.jpg` 並放入與程式碼相同的路徑中。")
