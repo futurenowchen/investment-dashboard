@@ -91,7 +91,6 @@ def plot_asset_allocation(df_B):
         df_B['num'] = df_B['市值（元）'].apply(dm.safe_float)
         chart_data = df_B[(df_B['num'] > 0) & (~df_B['股票'].str.contains('總資產|Total', na=False))]
         if not chart_data.empty:
-            # 使用更沉穩的科技藍色系
             color_discrete_sequence = ['#0077b6', '#00b4d8', '#90e0ef', '#caf0f8']
             fig = px.pie(
                 chart_data, 
@@ -126,8 +125,8 @@ def plot_nav_trend(df_F):
             
             BG_COLOR = '#FFFFFF'
             GRID_COLOR = '#F1F5F9'
-            COLOR_RISE = '#FF0000'        # 券商正紅
-            COLOR_FALL = '#009900'        # 券商正綠
+            COLOR_RISE = '#FF0000'
+            COLOR_FALL = '#009900'
             COLOR_NAV_MAIN = '#00B4D8'
             COLOR_NAV_FILL = 'rgba(0, 180, 216, 0.08)'
             COLOR_SMA = '#94A3B8'
@@ -186,145 +185,146 @@ def plot_nav_trend(df_F):
     return None
 
 def plot_wealth_trajectory():
-    """繪製 NEGENTROPIC ATARAXIA 財富路徑導航圖 (動態物理推演引擎)"""
+    """繪製 NEGENTROPIC ATARAXIA 財富路徑導航圖 (嚴格對齊 2026/04 基準圖片佈局)"""
     
-    # 戰術核心：建立動態複利引擎，確保每年數字皆反映真實的現金流與利率
-    def calc_trajectory(rate):
-        years_all = list(range(2025, 2041))
-        navs = []
-        nav = 2.88 # 基準起點：2026/04
-        for y in years_all:
-            if y == 2025:
-                navs.append(2.0) # 2025 實際紀錄
-            elif y == 2026:
-                navs.append(2.88)
-            else:
-                nav = nav * (1 + rate) + 0.15 # 每年經常性注資 15萬
-                if y == 2027: nav += 0.80 # 2027 Q4 注資 80萬(中位數)
-                elif y == 2029: nav += 0.725 # 2029 Q4 注資 72.5萬(中位數)
-                navs.append(round(nav, 2))
-        return dict(zip(years_all, navs))
-
-    # 計算三條戰略路徑 (保守 12%, 基礎 18%, 野心 30%)
-    traj_base = calc_trajectory(0.12)
-    traj_cons = calc_trajectory(0.18)
-    traj_alpha = calc_trajectory(0.30)
-
-    # 目標提取節點
-    target_years = [2025, 2026, 2027, 2029, 2030, 2033, 2035, 2038, 2040]
-    nav_base = [traj_base[y] for y in target_years]
-    nav_cons = [traj_cons[y] for y in target_years]
-    nav_alpha = [traj_alpha[y] for y in target_years]
+    # 嚴格依照圖表上的可見 X 軸節點
+    years = [2026, 2027, 2028, 2029, 2030, 2033, 2035, 2036, 2038, 2039, 2040]
+    
+    # 保守路徑 (15%) - 藍線
+    nav_15 =   [2.9, 3.9, 4.8, 5.7, 6.6, 10.2, 13.7, 15.7, 19.0, 21.7, 24.2]
+    text_15 =  ['2.9M', '3.9M', '', '5.7M', '6.6M', '10.2M', '13.7M', '15.7M', '19.0M', '21.7M', '24.2M']
+    
+    # 基準路徑 (17.5%) - 綠線
+    nav_175 =  [2.9, 4.6, 5.5, 7.0, 8.1, 13.0, 17.5, 20.0, 30.0, 33.8, 36.2]
+    text_175 = ['', '', '', '', '8.1M', '', '17.5M', '20.0M', '30.0M', '33.8M', '36.2M']
+    
+    # 野心路徑 (20%) - 紅線
+    nav_20 =   [2.9, 5.1, 6.8, 8.6, 10.5, 18.6, 27.1, 37.0, 57.0, 63.6, 68.7]
+    text_20 =  ['', '5.1M', '', '8.6M', '10.5M', '18.6M', '27.1M', '37.0M', '57.0M', '63.6M', '68.7M']
 
     MODERN_FONT = "Arial, 'Heiti TC', 'Microsoft JhengHei', sans-serif"
 
     fig = go.Figure()
 
-    # 1. 保守路徑 (12%) - 灰色實線，包覆下邊界
+    # 1. 保守路徑 (15%) - 藍色實線 (作為底邊界)
     fig.add_trace(go.Scatter(
-        x=target_years, y=nav_base,
-        name='保守路徑 (12%)',
+        x=years, y=nav_15,
+        name='保守路徑 (年化 15%)',
         mode='lines+markers+text',
-        text=[f"{v:.1f}" for v in nav_base],
-        textposition="bottom right",
-        line=dict(color='#94A3B8', width=2),
-        marker=dict(size=5, color='#94A3B8'),
-        textfont=dict(color='#94A3B8', size=9, family=MODERN_FONT),
-        hovertemplate='<b>%{x} 保守</b>: %{y:.2f}M<extra></extra>'
+        text=text_15, textposition="bottom right",
+        line=dict(color='#1F77B4', width=2),
+        marker=dict(size=6, color='#1F77B4'),
+        textfont=dict(color='#1F77B4', size=10, family=MODERN_FONT),
+        hovertemplate='<b>%{x} 保守</b>: %{y:.1f}M<extra></extra>'
     ))
 
-    # 2. 野心路徑 (30%) - 填色至保守邊界
+    # 2. 野心路徑 (20%) - 紅色實線，填滿至保守路徑
     fig.add_trace(go.Scatter(
-        x=target_years, y=nav_alpha,
-        name='野心路徑 (30%)',
+        x=years, y=nav_20,
+        name='野心路徑 (年化 20%)',
         mode='lines+markers+text',
-        text=[f"{v:.1f}" for v in nav_alpha],
-        textposition="top left",
-        fill='tonexty', # 填滿至保守路徑
-        fillcolor='rgba(0, 180, 216, 0.1)',
-        line=dict(color='#EF4444', width=2, dash='dash'),
-        marker=dict(size=5, color='#EF4444'),
-        textfont=dict(color='#EF4444', size=9, family=MODERN_FONT),
-        hovertemplate='<b>%{x} 野心</b>: %{y:.2f}M<extra></extra>'
+        text=text_20, textposition="top left",
+        fill='tonexty', # 填滿至保守路徑 (15%)
+        fillcolor='rgba(44, 160, 44, 0.12)', # 淺綠色潛力區間
+        line=dict(color='#D62728', width=2),
+        marker=dict(size=6, color='#D62728'),
+        textfont=dict(color='#D62728', size=10, family=MODERN_FONT),
+        hovertemplate='<b>%{x} 野心</b>: %{y:.1f}M<extra></extra>'
     ))
 
-    # 3. 基礎路徑 (18%) - 科技青主線，疊加於最上層
+    # 3. 基準路徑 (17.5%) - 綠色實線，疊加上層
     fig.add_trace(go.Scatter(
-        x=target_years, y=nav_cons,
-        name='基礎路徑 (18%)',
+        x=years, y=nav_175,
+        name='基準路徑 (年化 17.5%)',
         mode='lines+markers+text',
-        text=[f"{v:.1f}M" for v in nav_cons],
-        textposition="top center",
-        line=dict(color='#00B4D8', width=3.5),
-        marker=dict(size=8, color='#00B4D8', line=dict(color='white', width=1)),
-        textfont=dict(color='#0077B6', size=11, family=MODERN_FONT),
-        hovertemplate='<b>%{x} 基礎</b>: %{y:.2f}M<extra></extra>'
+        text=text_175, textposition="top center",
+        line=dict(color='#2CA02C', width=3),
+        marker=dict(size=8, color='#2CA02C', line=dict(color='white', width=1)),
+        textfont=dict(color='#2CA02C', size=11, family=MODERN_FONT),
+        hovertemplate='<b>%{x} 基準</b>: %{y:.1f}M<extra></extra>'
     ))
 
-    # --- 戰略背景階段色塊 (Phases) ---
-    fig.add_vrect(x0=2026, x1=2027.5, fillcolor="#E0F2FE", opacity=0.4, line_width=0,
-                  annotation_text="<b>Phase 1</b><br>窒息期", annotation_position="top left", annotation_font_size=11)
-    fig.add_vrect(x0=2027.5, x1=2028.5, fillcolor="#DCFCE7", opacity=0.4, line_width=0,
-                  annotation_text="<b>Phase 2</b><br>注資釋放", annotation_position="top left", annotation_font_size=11)
-    fig.add_vrect(x0=2028.5, x1=2030, fillcolor="#FEF9C3", opacity=0.4, line_width=0,
-                  annotation_text="<b>Phase 3</b><br>加速期", annotation_position="top left", annotation_font_size=11)
-    fig.add_vrect(x0=2030, x1=2034, fillcolor="#F3E8FF", opacity=0.4, line_width=0,
-                  annotation_text="<b>Phase 4</b><br>隱形加速", annotation_position="top left", annotation_font_size=11)
-    fig.add_vrect(x0=2034, x1=2040, fillcolor="#FFE4E6", opacity=0.4, line_width=0,
-                  annotation_text="<b>Phase 5</b><br>自由區", annotation_position="top left", annotation_font_size=11)
+    # 起點紫點
+    fig.add_trace(go.Scatter(
+        x=[2026], y=[2.887], name='實際 NAV (2026/04/24 起點)', mode='markers',
+        marker=dict(size=10, color='#7C3AED'), hovertemplate='<b>起點</b>: 2.887M<extra></extra>'
+    ))
 
-    # --- 絕對基準線與事件標註 (物理錨定) ---
-    # 千萬門檻絕對基準線 (10M Threshold)
-    fig.add_hline(y=10.0, line_dash="dot", line_color="#7C3AED", line_width=1.5, opacity=0.6,
-                  annotation_text=" 10M 跨越門檻", annotation_position="top left", annotation_font_color="#7C3AED", annotation_font_size=11)
+    # --- 頂部 5 大 Phase 色塊 ---
+    y_max = 85
+    fig.add_shape(type="rect", x0=2026, y0=70, x1=2027.5, y1=y_max, fillcolor="#E5F3FF", line_width=0, layer="below")
+    fig.add_annotation(x=2026.75, y=77.5, text="<b>Phase 1 窒息期 (生存)</b><br>2026 Q1 - 2027 Q2<br>死守現金．陣型與氧氣", showarrow=False, font=dict(size=11, color="#003366"))
 
+    fig.add_shape(type="rect", x0=2027.5, y0=70, x1=2028.5, y1=y_max, fillcolor="#E5F9E5", line_width=0, layer="below")
+    fig.add_annotation(x=2028.0, y=77.5, text="<b>Phase 2 注資釋放期</b><br>2027 Q3 - 2027 Q4<br>債務解放．第一次注資", showarrow=False, font=dict(size=11, color="#004D00"))
+
+    fig.add_shape(type="rect", x0=2028.5, y0=70, x1=2030, y1=y_max, fillcolor="#FFFBE6", line_width=0, layer="below")
+    fig.add_annotation(x=2029.25, y=77.5, text="<b>Phase 3 加速期 (資本成長)</b><br>2028 - 2029<br>複利啟動．資本積累", showarrow=False, font=dict(size=11, color="#664D00"))
+
+    fig.add_shape(type="rect", x0=2030, y0=70, x1=2034, y1=y_max, fillcolor="#F2E6FF", line_width=0, layer="below")
+    fig.add_annotation(x=2032.0, y=77.5, text="<b>Phase 4 隱形加速期</b><br>2030 - 2033<br>資本效應放大期", showarrow=False, font=dict(size=11, color="#330066"))
+
+    fig.add_shape(type="rect", x0=2034, y0=70, x1=2040, y1=y_max, fillcolor="#FFE6E6", line_width=0, layer="below")
+    fig.add_annotation(x=2037.0, y=77.5, text="<b>Phase 5 自由區域</b><br>2034 - 2040<br>資本主導．高資本自主", showarrow=False, font=dict(size=11, color="#660000"))
+
+    # --- 懸掛式箭頭與星星事件標註 ---
     events = [
-        # 注資錨定在當時的 基礎路徑 (18%) 數值上
-        dict(x=2027.75, y=traj_cons[2027], text="<b>2027 Q4 注資</b><br>約 NT$710-910K", color="#EA580C"),
-        dict(x=2029.75, y=traj_cons[2029], text="<b>2029 Q4 注資</b><br>約 NT$550-900K", color="#0284C7"),
-        # 精確千萬門檻突破點 (透過 2030 與 2031 內插法計算，約發生在 2030.87)
-        dict(x=2030.87, y=10.00, text="<b>跨越千萬門檻</b><br>進入資本質變期", color="#7C3AED"),
-        dict(x=2033.00, y=traj_cons[2033], text="<b>2033 規模膨脹</b><br>突破 14M", color="#9333EA")
+        dict(x=2027, y_text=34, y_arrow=5.1, text="<b>2027 Q4 注資</b><br>約 710K-910K", color="#FF6600", symbol="star"),
+        dict(x=2029, y_text=34, y_arrow=8.6, text="<b>2029 Q4 注資</b><br>約 550K-900K", color="#0066CC", symbol="star"),
+        dict(x=2033, y_text=40, y_arrow=18.6, text="<b>2033 加速期</b><br>跨越千萬門檻", color="#9933CC", symbol="arrow-down")
     ]
 
     for ev in events:
         fig.add_annotation(
-            x=ev['x'], y=ev['y'],
-            text=ev['text'],
-            showarrow=True, arrowhead=2, arrowsize=1, arrowwidth=2, arrowcolor=ev['color'],
-            ax=0, ay=-45,
-            font=dict(color=ev['color'], size=11, family=MODERN_FONT),
-            bgcolor="rgba(255,255,255,0.9)", bordercolor=ev['color'], borderwidth=1, borderpad=4
+            x=ev['x'], y=ev['y_arrow'],
+            ax=ev['x'], ay=ev['y_text'], axref='x', ayref='y',
+            text="", showarrow=True, arrowhead=2, arrowsize=1, arrowwidth=1.5, arrowcolor=ev['color'], opacity=0.7
         )
+        if ev['symbol'] == 'star':
+            fig.add_trace(go.Scatter(x=[ev['x']], y=[ev['y_text'] - 1.5], mode='markers', marker=dict(symbol='star', size=16, color=ev['color']), hoverinfo='skip', showlegend=False))
+        fig.add_annotation(x=ev['x'], y=ev['y_text'], text=ev['text'], showarrow=False, yshift=25, font=dict(color=ev['color'], size=11, family=MODERN_FONT))
 
-    # 車貸/分期結束標註 (物理高度同步校準)
+    # 綠色車貸/分期結束標註 (低空飛行)
     fig.add_annotation(
-        x=2027.41, y=traj_cons[2027],
-        text="<b>2027 車貸/分期解除</b><br>+12.8K/月",
-        showarrow=True, arrowhead=2, arrowcolor="#10B981", 
-        ax=-40, ay=45,
-        font=dict(color="#10B981", size=11, family=MODERN_FONT),
-        bgcolor="rgba(255,255,255,0.9)", bordercolor="#10B981", borderwidth=1, borderpad=4
+        x=2027, y=2.9, ax=2027, ay=13, axref='x', ayref='y',
+        text="", showarrow=True, arrowhead=2, arrowcolor="#2CA02C", arrowwidth=1.5, opacity=0.7
     )
+    fig.add_annotation(x=2027, y=13, text="<b>2027/05</b><br>車貸結束<br>現金流<br>+10K/月", showarrow=False, yshift=30, font=dict(color="#2CA02C", size=9, family=MODERN_FONT))
+
+    fig.add_annotation(
+        x=2028, y=4.8, ax=2028, ay=13, axref='x', ayref='y',
+        text="", showarrow=True, arrowhead=2, arrowcolor="#2CA02C", arrowwidth=1.5, opacity=0.7
+    )
+    fig.add_annotation(x=2028, y=13, text="<b>2027/07</b><br>分期結束<br>現金流<br>+2.8K/月", showarrow=False, yshift=30, font=dict(color="#2CA02C", size=9, family=MODERN_FONT))
+
+    # --- 底部里程碑區塊 (Milestone Boxes) ---
+    y_ms = -7
+    fig.add_annotation(x=2025.5, y=y_ms, text="<b>關鍵里程碑</b><br>(目標節點)", showarrow=False, bgcolor="#F1F5F9", bordercolor="#CBD5E1", borderwidth=1, borderpad=6, font=dict(size=10))
+    fig.add_annotation(x=2027, y=y_ms, text="<b>2026</b><br><b>300 萬</b><br>可觸及區<br>站穩 300 萬穩態", showarrow=False, bgcolor="#E5F9E5", bordercolor="#2CA02C", borderwidth=1, borderpad=6, font=dict(size=10))
+    fig.add_annotation(x=2028.5, y=y_ms, text="<b>2027</b><br><b>500 萬</b><br>臨界門檻<br>第一階 -> 第二階", showarrow=False, bgcolor="#FFF4E6", bordercolor="#FF6600", borderwidth=1, borderpad=6, font=dict(size=10))
+    fig.add_annotation(x=2031.5, y=y_ms, text="<b>2030</b><br><b>1,000 萬</b><br>射程內<br>飛輪完成．千萬進入合理射程", showarrow=False, bgcolor="#E5F3FF", bordercolor="#1F77B4", borderwidth=1, borderpad=6, font=dict(size=10))
+    fig.add_annotation(x=2035, y=y_ms, text="<b>2033</b><br>千萬後區間<br>主場開始<br>資本效應明顯放大", showarrow=False, bgcolor="#F2E6FF", bordercolor="#9933CC", borderwidth=1, borderpad=6, font=dict(size=10))
+    fig.add_annotation(x=2039, y=y_ms, text="<b>2040</b><br>美元百萬<br>高資本自主<br>進入自由區域", showarrow=False, bgcolor="#FFE6E6", bordercolor="#D62728", borderwidth=1, borderpad=6, font=dict(size=10))
 
     fig.update_layout(
         title=dict(
-            text="<b>NEGENTROPIC ATARAXIA 10.0 財富路徑整合圖</b><br><span style='font-size:13px; color:#64748B;'>起點：2026/04 NAV 2.88M | 風控：E < 112, LDR < 115, 質押 < 35% | 基期年化：18%</span>",
-            font=dict(size=18, family=MODERN_FONT)
+            text="<b>NEGENTROPIC ATARAXIA 10.0 財富路徑整合圖：保守 vs 野心 (2026 起點 · 2025–2040)</b><br><span style='font-size:12px; color:#64748B;'>起點：2026/04/24 NAV 約 NT$2,887,023 | 年化 15%–20% 區間 | 每年淨投入約 NT$150,000<br>兩次關鍵注資：2027 Q4 約 NT$710,000–910,000；2029 Q4 約 NT$550,000–900,000<br>風控原則：E < 112、LDR < 115、質押率長期 < 35%</span>",
+            font=dict(size=16, family=MODERN_FONT), x=0.5, xanchor='center'
         ),
         template='plotly_white', hovermode="x unified",
-        margin=dict(t=80, b=40, l=40, r=20),
+        margin=dict(t=120, b=60, l=50, r=50),
         font=dict(family=MODERN_FONT, color='#334155'),
-        legend=dict(orientation="h", yanchor="bottom", y=1.05, xanchor="center", x=0.5, bgcolor="rgba(255,255,255,0)"),
+        legend=dict(
+            orientation="v", yanchor="top", y=0.88, xanchor="left", x=0.02,
+            bgcolor="rgba(255,255,255,0.9)", bordercolor="#E2E8F0", borderwidth=1
+        ),
         plot_bgcolor='#FFFFFF', paper_bgcolor='#FFFFFF',
-        xaxis_title="", yaxis_title="總資產 NAV (百萬 TWD)",
-        height=700 # 增加高度以容納 30% 複利的爆發區間
+        xaxis_title="年份", yaxis_title="總資產 NAV (百萬 TWD)",
+        height=800
     )
 
-    fig.update_xaxes(showgrid=True, gridcolor='#F1F5F9', tickvals=list(range(2025, 2041)), showline=True, linecolor='#CBD5E1')
-    
-    # 釋放 Y 軸極限，讓 Alpha 路徑 (最高 174.6M) 得以展現，不再設定強硬的 range 上限
-    fig.update_yaxes(showgrid=True, gridcolor='#F1F5F9', showline=True, linecolor='#CBD5E1', zeroline=False, rangemode='tozero')
+    fig.update_xaxes(showgrid=True, gridcolor='#F1F5F9', tickvals=list(range(2025, 2041)), showline=True, linecolor='#CBD5E1', range=[2024.5, 2040.5])
+    fig.update_yaxes(showgrid=True, gridcolor='#F1F5F9', showline=True, linecolor='#CBD5E1', zeroline=False, range=[-15, 85], dtick=10)
 
     return fig
 
