@@ -492,6 +492,6 @@ else:
 st.markdown("---")
 st.subheader("🗺️ NEGENTROPIC ATARAXIA 10.0 財富路徑整合圖")
 try:
-    st.image("ChatGPT Image 2026年4月29日 下午01_11_02.jpg", use_container_width=True)
+    st.image("pic1.jpg", use_container_width=True)
 except Exception as e:
-    st.warning("圖片尚未放置於專案資料夾。請將圖片儲存為 `ChatGPT Image 2026年4月29日 下午01_11_02.jpg` 並放入與程式碼相同的路徑中。")
+    st.warning("圖片尚未放置於專案資料夾。請將圖片儲存為 `pic1.jpg` 並放入與程式碼相同的路徑中。")
