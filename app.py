@@ -1,359 +1,496 @@
-import plotly.express as px
-import plotly.graph_objects as go
-from plotly.subplots import make_subplots
+import streamlit as st
 import pandas as pd
+import time
+import re
+from datetime import datetime
 import data_manager as dm
+import visuals as vis
 
-# --- CSS 樣式 ---
-def get_custom_css():
-    return """
-    <style>
-    /* 1. 調整頁面頂部留白 */
-    .block-container {
-        padding-top: 5rem;
-        padding-bottom: 2rem;
-    }
+# 設置頁面配置
+st.set_page_config(layout="wide", page_title="投資組合儀表板")
 
-    html, body, [class*="stApp"] { font-size: 16px; }
-    h1 { font-size: 2.2em; margin-bottom: 0.5rem; }
-    h2 { font-size: 1.6em; padding-top: 0.5rem; }
-    h3 { font-size: 1.4em; }
+# 注入 CSS (來自 visuals.py)
+st.markdown(vis.get_custom_css(), unsafe_allow_html=True)
 
-    /* 表格設定：隱藏表頭 (針對核心資產優化) */
-    [data-testid="stDataFrame"] thead {
-        display: none;
-    }
+if 'live_prices' not in st.session_state:
+    st.session_state['live_prices'] = {}
 
-    /* 側邊欄按鈕樣式 */
-    div[data-testid="stSidebar"] .stButton button {
-        width: 100%; height: 45px; margin-bottom: 10px; border: 1px solid #ccc;
-    }
+# === 主程式 ===
 
-    /* 進度條顏色 */
-    .stProgress > div > div > div > div {
-        background-color: #00b4d8;
-    }
+# 載入基礎資料 (供側邊欄與下方區塊使用)
+df_A = dm.load_data('表A_持股總表')
+df_B = dm.load_data('表B_持股比例')
+df_C_base = dm.load_data('表C_總覽')
+df_D = dm.load_data('表D_現金流')
+df_E = dm.load_data('表E_已實現損益')
+df_F = dm.load_data('表F_每日淨值')
+df_G = dm.load_data('表G_財富藍圖') 
+df_Monitor_base = dm.load_data('即時監控面板')
+df_Market_base = dm.load_data('Market')
 
-    /* 自訂指標卡片樣式 (用於曝險指標優化) */
-    .custom-metric-card {
-        background-color: #f8f9fa;
-        border: 1px solid #e9ecef;
-        border-radius: 10px;
-        padding: 12px;
-        text-align: center;
-        height: 100%; /* 嘗試填滿高度 */
-        display: flex;
-        flex-direction: column;
-        justify-content: center;
-    }
-    .metric-label {
-        font-size: 0.9em;
-        color: #6c757d;
-        margin-bottom: 4px;
-    }
-    .metric-value {
-        font-size: 2.0em; /* 稍微加大數值 */
-        font-weight: bold;
-        color: #212529;
-        line-height: 1.1;
-    }
-    .metric-badge {
-        display: block; /* 改為區塊元素以滿版 */
-        width: 100%;    /* 設定寬度為 100% */
-        padding: 6px 0; /* 增加垂直 padding */
-        border-radius: 6px;
-        color: white;
-        font-size: 1.1em; /* 加大字體 */
-        font-weight: bold;
-        margin-bottom: 10px; /* 增加下方間距 */
-    }
+# 決定標題日期字串 (直接抓取系統今日時間)
+today = datetime.now()
+date_str = f" - {today.year}年{today.month}月{today.day}日"
 
-    /* 心態提醒卡片樣式 */
-    .mindset-card {
-        background-color: #e8f4f8; /* 淺藍色底 */
-        border-left: 5px solid #00b4d8; /* 左側藍色線條 */
-        padding: 15px;
-        border-radius: 5px;
-        margin-top: 15px; /* 與上方卡片保持距離 */
-        color: #0f5132;
-        font-size: 1.0em;
-        display: flex;
-        align-items: center;
-        width: 100%;
-    }
-    </style>
-    """
+st.title(f'💰 投資組合儀表板{date_str}')
 
-# --- 圖表繪製 ---
-def plot_asset_allocation(df_B):
-    """繪製資產配置圓餅圖"""
-    if not df_B.empty and '市值（元）' in df_B.columns:
-        df_B['num'] = df_B['市值（元）'].apply(dm.safe_float)
-        chart_data = df_B[(df_B['num'] > 0) & (~df_B['股票'].str.contains('總資產|Total', na=False))]
-        if not chart_data.empty:
-            # 使用更沉穩的科技藍色系
-            color_discrete_sequence = ['#0077b6', '#00b4d8', '#90e0ef', '#caf0f8']
-            fig = px.pie(
-                chart_data, 
-                values='num', 
-                names='股票',
-                color_discrete_sequence=color_discrete_sequence
-            )
-            fig.update_layout(
-                margin=dict(t=10, b=10, l=10, r=10),
-                legend=dict(orientation="h", yanchor="bottom", y=-0.2, xanchor="center", x=0.5)
-            )
-            return fig
-    return None
+# --- Sidebar ---
+st.sidebar.header("🎯 數據管理")
+if st.sidebar.button("🔄 重新載入全域資料"):
+    dm.load_data.clear()
+    st.rerun()
 
-def plot_nav_trend(df_F):
-    """繪製戰略級 NAV 趨勢與淨變動複合圖 (Light Tech Blue Edition)"""
-    if not df_F.empty:
-        df_calc = df_F.copy()
-        if '實質NAV' in df_calc.columns and '日期' in df_calc.columns:
-            df_calc['dt'] = pd.to_datetime(df_calc['日期'], errors='coerce')
-            df_calc['nav'] = df_calc['實質NAV'].apply(dm.safe_float)
+# 戰術升級：局部無感跳動開關
+auto_refresh = st.sidebar.checkbox("⏱️ 啟動局部無感跳動 (每 60 秒)", value=False)
+refresh_interval = 60 if auto_refresh else None
+if auto_refresh:
+    st.sidebar.info("🟢 戰術雷達：局部掃描啟動")
+
+if st.sidebar.button("💾 更新股價至 Google Sheets", type="primary"):
+    if not df_A.empty and '股票' in df_A.columns:
+        tickers = [t for t in df_A['股票'].unique() if str(t).strip()]
+        st.toast(f"正在更新 {len(tickers)} 檔股價...", icon="⏳")
+        updates = dm.fetch_current_prices(tickers)
+        st.session_state['live_prices'] = updates
+        if updates:
+            success = dm.write_prices_to_sheet(df_A, updates)
+            if success:
+                st.sidebar.success(f"成功更新 {len(updates)} 檔股價！")
+                time.sleep(1)
+                dm.load_data.clear()
+                st.rerun()
+        else:
+            st.sidebar.warning("未能取得任何股價，請檢查代碼或網路。")
+
+st.sidebar.markdown("---")
+st.sidebar.subheader("📋 匯出功能")
+if st.sidebar.button("產生文字日報"):
+    report_text = dm.generate_daily_report(df_A, df_C_base, df_D, df_E, df_F, df_Monitor_base, st.session_state['live_prices'], df_Market_base)
+    st.sidebar.markdown("請點擊下方代碼區塊右上角的 **複製按鈕**：")
+    st.sidebar.code(report_text, language='text')
+
+st.sidebar.markdown("---")
+with st.sidebar.expander("🛠️ 連線狀態檢查"):
+    st.write(f"目前設定的 Sheet URL: `{dm.SHEET_URL}`")
+    if "connections" in st.secrets: st.success("✅ Secrets 設定已偵測到")
+    else: st.error("❌ 找不到 Secrets 設定")
+st.sidebar.markdown("---")
+
+
+# ==========================================
+# 🛡️ 戰略高頻監控區 (Fragment Protocol 局部重載)
+# ==========================================
+@st.fragment(run_every=refresh_interval)
+def render_live_monitoring_fragment():
+    # 每次局部重載時，讀取最新快取資料 (透過 TTL 60 秒機制確保數據為最新)
+    df_Monitor = dm.load_data('即時監控面板')
+    df_C = dm.load_data('表C_總覽')
+    df_Market = dm.load_data('Market')
+
+    st.header('1. 投資總覽')
+
+    # 準備總覽卡片數據
+    tot_asset_str = "0"
+    cash_str = "0"
+    nav_nc_str = "0"
+    nav_vol_str = "0%"
+    nav_nc_color = "#212529"
+    nav_vol_color = "#212529"
+
+    stock_value_str = "0"
+    stock_nc_str = "0"
+    stock_vol_str = "0%"
+    stock_nc_color = "#212529"
+    stock_vol_color = "#212529"
+
+    pct_float = 0.0
+    lev_str = "0%"
+    e_val = "0%"
+
+    if not df_Monitor.empty:
+        tot_asset_str = dm.fmt_int(df_Monitor['總資產'].iloc[0]) if '總資產' in df_Monitor.columns else "0"
+        cash_str = dm.fmt_int(df_Monitor['現金'].iloc[0]) if '現金' in df_Monitor.columns else "0"
+        stock_value_str = dm.fmt_int(df_Monitor['股票市值'].iloc[0]) if '股票市值' in df_Monitor.columns else "0"
+        
+        # NAV淨變動
+        nnc_val = dm.safe_float(df_Monitor['NAV淨變動'].iloc[0]) if 'NAV淨變動' in df_Monitor.columns else 0
+        nav_nc_str = f"+{dm.fmt_int(nnc_val)}" if nnc_val > 0 else dm.fmt_int(nnc_val)
+        if nnc_val > 0: nav_nc_color = "#FF0000" 
+        elif nnc_val < 0: nav_nc_color = "#009900"
+        
+        # NAV波動率
+        nv_raw = df_Monitor['NAV波動率'].iloc[0] if 'NAV波動率' in df_Monitor.columns else '0%'
+        nv_val = dm.safe_float(nv_raw)
+        nav_vol_str = nv_raw if isinstance(nv_raw, str) and '%' in nv_raw else dm.fmt_pct(nv_val)
+        if nv_val > 0: nav_vol_color = "#FF0000"
+        elif nv_val < 0: nav_vol_color = "#009900"
+
+        # 股市淨變動
+        snc_val = dm.safe_float(df_Monitor['股市淨變動'].iloc[0]) if '股市淨變動' in df_Monitor.columns else 0
+        stock_nc_str = f"+{dm.fmt_int(snc_val)}" if snc_val > 0 else dm.fmt_int(snc_val)
+        if snc_val > 0: stock_nc_color = "#FF0000" 
+        elif snc_val < 0: stock_nc_color = "#009900"
+
+        # 股市波動率
+        sv_raw = df_Monitor['股市波動率'].iloc[0] if '股市波動率' in df_Monitor.columns else '0%'
+        sv_val = dm.safe_float(sv_raw)
+        stock_vol_str = sv_raw if isinstance(sv_raw, str) and '%' in sv_raw else dm.fmt_pct(sv_val)
+        if sv_val > 0: stock_vol_color = "#FF0000"
+        elif sv_val < 0: stock_vol_color = "#009900"
+        
+        # 達成進度
+        p_val = df_Monitor['達成進度'].iloc[0] if '達成進度' in df_Monitor.columns else '0%'
+        pct_float = dm.safe_float(p_val)
+        pct_float = pct_float / 100.0 if pct_float > 1 else pct_float
+        
+        # 曝險指標 E
+        e_val = df_Monitor['曝險指標 E'].iloc[0] if '曝險指標 E' in df_Monitor.columns else '0%'
+        lev_str = e_val if isinstance(e_val, str) and '%' in e_val else dm.fmt_pct(e_val)
+
+    target = 0
+    gap = 0
+
+    if not df_C.empty:
+        df_c = df_C.copy()
+        first_col = df_c.columns[0]
+        df_c[first_col] = df_c[first_col].astype(str).str.strip()
+        df_c.set_index(first_col, inplace=True)
+        col_val = df_c.columns[0]
+
+        target = dm.safe_float(df_c.loc['短期財務目標', col_val]) if '短期財務目標' in df_c.index else 0
+        gap = dm.safe_float(df_c.loc['短期財務目標差距', col_val]) if '短期財務目標差距' in df_c.index else 0
+
+    # 第一排卡片：總資產、現金、NAV淨變動、NAV波動率
+    row1_col1, row1_col2, row1_col3, row1_col4 = st.columns(4)
+    with row1_col1: st.markdown(vis.render_simple_card('總資產', tot_asset_str), unsafe_allow_html=True)
+    with row1_col2: st.markdown(vis.render_simple_card('現金', cash_str), unsafe_allow_html=True)
+    with row1_col3: st.markdown(vis.render_simple_card('NAV淨變動', nav_nc_str, nav_nc_color), unsafe_allow_html=True)
+    with row1_col4: st.markdown(vis.render_simple_card('NAV波動率', nav_vol_str, nav_vol_color), unsafe_allow_html=True)
+
+    # 第二排卡片：股票市值、股市淨變動、股市波動率、達成進度
+    row2_col1, row2_col2, row2_col3, row2_col4 = st.columns(4)
+    with row2_col1: st.markdown(vis.render_simple_card('股票市值', stock_value_str), unsafe_allow_html=True)
+    with row2_col2: st.markdown(vis.render_simple_card('股市淨變動', stock_nc_str, stock_nc_color), unsafe_allow_html=True)
+    with row2_col3: st.markdown(vis.render_simple_card('股市波動率', stock_vol_str, stock_vol_color), unsafe_allow_html=True)
+    with row2_col4: st.markdown(vis.render_goal_progress_card(target, gap, pct_float), unsafe_allow_html=True)
+
+    # 📅 今日判斷 & 市場狀態
+    st.markdown("<h3 style='margin-top: 0.5rem; margin-bottom: 0.5rem;'>📅 今日判斷 & 市場狀態</h3>", unsafe_allow_html=True)
+
+    monitor_bottom_dict = {}
+    if not df_Monitor.empty:
+        for i, row in df_Monitor.iterrows():
+            if 'LDR' in row.values and '盤勢位置' in row.values:
+                headers = row.astype(str).str.strip().tolist()
+                if i + 1 < len(df_Monitor):
+                    values = df_Monitor.iloc[i + 1].tolist()
+                    monitor_bottom_dict = dict(zip(headers, values))
+                break
+
+    if monitor_bottom_dict:
+        try:
+            ldr_raw = str(monitor_bottom_dict.get('LDR', 'N/A'))
+            risk_today = str(monitor_bottom_dict.get('今日風險等級', 'N/A'))
+            cmd = str(monitor_bottom_dict.get('今日指令', 'N/A'))
+            cmd = re.sub(r"【Debug.*?】", "", cmd, flags=re.DOTALL).strip()
+            market_pos = str(monitor_bottom_dict.get('盤勢位置', 'N/A'))
             
-            # 取出每日淨變動作為波動柱狀圖
-            if 'NAV淨變動' in df_calc.columns:
-                df_calc['net_change'] = df_calc['NAV淨變動'].apply(dm.safe_float)
-            elif '當日淨變動' in df_calc.columns:
-                df_calc['net_change'] = df_calc['當日淨變動'].apply(dm.safe_float)
+            ldr_val_num = dm.safe_float(ldr_raw)
+            ldr_ratio = ldr_val_num / 100.0 if ldr_val_num > 5 else ldr_val_num
+            
+            # 使用正紅/正綠
+            if ldr_ratio <= 1.0: ldr_status_txt, ldr_color = "黃金結構", "#009900"
+            elif ldr_ratio <= 1.05: ldr_status_txt, ldr_color = "偏熱", "#F59E0B"
+            elif ldr_ratio < 1.08: ldr_status_txt, ldr_color = "過熱", "#EA580C"
+            else: ldr_status_txt, ldr_color = "危險", "#FF0000"
+            
+            ldr_display = f"{ldr_val_num:.2f}%<div style='font-size: 1rem; line-height: 1.0; margin-top: 2px;'>{ldr_status_txt}</div>"
+
+            # 曝險倍數狀態判定
+            e_val_num = dm.safe_float(e_val)
+            e_ratio = e_val_num / 100.0 if e_val_num > 5 else e_val_num
+            
+            if e_ratio < 1.10: e_status_txt, e_color = "安全", "#009900"
+            elif e_ratio <= 1.12: e_status_txt, e_color = "警戒", "#F59E0B"
+            else: e_status_txt, e_color = "危險", "#FF0000"
+            
+            e_display = f"{lev_str}<div style='font-size: 1rem; line-height: 1.0; margin-top: 2px;'>{e_status_txt}</div>"
+
+            raw_pledge = dm.safe_float(monitor_bottom_dict.get('總質押率', 0))
+            pledge_val = raw_pledge * 100 if abs(raw_pledge) <= 5.0 else raw_pledge
+            
+            sheet_pledge_status = ""
+            if not df_C.empty:
+                 p_status_raw = dm.fuzzy_get(df_C.set_index(df_C.columns[0]), '質押率燈號')
+                 if p_status_raw: sheet_pledge_status = str(p_status_raw).strip()
+
+            if sheet_pledge_status:
+                 p_status = sheet_pledge_status
+                 if "安全" in p_status: p_color = "#009900"
+                 elif "謹慎" in p_status: p_color = "#0EA5E9"
+                 elif "高警戒" in p_status: p_color = "#EA580C"
+                 elif "警戒" in p_status: p_color = "#F59E0B"
+                 elif "危險" in p_status: p_color = "#FF0000"
+                 else: p_color = "#334155"
             else:
-                df_calc['net_change'] = 0.0
+                if pledge_val < 30: p_status, p_color = "安全（絕對安全區）", "#009900"
+                elif pledge_val < 35: p_status, p_color = "謹慎可開火區", "#0EA5E9"
+                elif pledge_val < 40: p_status, p_color = "警戒（火力鎖定區）", "#F59E0B"
+                elif pledge_val < 45: p_status, p_color = "高警戒", "#EA580C"
+                else: p_status, p_color = "危險", "#FF0000"
+            
+            pledge_display = f"{pledge_val:.2f}%<div style='font-size: 1rem; line-height: 1.0; margin-top: 2px; white-space: normal; word-break: break-word;'>{p_status}</div>"
+            
+            bias_val = str(monitor_bottom_dict.get('季線乖離', 'N/A'))
+            
+            vix_val, vix_status = "N/A", ""
+            if not df_Market.empty:
+                idx_col = df_Market.columns[0]
+                vix_row = df_Market[df_Market[idx_col].astype(str).str.strip().str.upper() == 'VIX']
+                if not vix_row.empty:
+                    if len(df_Market.columns) >= 2:
+                        vix_val = str(vix_row.iloc[0].iloc[1]).strip()
+                    if len(df_Market.columns) >= 4:
+                        vix_status = str(vix_row.iloc[0].iloc[3]).strip()
+
+            risk_color = "#334155"
+            if "紅" in risk_today: risk_color = "#FF0000"
+            elif "橘" in risk_today: risk_color = "#EA580C"
+            elif "黃" in risk_today: risk_color = "#F59E0B"
+            elif "綠" in risk_today: risk_color = "#009900"
+
+            m_cols = st.columns(6)
+            
+            with m_cols[0]: st.markdown(vis.render_mini_metric("LDR", ldr_display, ldr_color), unsafe_allow_html=True)
+            with m_cols[1]: st.markdown(vis.render_mini_metric("曝險倍數", e_display, e_color), unsafe_allow_html=True)
+            with m_cols[2]:
+                match = re.search(r"(.+?)\s*([\(（].+?[\)）])", risk_today)
+                if match:
+                    r_main = match.group(1).strip()
+                    r_sub = match.group(2).strip()
+                    r_sub_clean = re.sub(r"[（）\(\)]", "", r_sub)
+                    risk_display_html = f"{r_main}<div style='font-size: 1rem; line-height: 1.0; margin-top: 2px; white-space: normal; word-break: break-word;'>{r_sub_clean}</div>"
+                else: risk_display_html = risk_today
+                st.markdown(vis.render_mini_metric("風險等級", risk_display_html, risk_color), unsafe_allow_html=True)
                 
-            df_chart = df_calc.sort_values('dt').reset_index(drop=True)
+            with m_cols[3]: st.markdown(vis.render_mini_metric("質押率", pledge_display, p_color), unsafe_allow_html=True)
+            with m_cols[4]:
+                bias_display = "N/A"
+                if bias_val != "N/A":
+                        bv = dm.safe_float(bias_val)
+                        bias_display = f"{bv:.2f}%"
+                val_str = f"{market_pos}<div style='font-size: 1rem; line-height: 1.0; margin-top: 2px;'>{bias_display}</div>"
+                st.markdown(vis.render_mini_metric("盤勢", val_str), unsafe_allow_html=True)
+            with m_cols[5]:
+                v_html = vix_status
+                match = re.search(r"(.+?)\s*([\(（].+?[\)）])", vix_status, re.DOTALL)
+                if match:
+                    v_main = match.group(1).strip()
+                    v_sub = match.group(2).strip()
+                    v_sub_clean = re.sub(r"[（）\(\)]", "", v_sub).replace('\n', ' ')
+                    v_html = f"{v_main}<div style='font-size: 1rem; line-height: 1.3; margin-top: 2px; white-space: normal; color: gray;'>{v_sub_clean}</div>"
+                vix_display_html = f"{vix_val}<div style='font-size: 1rem; line-height: 1.2; margin-top: 2px;'>{v_html}</div>"
+                st.markdown(vis.render_mini_metric("VIX", vix_display_html), unsafe_allow_html=True) 
             
-            # 新增戰略生命線：20日移動平均 (這是使用者自身 NAV 的月線)
-            df_chart['SMA20'] = df_chart['nav'].rolling(window=20, min_periods=1).mean()
+            st.markdown(f"<div style='font-size:1.1em;color:gray;margin-top:2px;margin-bottom:2px'>📊 操作指令 (60日乖離: {bias_val})</div>", unsafe_allow_html=True)
+            st.info(f"{cmd}")
             
-            # === 清爽科技藍配色與現代黑體設定 ===
-            BG_COLOR = '#FFFFFF'          # 純白基底，融入網頁
-            GRID_COLOR = '#F1F5F9'        # 極淺灰網格線 (Slate 100)
-            COLOR_RISE = '#FF0000'        # 券商正紅 (台股漲)
-            COLOR_FALL = '#009900'        # 券商正綠 (台股跌，白底增強對比)
-            COLOR_NAV_MAIN = '#00B4D8'    # 科技青
-            COLOR_NAV_FILL = 'rgba(0, 180, 216, 0.08)' # 底部微光
-            COLOR_SMA = '#94A3B8'         # 戰略灰 (Slate 400)
-            TEXT_COLOR = '#334155'        # 深灰字體 (Slate 700)
-            MODERN_FONT = "Arial, 'Heiti TC', 'Microsoft JhengHei', sans-serif" # 高辨識度黑體
+            mindset_text = ""
+            for i, row in df_Monitor.iterrows():
+                if '心態短句' in row.values or '提醒' in row.values:
+                    headers = row.astype(str).str.strip().tolist()
+                    if i + 1 < len(df_Monitor):
+                        values = df_Monitor.iloc[i + 1].tolist()
+                        m_dict = dict(zip(headers, values))
+                        mindset_col = next((c for c in m_dict.keys() if '心態' in str(c) or '提醒' in str(c)), None)
+                        if mindset_col:
+                            mindset_text = str(m_dict.get(mindset_col, '')).strip()
+                    break
             
-            colors = [COLOR_RISE if val > 0 else COLOR_FALL for val in df_chart['net_change']]
+            if mindset_text:
+                st.markdown(vis.render_mindset_card(mindset_text), unsafe_allow_html=True)
+                
+        except Exception as e: st.error(f"解析判斷數據時發生錯誤: {e}")
+    else: st.warning('總覽數據載入失敗。請檢查 Secrets 設定或試算表網址。')
+    st.markdown("---")
 
-            # 建立上下分離的 Subplots (7:3 比例)
-            fig = make_subplots(
-                rows=2, cols=1, 
-                shared_xaxes=True, 
-                vertical_spacing=0.03,
-                row_heights=[0.75, 0.25]
-            )
+# === 執行局部無感跳動區塊 ===
+render_live_monitoring_fragment()
 
-            # 1. 主圖：NAV 折線面積圖 (Row 1)
-            # 整合所有資訊至 customdata，達成單一彈出視窗
-            fig.add_trace(
-                go.Scatter(
-                    x=df_chart['dt'],
-                    y=df_chart['nav'],
-                    name="每日淨值", 
-                    fill='tozeroy',
-                    mode='lines', 
-                    line=dict(
-                        color=COLOR_NAV_MAIN, 
-                        width=2.5, 
-                        shape='spline', # 平滑曲線
-                        smoothing=0.8
-                    ),
-                    fillcolor=COLOR_NAV_FILL,
-                    customdata=df_chart[['net_change', 'SMA20']].values, # 封裝其他數據供 hover 使用
-                    hovertemplate=(
-                        '<b>日期：%{x|%Y-%m-%d}</b><br><br>'
-                        '<b>每日淨值：</b> %{y:,.0f}<br>'
-                        '<b>淨值變化：</b> %{customdata[0]:+,.0f}<br>'
-                        '<b>NAV 20MA：</b> %{customdata[1]:,.0f}'
-                        '<extra></extra>' # 隱藏右側獨立的 trace 名稱標籤
-                    )
-                ),
-                row=1, col=1
-            )
+
+# ==========================================
+# 2. 持股分析 (靜態區，不隨Fragment重載閃爍)
+# ==========================================
+st.header('2. 持股分析')
+c1, c2 = st.columns([3, 1])
+with c1:
+    st.markdown("### 📝 持股明細") 
+    if not df_A.empty:
+        df_show = df_A.copy()
+        if st.session_state['live_prices']:
+            df_show['即時價'] = df_show['股票'].map(st.session_state['live_prices']).fillna('')
+        
+        for c in ['持有數量（股）', '市值（元）', '浮動損益']: 
+            if c in df_show.columns: df_show[c] = df_show[c].apply(dm.fmt_int)
+        for c in ['平均成本', '收盤價', '即時價']:
+            if c in df_show.columns: df_show[c] = df_show[c].apply(dm.fmt_money)
             
-            # 1.1 主圖：20日移動平均線 (Row 1)
-            fig.add_trace(
-                go.Scatter(
-                    x=df_chart['dt'],
-                    y=df_chart['SMA20'],
-                    name="NAV 20MA",
-                    mode='lines',
-                    line=dict(color=COLOR_SMA, width=1.5, dash='dash'),
-                    hoverinfo='skip' # 關閉獨立 hover，已整合至主視窗
-                ),
-                row=1, col=1
-            )
+        height_val = (len(df_show) + 1) * 35 + 20
+        st.dataframe(df_show, use_container_width=True, height=height_val, hide_index=True)
 
-            # 2. 副圖：動能底槽柱狀圖 (Row 2)
-            fig.add_trace(
-                go.Bar(
-                    x=df_chart['dt'],
-                    y=df_chart['net_change'],
-                    name="淨值變化",
-                    marker_color=colors,
-                    opacity=0.75, 
-                    marker_line_width=0, 
-                    hoverinfo='skip' # 關閉獨立 hover，已整合至主視窗
-                ),
-                row=2, col=1
-            )
+with c2:
+    st.markdown("<h3 style='text-align: center;'>🍰 資產配置</h3>", unsafe_allow_html=True) 
+    fig = vis.plot_asset_allocation(df_B)
+    if fig:
+        st.plotly_chart(fig, use_container_width=True)
 
-            # 版面優化設定 (Light Vibe & Modern Font)
-            fig.update_layout(
-                template='plotly_white', # 改為亮色主題
-                hovermode="x", # 採用單一 X 軸對齊，配合自定義 hovertemplate 達成最簡潔效果
-                margin=dict(t=40, b=10, l=10, r=10),
-                plot_bgcolor=BG_COLOR,
-                paper_bgcolor=BG_COLOR,
-                font=dict(family=MODERN_FONT, size=13, color=TEXT_COLOR), # 應用清晰的無襯線字體
-                legend=dict(
-                    orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1,
-            # 隱藏次座標的 Y 軸刻度，僅保留 0 軸絕對基準線
-            fig.update_yaxes(
-                showticklabels=False, 
-                showgrid=False, 
-                zeroline=True, 
-                zerolinecolor='#CBD5E1', # 絕對基準線 (淺灰)
-                zerolinewidth=1.5, 
-                row=2, col=1
-            )
 
-            return fig
-    return None
+# ==========================================
+# 3. 交易紀錄與淨值 (靜態區)
+# ==========================================
+st.header('3. 交易紀錄與淨值')
+t1, t2, t3 = st.tabs(['現金流', '已實現損益', '每日淨值'])
 
-def plot_wealth_trajectory():
-    """繪製 NEGENTROPIC ATARAXIA 財富路徑導航圖"""
-    years = [2025, 2026, 2027, 2029, 2030, 2033, 2035, 2038, 2040]
-    nav_low = [2.0, 3.28, 4.63, 7.0, 8.2, 12.99, 17.51, 27.14, 36.22]
-    nav_high = [2.0, 3.38, 5.11, 8.59, 10.46, 18.62, 27.14, 47.44, 68.65]
+with t1:
+    if not df_D.empty:
+        df_calc = df_D.copy()
+        if '日期' in df_calc.columns:
+            df_calc['dt'] = pd.to_datetime(df_calc['日期'], errors='coerce')
+            df_calc.sort_values('dt', ascending=False, inplace=True)
+        cats = df_calc['動作'].unique().tolist()
+        sel = st.multiselect('篩選動作', cats, default=cats)
+        df_calc = df_calc[df_calc['動作'].isin(sel)]
+        total = df_calc['淨收／支出'].apply(dm.safe_float).sum() if '淨收／支出' in df_calc.columns else 0
+        c_a, c_b = st.columns(2)
+        c_a.metric("篩選淨額", dm.fmt_money(total))
+        c_b.markdown(f"**筆數：** {len(df_calc)}")
+        df_view = df_calc.drop(columns=['dt'], errors='ignore').copy()
+        if '日期' in df_view.columns: df_view['日期'] = df_view['日期'].apply(dm.fmt_date)
+        for c in ['淨收／支出', '累積現金', '成交價']:
+            if c in df_view.columns: df_view[c] = df_view[c].apply(dm.fmt_money)
+        if '數量' in df_view.columns: df_view['數量'] = df_view['數量'].apply(dm.fmt_int)
+        st.dataframe(df_view, use_container_width=True, height=400)
+        if not df_calc.empty: st.caption(f"📅 {df_calc['dt'].min().date()} ~ {df_calc['dt'].max().date()}")
 
-    MODERN_FONT = "Arial, 'Heiti TC', 'Microsoft JhengHei', sans-serif"
+with t2:
+    if not df_E.empty:
+        df_calc = df_E.copy()
+        d_col = next((c for c in df_calc.columns if '日期' in c), None)
+        if d_col:
+            df_calc['dt'] = pd.to_datetime(df_calc[d_col], errors='coerce')
+            df_calc.sort_values('dt', ascending=False, inplace=True)
+        stocks = df_calc['股票'].unique().tolist()
+        c_sel, c_all, c_clr = st.columns([4, 1, 1])
+        with c_sel: sel_s = st.multiselect('篩選股票', stocks, default=stocks, key='pnl_s', label_visibility="collapsed")
+        with c_all:
+            st.markdown('<div style="height: 28px"></div>', unsafe_allow_html=True)
+            if st.button("全選"): del st.session_state['pnl_s']; st.rerun()
+        with c_clr:
+            st.markdown('<div style="height: 28px"></div>', unsafe_allow_html=True)
+            if st.button("清除"): st.session_state['pnl_s'] = []; st.rerun()
+        if sel_s: df_calc = df_calc[df_calc['股票'].isin(sel_s)]
+        total = df_calc['已實現損益'].apply(dm.safe_float).sum() if '已實現損益' in df_calc.columns else 0
+        st.metric("總實現損益", dm.fmt_money(total))
+        df_view = df_calc.drop(columns=['dt'], errors='ignore').copy()
+        if d_col: df_view[d_col] = df_view[d_col].apply(dm.fmt_date)
+        for c in ['已實現損益', '投資成本', '帳面收入', '成交均價']:
+             if c in df_view.columns: df_view[c] = df_view[c].apply(dm.fmt_money)
+        st.dataframe(df_view, use_container_width=True, height=400)
 
-    fig = go.Figure()
+with t3:
+    fig = vis.plot_nav_trend(df_F)
+    if fig:
+        st.plotly_chart(fig, use_container_width=True)
+        with st.expander("詳細數據"):
+            df_calc = df_F.copy()
+            d_col = next((c for c in df_calc.columns if '日期' in c), '日期')
+            df_calc['dt'] = pd.to_datetime(df_calc[d_col], errors='coerce')
+            df_disp = df_calc.sort_values('dt', ascending=False).drop(columns=['dt'], errors='ignore').copy()
+            df_disp['日期'] = df_disp['日期'].apply(dm.fmt_date)
+            for c in ['實質NAV', '股票市值', '現金']:
+                if c in df_disp.columns: df_disp[c] = df_disp[c].apply(dm.fmt_money)
+            st.dataframe(df_disp, use_container_width=True)
+            if not df_calc.empty: st.caption(f"📅 紀錄: {df_calc['dt'].min().date()} ~ {df_calc['dt'].max().date()}")
 
-    # 進攻路徑 (野心) - 放在下層避免遮擋，使用虛線與紅色警戒色
-    fig.add_trace(go.Scatter(
-        x=years, y=nav_high,
-        name='進攻路徑 (Alpha)',
-        mode='lines+markers+text',
-        text=[f"{v:.1f}M" for v in nav_high],
-        textposition="top left",
-        line=dict(color='#EF4444', width=2, dash='dash'),
-        marker=dict(size=6, color='#EF4444'),
-        textfont=dict(color='#EF4444', size=11, family=MODERN_FONT)
-    ))
+st.markdown('---')
 
-    # 保守路徑 (基準) - 疊加上層，作為主視覺錨點
-    fig.add_trace(go.Scatter(
-        x=years, y=nav_low,
-        name='保守路徑 (Base)',
-        mode='lines+markers+text',
-        text=[f"{v:.1f}M" for v in nav_low],
-        textposition="bottom right",
-        fill='tonexty', # 填滿至上一條線 (nav_high)
-        fillcolor='rgba(0, 180, 216, 0.1)',
-        line=dict(color='#007BFF', width=3),
-        marker=dict(size=8, color='#007BFF'),
-        textfont=dict(color='#007BFF', size=11, family=MODERN_FONT)
-    ))
+# ==========================================
+# 4. 財富藍圖 (靜態區)
+# ==========================================
+st.header('4. 財富藍圖')
+if not df_G.empty:
+    try:
+        all_rows = [df_G.columns.tolist()] + df_G.values.tolist()
+        current_title = None
+        current_data = []
+        found_sections = False 
+        
+        for row in all_rows:
+            first_cell = str(row[0]).strip()
+            if first_cell.startswith(('一、', '二、', '三、', '四、', '五、')):
+                found_sections = True
+                if current_title:
+                    title_match = re.search(r"(.+?)\s*[（\(](.+)[）\)]", current_title)
+                    if title_match:
+                        main_t = title_match.group(1).strip()
+                        sub_t = title_match.group(2).strip()
+                        st.markdown(f"### {main_t}")
+                        st.markdown(f"<div style='font-size: 0.9em; color: gray; margin-top: -0.5rem; margin-bottom: 0.8rem;'>（{sub_t}）</div>", unsafe_allow_html=True)
+                    else:
+                        st.subheader(current_title)
+                        
+                    if len(current_data) > 0:
+                        headers = current_data[0]
+                        body = current_data[1:] if len(current_data) > 1 else []
+                        u_heads = []
+                        seen = {}
+                        for h in headers:
+                            h_str = str(h).strip()
+                            if not h_str: h_str = "-" 
+                            if h_str in seen: seen[h_str] += 1; u_heads.append(f"{h_str}_{seen[h_str]}")
+                            else: seen[h_str] = 0; u_heads.append(h_str)
+                        if body:
+                            st.dataframe(pd.DataFrame(body, columns=u_heads), use_container_width=True, hide_index=True)
+                current_title = first_cell
+                current_data = []
+            elif any(str(c).strip() for c in row):
+                if current_title is not None:
+                    current_data.append(row)
+        
+        # Render last
+        if current_title:
+            title_match = re.search(r"(.+?)\s*[（\(](.+)[）\)]", current_title)
+            if title_match:
+                main_t = title_match.group(1).strip()
+                sub_t = title_match.group(2).strip()
+                st.markdown(f"### {main_t}")
+                st.markdown(f"<div style='font-size: 0.9em; color: gray; margin-top: -0.5rem; margin-bottom: 0.8rem;'>（{sub_t}）</div>", unsafe_allow_html=True)
+            else:
+                st.subheader(current_title)
+            
+            if len(current_data) > 0:
+                headers = current_data[0]
+                body = current_data[1:] if len(current_data) > 1 else []
+                u_heads = []
+                seen = {}
+                for h in headers:
+                    h_str = str(h).strip()
+                    if not h_str: h_str = "-" 
+                    if h_str in seen: seen[h_str] += 1; u_heads.append(f"{h_str}_{seen[h_str]}")
+                    else: seen[h_str] = 0; u_heads.append(h_str)
+                if body:
+                    st.dataframe(pd.DataFrame(body, columns=u_heads), use_container_width=True, hide_index=True)
+        
+        if not found_sections:
+            st.dataframe(df_G, use_container_width=True)
 
-    fig.update_layout(
-        template='plotly_white',
-        hovermode="x unified",
-        margin=dict(t=20, b=20, l=10, r=10),
-        font=dict(family=MODERN_FONT, color='#334155'),
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-        plot_bgcolor='#FFFFFF',
-        paper_bgcolor='#FFFFFF',
-        xaxis_title="",
-        yaxis_title="總資產 NAV (百萬 TWD)",
-        height=500
-    )
+    except:
+        st.dataframe(df_G, use_container_width=True)
+else:
+    st.info("無財富藍圖資料")
 
-    fig.update_xaxes(
-        showgrid=True, gridcolor='#F1F5F9', 
-        tickvals=years, # 強制鎖定陣列中的關鍵年份刻度
-        showline=True, linecolor='#CBD5E1'
-    )
-    fig.update_yaxes(
-        showgrid=True, gridcolor='#F1F5F9', 
-        showline=True, linecolor='#CBD5E1',
-        zeroline=False
-    )
-
-    return fig
-
-# --- HTML 卡片產生器 ---
-def render_risk_metric_card(risk_text, lev_value, style_dict):
-    return f"""
-    <div class='custom-metric-card'>
-        <div class='metric-badge' style='background-color: {style_dict['bg']}; color: {style_dict['t']};'>
-            {style_dict['e']} {risk_text}
-        </div>
-        <div class='metric-label'>曝險倍數</div>
-        <div class='metric-value'>{lev_value:.2f}</div>
-    </div>
-    """
-
-def render_goal_progress_card(target, gap, pct):
-    return f"""
-    <div style="background-color:#f8f9fa; padding:15px; border-radius:10px; margin-bottom:10px; border:1px solid #e9ecef; height: 100%; display: flex; flex-direction: column; justify-content: center;">
-        <div style="font-size:1.0em; color:#6c757d; margin-bottom:5px;">達成進度</div>
-        <div style="font-size:2.2em; font-weight:bold; color:#007BFF; line-height:1.1;">
-            {pct*100:.1f}%
-        </div>
-        <div style="margin-top:8px; font-size:0.85em; display:flex; justify-content:space-between; color:#495057;">
-            <span>目標: <b>{dm.fmt_int(target)}</b></span>
-        </div>
-          <div style="text-align:right; font-size:0.8em; color:#e63946; margin-top:2px;">
-            (差 {dm.fmt_int(gap)})
-        </div>
-    </div>
-    """
-
-def render_house_plan_card(r_display, dp_target, est_year):
-    return f"""
-    <div style="background-color:#f8f9fa; padding:15px; border-radius:10px; margin-bottom:10px; border:1px solid #e9ecef; height: 100%; display: flex; flex-direction: column; justify-content: center;">
-        <div style="font-size:1.0em; color:#6c757d; margin-bottom:5px;">房屋準備度 R</div>
-        <div style="font-size:2.2em; font-weight:bold; color:#00b4d8; line-height:1.1;">
-            {r_display}
-        </div>
-        <div style="margin-top:8px; font-size:0.85em; display:flex; justify-content:space-between; color:#495057;">
-            <span>頭期款: <b>{dm.fmt_int(dp_target)}</b></span>
-        </div>
-          <div style="text-align:right; font-size:0.8em; color:#6c757d; margin-top:2px;">
-            (預估 {est_year} 年)
-        </div>
-    </div>
-    """
-
-def render_simple_card(title, value, value_color="#212529"):
-    """通用數值展示卡片"""
-    return f"""
-    <div style="background-color:#f8f9fa; padding:15px; border-radius:10px; margin-bottom:10px; border:1px solid #e9ecef; height: 100%; display: flex; flex-direction: column; justify-content: center;">
-        <div style="font-size:1.0em; color:#6c757d; margin-bottom:5px;">{title}</div>
-        <div style="font-size:2.2em; font-weight:bold; color:{value_color}; line-height:1.1;">
-            {value}
-        </div>
-    </div>
-    """
-
-def render_mindset_card(mindset_text):
-    return f"""
-    <div class="mindset-card">
-        💡 <b>心態提醒：</b> {mindset_text}
-    </div>
-    """
-
-def render_mini_metric(label, value, color="black"):
-    return f"""
-    <div style='margin-bottom:0px;'>
-        <div style='font-size:1.1rem; color:gray; margin-bottom:2px; white-space: nowrap;'>{label}</div>
-        <div style='font-size:1.8rem; font-weight:bold; color:{color}; line-height:1.2; white-space: normal; word-break: break-word;'>{value}</div>
-    </div>
-    """
+st.markdown("---")
+st.subheader("🗺️ NEGENTROPIC ATARAXIA 10.0 財富路徑導航圖")
+fig_traj = vis.plot_wealth_trajectory()
+if fig_traj:
+    st.plotly_chart(fig_traj, use_container_width=True)
