@@ -188,8 +188,9 @@ def render_live_monitoring_fragment():
             ldr_val_num = dm.safe_float(ldr_raw)
             ldr_ratio = ldr_val_num / 100.0 if ldr_val_num > 5 else ldr_val_num
             
+            # 修復：補上 "偏熱" 文字宣告，避免 Unpack Error
             if ldr_ratio <= 1.0: ldr_status_txt, ldr_color = "黃金結構", "#10B981"
-            elif ldr_ratio <= 1.05: ldr_status_txt, ldr_color = "#F59E0B"
+            elif ldr_ratio <= 1.05: ldr_status_txt, ldr_color = "偏熱", "#F59E0B"
             elif ldr_ratio < 1.08: ldr_status_txt, ldr_color = "過熱", "#EA580C"
             else: ldr_status_txt, ldr_color = "危險", "#EF4444"
             
