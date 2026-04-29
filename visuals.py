@@ -185,7 +185,7 @@ def plot_nav_trend(df_F):
     return None
 
 def plot_wealth_trajectory():
-    """繪製 NEGENTROPIC ATARAXIA 財富路徑導航圖 (嚴格對齊 2026/04 基準圖片佈局)"""
+    """繪製 NEGENTROPIC ATARAXIA 財富路徑導航圖 (嚴格對齊 2026/04 基準圖片佈局，防擁擠最佳化)"""
     
     # 嚴格依照圖表上的可見 X 軸節點
     years = [2026, 2027, 2028, 2029, 2030, 2033, 2035, 2036, 2038, 2039, 2040]
@@ -206,7 +206,7 @@ def plot_wealth_trajectory():
 
     fig = go.Figure()
 
-    # 0. 潛力區間填色 (獨立圖層，解開與折線順序的綁定)
+    # 0. 潛力區間填色 (獨立圖層)
     fig.add_trace(go.Scatter(
         x=years + years[::-1],
         y=nav_20 + nav_15[::-1],
@@ -218,7 +218,10 @@ def plot_wealth_trajectory():
         showlegend=True
     ))
 
-    # 1. 野心路徑 (20%) - 紅色實線
+    # --- 關鍵修正：確保 Hover 順序為 野心 -> 基準 -> 保守 ---
+    # Plotly unified hover 會依照 Trace 加入的順序顯示，所以我們先加野心(紅)，再加基準(綠)，最後保守(藍)
+
+    # 1. 野心路徑 (20%) - 紅色實線，Hover 最上方
     fig.add_trace(go.Scatter(
         x=years, y=nav_20,
         name='野心路徑 (年化 20%)',
@@ -230,7 +233,7 @@ def plot_wealth_trajectory():
         hovertemplate='<b>%{x} 野心</b>: %{y:.1f}M<extra></extra>'
     ))
 
-    # 2. 基準路徑 (17.5%) - 綠色實線
+    # 2. 基準路徑 (17.5%) - 綠色實線，Hover 中間
     fig.add_trace(go.Scatter(
         x=years, y=nav_175,
         name='基準路徑 (年化 17.5%)',
@@ -242,7 +245,7 @@ def plot_wealth_trajectory():
         hovertemplate='<b>%{x} 基準</b>: %{y:.1f}M<extra></extra>'
     ))
 
-    # 3. 保守路徑 (15%) - 藍色實線
+    # 3. 保守路徑 (15%) - 藍色實線，Hover 最下方
     fig.add_trace(go.Scatter(
         x=years, y=nav_15,
         name='保守路徑 (年化 15%)',
@@ -260,30 +263,34 @@ def plot_wealth_trajectory():
         marker=dict(size=10, color='#7C3AED'), hovertemplate='<b>起點</b>: 2.887M<extra></extra>'
     ))
 
-    # --- 頂部 5 大 Phase 色塊 (錯位排列防擁擠) ---
-    y_base = 76   # 提高矩形底部，為折線預留空間
-    y_max = 100   # 矩形推升至更高點
+    # --- 頂部 5 大 Phase 色塊 (錯位排列防擁擠，高度徹底推升) ---
+    y_base = 80   # 提高矩形底部
+    y_max = 120   # 矩形推升至天花板
+
+    # 高度交錯設定，避免左右文字碰撞
+    y_high = 108
+    y_low = 90
 
     fig.add_shape(type="rect", x0=2026, y0=y_base, x1=2027.5, y1=y_max, fillcolor="#E5F3FF", line_width=0, layer="below")
-    fig.add_annotation(x=2026.75, y=92, text="<b>Phase 1 窒息期 (生存)</b><br>2026 Q1 - 2027 Q2<br>死守現金．陣型與氧氣", showarrow=False, font=dict(size=10, color="#003366"))
+    fig.add_annotation(x=2026.75, y=y_high, text="<b>Phase 1 窒息期</b><br>2026 Q1-2027 Q2<br>死守現金與氧氣", showarrow=False, font=dict(size=10, color="#003366"))
 
     fig.add_shape(type="rect", x0=2027.5, y0=y_base, x1=2028.5, y1=y_max, fillcolor="#E5F9E5", line_width=0, layer="below")
-    fig.add_annotation(x=2028.0, y=82, text="<b>Phase 2 注資釋放期</b><br>2027 Q3 - 2027 Q4<br>債務解放．第一次注資", showarrow=False, font=dict(size=10, color="#004D00"))
+    fig.add_annotation(x=2028.0, y=y_low, text="<b>Phase 2 注資期</b><br>2027 Q3-2027 Q4<br>第一次注資", showarrow=False, font=dict(size=10, color="#004D00"))
 
     fig.add_shape(type="rect", x0=2028.5, y0=y_base, x1=2030, y1=y_max, fillcolor="#FFFBE6", line_width=0, layer="below")
-    fig.add_annotation(x=2029.25, y=92, text="<b>Phase 3 加速期 (資本成長)</b><br>2028 - 2029<br>複利啟動．資本積累", showarrow=False, font=dict(size=10, color="#664D00"))
+    fig.add_annotation(x=2029.25, y=y_high, text="<b>Phase 3 加速期</b><br>2028-2029<br>複利啟動與積累", showarrow=False, font=dict(size=10, color="#664D00"))
 
     fig.add_shape(type="rect", x0=2030, y0=y_base, x1=2034, y1=y_max, fillcolor="#F2E6FF", line_width=0, layer="below")
-    fig.add_annotation(x=2032.0, y=82, text="<b>Phase 4 隱形加速期</b><br>2030 - 2033<br>資本效應放大期", showarrow=False, font=dict(size=10, color="#330066"))
+    fig.add_annotation(x=2032.0, y=y_low, text="<b>Phase 4 隱形加速</b><br>2030-2033<br>資本效應放大期", showarrow=False, font=dict(size=10, color="#330066"))
 
     fig.add_shape(type="rect", x0=2034, y0=y_base, x1=2040, y1=y_max, fillcolor="#FFE6E6", line_width=0, layer="below")
-    fig.add_annotation(x=2037.0, y=92, text="<b>Phase 5 自由區域</b><br>2034 - 2040<br>資本主導．高資本自主", showarrow=False, font=dict(size=10, color="#660000"))
+    fig.add_annotation(x=2037.0, y=y_high, text="<b>Phase 5 自由區域</b><br>2034-2040<br>高資本自主導向", showarrow=False, font=dict(size=10, color="#660000"))
 
     # --- 懸掛式箭頭與星星事件標註 ---
     events = [
-        dict(x=2027, y_text=42, y_arrow=5.1, text="<b>2027 Q4 注資</b><br>約 710K-910K", color="#FF6600", symbol="star"),
-        dict(x=2029, y_text=42, y_arrow=8.6, text="<b>2029 Q4 注資</b><br>約 550K-900K", color="#0066CC", symbol="star"),
-        dict(x=2033, y_text=48, y_arrow=18.6, text="<b>2033 加速期</b><br>跨越千萬門檻", color="#9933CC", symbol="arrow-down")
+        dict(x=2027, y_text=48, y_arrow=5.1, text="<b>2027 Q4 注資</b><br>約 710K-910K", color="#FF6600", symbol="star"),
+        dict(x=2029, y_text=48, y_arrow=8.6, text="<b>2029 Q4 注資</b><br>約 550K-900K", color="#0066CC", symbol="star"),
+        dict(x=2033, y_text=54, y_arrow=18.6, text="<b>2033 加速期</b><br>跨越千萬門檻", color="#9933CC", symbol="arrow-down")
     ]
 
     for ev in events:
@@ -314,7 +321,7 @@ def plot_wealth_trajectory():
     fig.add_annotation(x=2025.5, y=y_ms, text="<b>關鍵里程碑</b><br>(目標節點)", showarrow=False, bgcolor="#F1F5F9", bordercolor="#CBD5E1", borderwidth=1, borderpad=6, font=dict(size=10))
     fig.add_annotation(x=2027, y=y_ms, text="<b>2026</b><br><b>300 萬</b><br>可觸及區<br>站穩 300 萬穩態", showarrow=False, bgcolor="#E5F9E5", bordercolor="#2CA02C", borderwidth=1, borderpad=6, font=dict(size=10))
     fig.add_annotation(x=2028.5, y=y_ms, text="<b>2027</b><br><b>500 萬</b><br>臨界門檻<br>第一階 -> 第二階", showarrow=False, bgcolor="#FFF4E6", bordercolor="#FF6600", borderwidth=1, borderpad=6, font=dict(size=10))
-    fig.add_annotation(x=2031.5, y=y_ms, text="<b>2030</b><br><b>1,000 萬</b><br>射程內<br>飛輪完成．千萬進入合理射程", showarrow=False, bgcolor="#E5F3FF", bordercolor="#1F77B4", borderwidth=1, borderpad=6, font=dict(size=10))
+    fig.add_annotation(x=2031.5, y=y_ms, text="<b>2030</b><br><b>1,000 萬</b><br>射程內<br>飛輪完成．千萬合理射程", showarrow=False, bgcolor="#E5F3FF", bordercolor="#1F77B4", borderwidth=1, borderpad=6, font=dict(size=10))
     fig.add_annotation(x=2035, y=y_ms, text="<b>2033</b><br>千萬後區間<br>主場開始<br>資本效應明顯放大", showarrow=False, bgcolor="#F2E6FF", bordercolor="#9933CC", borderwidth=1, borderpad=6, font=dict(size=10))
     fig.add_annotation(x=2039, y=y_ms, text="<b>2040</b><br>美元百萬<br>高資本自主<br>進入自由區域", showarrow=False, bgcolor="#FFE6E6", bordercolor="#D62728", borderwidth=1, borderpad=6, font=dict(size=10))
 
@@ -327,7 +334,7 @@ def plot_wealth_trajectory():
         margin=dict(t=160, b=60, l=50, r=50), # 大幅增加上方留白防擠壓
         font=dict(family=MODERN_FONT, color='#334155'),
         legend=dict(
-            orientation="v", yanchor="top", y=0.76, xanchor="left", x=0.02, # 圖例微調至色塊正下方
+            orientation="v", yanchor="top", y=0.68, xanchor="left", x=0.02, # 圖例大幅下移，避開色塊干擾區
             bgcolor="rgba(255,255,255,0.9)", bordercolor="#E2E8F0", borderwidth=1
         ),
         plot_bgcolor='#FFFFFF', paper_bgcolor='#FFFFFF',
@@ -336,8 +343,9 @@ def plot_wealth_trajectory():
     )
 
     fig.update_xaxes(showgrid=True, gridcolor='#F1F5F9', tickvals=list(range(2025, 2041)), showline=True, linecolor='#CBD5E1', range=[2024.5, 2040.5])
-    # Y 軸極限推升至 100，為頂部色塊爭取專屬空間
-    fig.update_yaxes(showgrid=True, gridcolor='#F1F5F9', showline=True, linecolor='#CBD5E1', zeroline=False, range=[-15, 100], dtick=10)
+    
+    # 關鍵修正：Y 軸極限推升至 120，為頂部色塊與文字創造絕對無阻擋空間
+    fig.update_yaxes(showgrid=True, gridcolor='#F1F5F9', showline=True, linecolor='#CBD5E1', zeroline=False, range=[-15, 120], dtick=10)
 
     return fig
 
