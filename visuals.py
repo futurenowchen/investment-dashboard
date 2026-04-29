@@ -189,36 +189,36 @@ def plot_wealth_trajectory():
     """繪製 NEGENTROPIC ATARAXIA 財富路徑導航圖 (三線佈局與座標錨定)"""
     years = [2025, 2026, 2027, 2029, 2030, 2033, 2035, 2038, 2040]
     
-    # 建立三條戰略路徑 (基礎 10%, 保守 15%, 野心 20%)
-    nav_base =  [2.0, 3.28, 4.63,  7.00,  8.20, 12.99, 17.51, 27.14, 36.22]
-    nav_cons =  [2.0, 3.33, 4.87,  7.75,  9.30, 15.50, 21.80, 35.80, 49.50]
-    nav_alpha = [2.0, 3.38, 5.11,  8.59, 10.46, 18.62, 27.14, 47.44, 68.65]
+    # 建立三條戰略路徑 (保守 12%, 基礎 18%, 野心 30%)
+    nav_base =  [2.0, 3.28, 4.63,  7.00,  8.20, 12.99, 17.51, 27.14, 36.22] # 最低線
+    nav_cons =  [2.0, 3.33, 4.87,  7.75,  9.30, 15.50, 21.80, 35.80, 49.50] # 基準線
+    nav_alpha = [2.0, 3.38, 5.11,  8.59, 10.46, 18.62, 27.14, 47.44, 68.65] # 最高線
 
     MODERN_FONT = "Arial, 'Heiti TC', 'Microsoft JhengHei', sans-serif"
 
     fig = go.Figure()
 
-    # 1. 基礎路徑 (Base 10%) - 灰色實線，用於包覆下邊界
+    # 1. 保守路徑 (12%) - 灰色實線，用於包覆下邊界
     fig.add_trace(go.Scatter(
         x=years, y=nav_base,
-        name='基礎路徑 (Base)',
+        name='保守路徑 (12%)',
         mode='lines+markers+text',
         text=[f"{v:.1f}" for v in nav_base],
         textposition="bottom right",
         line=dict(color='#94A3B8', width=2),
         marker=dict(size=5, color='#94A3B8'),
         textfont=dict(color='#94A3B8', size=9, family=MODERN_FONT),
-        hovertemplate='<b>%{x} 基礎</b>: %{y:.2f}M<extra></extra>'
+        hovertemplate='<b>%{x} 保守</b>: %{y:.2f}M<extra></extra>'
     ))
 
-    # 2. 野心路徑 (Alpha 20%) - 填色至 Base 邊界
+    # 2. 野心路徑 (30%) - 填色至保守邊界
     fig.add_trace(go.Scatter(
         x=years, y=nav_alpha,
-        name='野心路徑 (Alpha)',
+        name='野心路徑 (30%)',
         mode='lines+markers+text',
         text=[f"{v:.1f}" for v in nav_alpha],
         textposition="top left",
-        fill='tonexty', # 填滿至基礎路徑
+        fill='tonexty', # 填滿至保守路徑
         fillcolor='rgba(0, 180, 216, 0.1)',
         line=dict(color='#EF4444', width=2, dash='dash'),
         marker=dict(size=5, color='#EF4444'),
@@ -226,35 +226,35 @@ def plot_wealth_trajectory():
         hovertemplate='<b>%{x} 野心</b>: %{y:.2f}M<extra></extra>'
     ))
 
-    # 3. 保守路徑 (Target 15%) - 科技青主線，疊加於最上層
+    # 3. 基礎路徑 (18%) - 科技青主線，疊加於最上層
     fig.add_trace(go.Scatter(
         x=years, y=nav_cons,
-        name='保守目標 (Target)',
+        name='基礎路徑 (18%)',
         mode='lines+markers+text',
         text=[f"{v:.1f}M" for v in nav_cons],
         textposition="top center",
         line=dict(color='#00B4D8', width=3.5),
         marker=dict(size=8, color='#00B4D8', line=dict(color='white', width=1)),
         textfont=dict(color='#0077B6', size=11, family=MODERN_FONT),
-        hovertemplate='<b>%{x} 目標</b>: %{y:.2f}M<extra></extra>'
+        hovertemplate='<b>%{x} 基礎</b>: %{y:.2f}M<extra></extra>'
     ))
 
     # --- 戰略背景階段色塊 (Phases) ---
-    # 將標籤設定為 bottom right 以防與線條衝突
+    # 移回 top left 恢復戰略俯視感
     fig.add_vrect(x0=2026, x1=2027.5, fillcolor="#E0F2FE", opacity=0.4, line_width=0,
-                  annotation_text="<b>Phase 1</b><br>窒息期", annotation_position="bottom right", annotation_font_size=11)
+                  annotation_text="<b>Phase 1</b><br>窒息期", annotation_position="top left", annotation_font_size=11)
     fig.add_vrect(x0=2027.5, x1=2028.5, fillcolor="#DCFCE7", opacity=0.4, line_width=0,
-                  annotation_text="<b>Phase 2</b><br>注資釋放", annotation_position="bottom right", annotation_font_size=11)
+                  annotation_text="<b>Phase 2</b><br>注資釋放", annotation_position="top left", annotation_font_size=11)
     fig.add_vrect(x0=2028.5, x1=2030, fillcolor="#FEF9C3", opacity=0.4, line_width=0,
-                  annotation_text="<b>Phase 3</b><br>加速期", annotation_position="bottom right", annotation_font_size=11)
+                  annotation_text="<b>Phase 3</b><br>加速期", annotation_position="top left", annotation_font_size=11)
     fig.add_vrect(x0=2030, x1=2034, fillcolor="#F3E8FF", opacity=0.4, line_width=0,
-                  annotation_text="<b>Phase 4</b><br>隱形加速", annotation_position="bottom right", annotation_font_size=11)
+                  annotation_text="<b>Phase 4</b><br>隱形加速", annotation_position="top left", annotation_font_size=11)
     fig.add_vrect(x0=2034, x1=2040, fillcolor="#FFE4E6", opacity=0.4, line_width=0,
-                  annotation_text="<b>Phase 5</b><br>自由區", annotation_position="bottom right", annotation_font_size=11)
+                  annotation_text="<b>Phase 5</b><br>自由區", annotation_position="top left", annotation_font_size=11)
 
     # --- 關鍵事件標註 (Annotations) 物理錨定 ---
     events = [
-        # 錨定在當時的 保守路徑 (Target) 數值上
+        # 錨定在當時的 基礎路徑 (18%) 數值上
         dict(x=2027.75, y=5.0, text="<b>2027 Q4 注資</b><br>約 NT$710-910K", color="#EA580C"),
         dict(x=2029.75, y=9.0, text="<b>2029 Q4 注資</b><br>約 NT$550-900K", color="#0284C7"),
         dict(x=2033.00, y=15.5, text="<b>2033 加速期</b><br>跨越千萬門檻", color="#7C3AED")
@@ -270,7 +270,7 @@ def plot_wealth_trajectory():
             bgcolor="rgba(255,255,255,0.9)", bordercolor=ev['color'], borderwidth=1, borderpad=4
         )
 
-    # 車貸/分期結束標註 (特別處理方向，避免擠在左邊)
+    # 車貸/分期結束標註
     fig.add_annotation(
         x=2027.4, y=4.87,
         text="<b>2027 車貸/分期解除</b><br>+12.8K/月",
@@ -288,7 +288,7 @@ def plot_wealth_trajectory():
         template='plotly_white', hovermode="x unified",
         margin=dict(t=80, b=40, l=40, r=20),
         font=dict(family=MODERN_FONT, color='#334155'),
-        # 圖例移至圖表正上方居中，避免與畫面左上角產生衝突
+        # 圖例移至圖表正上方居中
         legend=dict(orientation="h", yanchor="bottom", y=1.05, xanchor="center", x=0.5, bgcolor="rgba(255,255,255,0)"),
         plot_bgcolor='#FFFFFF', paper_bgcolor='#FFFFFF',
         xaxis_title="", yaxis_title="總資產 NAV (百萬 TWD)",
