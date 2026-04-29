@@ -304,7 +304,7 @@ def render_goal_progress_card(target, gap, pct):
     return f"""
     <div style="background-color:#f8f9fa; padding:15px; border-radius:10px; margin-bottom:10px; border:1px solid #e9ecef; height: 100%; display: flex; flex-direction: column; justify-content: center;">
         <div style="font-size:1.0em; color:#6c757d; margin-bottom:5px;">達成進度</div>
-        <div style="font-size:2.2em; font-weight:bold; color:#00b4d8; line-height:1.1;">
+        <div style="font-size:2.2em; font-weight:bold; color:#007BFF; line-height:1.1;">
             {pct*100:.1f}%
         </div>
         <div style="margin-top:8px; font-size:0.85em; display:flex; justify-content:space-between; color:#495057;">
