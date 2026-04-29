@@ -130,8 +130,8 @@ def plot_nav_trend(df_F):
             # === 清爽科技藍配色與現代黑體設定 ===
             BG_COLOR = '#FFFFFF'          # 純白基底，融入網頁
             GRID_COLOR = '#F1F5F9'        # 極淺灰網格線 (Slate 100)
-            COLOR_RISE = '#EF4444'        # 亮紅 (台股漲)
-            COLOR_FALL = '#10B981'        # 翠綠 (台股跌)
+            COLOR_RISE = '#FF0000'        # 券商正紅 (台股漲)
+            COLOR_FALL = '#009900'        # 券商正綠 (台股跌，白底增強對比)
             COLOR_NAV_MAIN = '#00B4D8'    # 科技青
             COLOR_NAV_FILL = 'rgba(0, 180, 216, 0.08)' # 底部微光
             COLOR_SMA = '#94A3B8'         # 戰略灰 (Slate 400)
