@@ -213,69 +213,7 @@ def plot_nav_trend(df_F):
                 font=dict(family=MODERN_FONT, size=13, color=TEXT_COLOR), # 應用清晰的無襯線字體
                 legend=dict(
                     orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1,
-                    font=dict(family=MODERN_FONT, color=TEXT_COLOR)
-                ),
-                hoverlabel=dict(
-                    bgcolor="#FFFFFF",
-                    bordercolor=COLOR_NAV_MAIN,
-                    font_size=14,
-                    font_family=MODERN_FONT,
-                    font_color="#334155"
-                )
-            )
-
-            # X軸：共用設定
-            fig.update_xaxes(
-                showgrid=False, 
-                showspikes=True, 
-                spikemode="across",
-                spikesnap="cursor",
-                spikedash="solid",
-                spikethickness=1,
-                spikecolor="#CBD5E1", # 淺灰十字準線
-                showline=True,
-                linecolor=GRID_COLOR,
-                row=1, col=1
-            )
-            fig.update_xaxes(
-                showgrid=False, 
-                showline=True,
-                linecolor=GRID_COLOR,
-                row=2, col=1
-            )
-            
-            # 戰略 Y 軸截斷邏輯與動態刻度 (Dynamic Tick Intervals)
-            min_nav = df_chart['nav'].min()
-            max_nav = df_chart['nav'].max()
-            y_bottom = 1400000 if min_nav > 1400000 else min_nav * 0.95
-            y_top = max_nav * 1.05
-
-            # 動態刻度設定邏輯：
-            # - 500萬以下：每 20萬一格
-            # - 500萬~1000萬：每 30萬一格
-            # - 1000萬以上：每 50萬一格
-            if max_nav < 5000000:
-                nav_dtick = 200000
-            elif max_nav < 10000000:
-                nav_dtick = 300000
-            else:
-                nav_dtick = 500000
-
-            # Y軸 (主圖)：NAV
-            fig.update_yaxes(
-                range=[y_bottom, y_top], # 實施 Y 軸壓縮，放大波動視覺
-                title_font=dict(family=MODERN_FONT, color=TEXT_COLOR, size=12),
-                tickformat=",.0f", 
-                dtick=nav_dtick, # 動態設定刻度間距
-                showgrid=True, 
-                gridwidth=1, 
-                gridcolor=GRID_COLOR,
-                showline=True,
-                linecolor=GRID_COLOR,
-                row=1, col=1
-            )
-            
-            # Y軸 (副圖)：動能槽設定
+            # 隱藏次座標的 Y 軸刻度，僅保留 0 軸絕對基準線
             fig.update_yaxes(
                 showticklabels=False, 
                 showgrid=False, 
@@ -287,6 +225,68 @@ def plot_nav_trend(df_F):
 
             return fig
     return None
+
+def plot_wealth_trajectory():
+    """繪製 NEGENTROPIC ATARAXIA 財富路徑導航圖"""
+    years = [2025, 2026, 2027, 2029, 2030, 2033, 2035, 2038, 2040]
+    nav_low = [2.0, 3.28, 4.63, 7.0, 8.2, 12.99, 17.51, 27.14, 36.22]
+    nav_high = [2.0, 3.38, 5.11, 8.59, 10.46, 18.62, 27.14, 47.44, 68.65]
+
+    MODERN_FONT = "Arial, 'Heiti TC', 'Microsoft JhengHei', sans-serif"
+
+    fig = go.Figure()
+
+    # 進攻路徑 (野心) - 放在下層避免遮擋，使用虛線與紅色警戒色
+    fig.add_trace(go.Scatter(
+        x=years, y=nav_high,
+        name='進攻路徑 (Alpha)',
+        mode='lines+markers+text',
+        text=[f"{v:.1f}M" for v in nav_high],
+        textposition="top left",
+        line=dict(color='#EF4444', width=2, dash='dash'),
+        marker=dict(size=6, color='#EF4444'),
+        textfont=dict(color='#EF4444', size=11, family=MODERN_FONT)
+    ))
+
+    # 保守路徑 (基準) - 疊加上層，作為主視覺錨點
+    fig.add_trace(go.Scatter(
+        x=years, y=nav_low,
+        name='保守路徑 (Base)',
+        mode='lines+markers+text',
+        text=[f"{v:.1f}M" for v in nav_low],
+        textposition="bottom right",
+        fill='tonexty', # 填滿至上一條線 (nav_high)
+        fillcolor='rgba(0, 180, 216, 0.1)',
+        line=dict(color='#007BFF', width=3),
+        marker=dict(size=8, color='#007BFF'),
+        textfont=dict(color='#007BFF', size=11, family=MODERN_FONT)
+    ))
+
+    fig.update_layout(
+        template='plotly_white',
+        hovermode="x unified",
+        margin=dict(t=20, b=20, l=10, r=10),
+        font=dict(family=MODERN_FONT, color='#334155'),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        plot_bgcolor='#FFFFFF',
+        paper_bgcolor='#FFFFFF',
+        xaxis_title="",
+        yaxis_title="總資產 NAV (百萬 TWD)",
+        height=500
+    )
+
+    fig.update_xaxes(
+        showgrid=True, gridcolor='#F1F5F9', 
+        tickvals=years, # 強制鎖定陣列中的關鍵年份刻度
+        showline=True, linecolor='#CBD5E1'
+    )
+    fig.update_yaxes(
+        showgrid=True, gridcolor='#F1F5F9', 
+        showline=True, linecolor='#CBD5E1',
+        zeroline=False
+    )
+
+    return fig
 
 # --- HTML 卡片產生器 ---
 def render_risk_metric_card(risk_text, lev_value, style_dict):
