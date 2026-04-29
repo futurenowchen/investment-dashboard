@@ -213,7 +213,69 @@ def plot_nav_trend(df_F):
                 font=dict(family=MODERN_FONT, size=13, color=TEXT_COLOR), # 應用清晰的無襯線字體
                 legend=dict(
                     orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1,
-            # 隱藏次座標的 Y 軸刻度，僅保留 0 軸絕對基準線
+                    font=dict(family=MODERN_FONT, color=TEXT_COLOR)
+                ),
+                hoverlabel=dict(
+                    bgcolor="#FFFFFF",
+                    bordercolor=COLOR_NAV_MAIN,
+                    font_size=14,
+                    font_family=MODERN_FONT,
+                    font_color="#334155"
+                )
+            )
+
+            # X軸：共用設定
+            fig.update_xaxes(
+                showgrid=False, 
+                showspikes=True, 
+                spikemode="across",
+                spikesnap="cursor",
+                spikedash="solid",
+                spikethickness=1,
+                spikecolor="#CBD5E1", # 淺灰十字準線
+                showline=True,
+                linecolor=GRID_COLOR,
+                row=1, col=1
+            )
+            fig.update_xaxes(
+                showgrid=False, 
+                showline=True,
+                linecolor=GRID_COLOR,
+                row=2, col=1
+            )
+            
+            # 戰略 Y 軸截斷邏輯與動態刻度 (Dynamic Tick Intervals)
+            min_nav = df_chart['nav'].min()
+            max_nav = df_chart['nav'].max()
+            y_bottom = 1400000 if min_nav > 1400000 else min_nav * 0.95
+            y_top = max_nav * 1.05
+
+            # 動態刻度設定邏輯：
+            # - 500萬以下：每 20萬一格
+            # - 500萬~1000萬：每 30萬一格
+            # - 1000萬以上：每 50萬一格
+            if max_nav < 5000000:
+                nav_dtick = 200000
+            elif max_nav < 10000000:
+                nav_dtick = 300000
+            else:
+                nav_dtick = 500000
+
+            # Y軸 (主圖)：NAV
+            fig.update_yaxes(
+                range=[y_bottom, y_top], # 實施 Y 軸壓縮，放大波動視覺
+                title_font=dict(family=MODERN_FONT, color=TEXT_COLOR, size=12),
+                tickformat=",.0f", 
+                dtick=nav_dtick, # 動態設定刻度間距
+                showgrid=True, 
+                gridwidth=1, 
+                gridcolor=GRID_COLOR,
+                showline=True,
+                linecolor=GRID_COLOR,
+                row=1, col=1
+            )
+            
+            # Y軸 (副圖)：動能槽設定
             fig.update_yaxes(
                 showticklabels=False, 
                 showgrid=False, 
