@@ -134,6 +134,7 @@ def plot_nav_trend(df_F):
             MODERN_FONT = "Arial, 'Heiti TC', 'Microsoft JhengHei', sans-serif"
             
             colors = [COLOR_RISE if val > 0 else COLOR_FALL for val in df_chart['net_change']]
+            df_chart['hover_color'] = colors
 
             fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.03, row_heights=[0.75, 0.25])
 
@@ -142,8 +143,8 @@ def plot_nav_trend(df_F):
                     x=df_chart['dt'], y=df_chart['nav'], name="每日淨值", fill='tozeroy', mode='lines', 
                     line=dict(color=COLOR_NAV_MAIN, width=2.5, shape='spline', smoothing=0.8),
                     fillcolor=COLOR_NAV_FILL,
-                    customdata=df_chart[['net_change', 'SMA20']].values,
-                    hovertemplate='<b>日期：%{x|%Y-%m-%d}</b><br><br><b>每日淨值：</b> %{y:,.0f}<br><b>淨值變化：</b> <span style="color:%{customdata[0] > 0 ? \'#FF0000\' : \'#009900\'}">%{customdata[0]:+,.0f}</span><br><b>NAV 20MA：</b> %{customdata[1]:,.0f}<extra></extra>'
+                    customdata=df_chart[['net_change', 'SMA20', 'hover_color']].values,
+                    hovertemplate='<b>日期：%{x|%Y-%m-%d}</b><br><br><b>每日淨值：</b> %{y:,.0f}<br><b>淨值變化：</b> <span style="color:%{customdata[2]}">%{customdata[0]:+,.0f}</span><br><b>NAV 20MA：</b> %{customdata[1]:,.0f}<extra></extra>'
                 ),
                 row=1, col=1
             )
