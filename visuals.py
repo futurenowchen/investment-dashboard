@@ -114,7 +114,6 @@ def plot_nav_trend(df_F):
             df_calc['dt'] = pd.to_datetime(df_calc['日期'], errors='coerce')
             df_calc['nav'] = df_calc['實質NAV'].apply(dm.safe_float)
             
-            # 取出每日淨變動作為波動柱狀圖
             if 'NAV淨變動' in df_calc.columns:
                 df_calc['net_change'] = df_calc['NAV淨變動'].apply(dm.safe_float)
             elif '當日淨變動' in df_calc.columns:
@@ -123,173 +122,71 @@ def plot_nav_trend(df_F):
                 df_calc['net_change'] = 0.0
                 
             df_chart = df_calc.sort_values('dt').reset_index(drop=True)
-            
-            # 新增戰略生命線：20日移動平均 (這是使用者自身 NAV 的月線)
             df_chart['SMA20'] = df_chart['nav'].rolling(window=20, min_periods=1).mean()
             
-            # === 清爽科技藍配色與現代黑體設定 ===
-            BG_COLOR = '#FFFFFF'          # 純白基底，融入網頁
-            GRID_COLOR = '#F1F5F9'        # 極淺灰網格線 (Slate 100)
-            COLOR_RISE = '#FF0000'        # 券商正紅 (台股漲)
-            COLOR_FALL = '#009900'        # 券商正綠 (台股跌，白底增強對比)
-            COLOR_NAV_MAIN = '#00B4D8'    # 科技青
-            COLOR_NAV_FILL = 'rgba(0, 180, 216, 0.08)' # 底部微光
-            COLOR_SMA = '#94A3B8'         # 戰略灰 (Slate 400)
-            TEXT_COLOR = '#334155'        # 深灰字體 (Slate 700)
-            MODERN_FONT = "Arial, 'Heiti TC', 'Microsoft JhengHei', sans-serif" # 高辨識度黑體
+            BG_COLOR = '#FFFFFF'
+            GRID_COLOR = '#F1F5F9'
+            COLOR_RISE = '#FF0000'        # 券商正紅
+            COLOR_FALL = '#009900'        # 券商正綠
+            COLOR_NAV_MAIN = '#00B4D8'
+            COLOR_NAV_FILL = 'rgba(0, 180, 216, 0.08)'
+            COLOR_SMA = '#94A3B8'
+            TEXT_COLOR = '#334155'
+            MODERN_FONT = "Arial, 'Heiti TC', 'Microsoft JhengHei', sans-serif"
             
             colors = [COLOR_RISE if val > 0 else COLOR_FALL for val in df_chart['net_change']]
 
-            # 建立上下分離的 Subplots (7:3 比例)
-            fig = make_subplots(
-                rows=2, cols=1, 
-                shared_xaxes=True, 
-                vertical_spacing=0.03,
-                row_heights=[0.75, 0.25]
-            )
+            fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.03, row_heights=[0.75, 0.25])
 
-            # 1. 主圖：NAV 折線面積圖 (Row 1)
-            # 整合所有資訊至 customdata，達成單一彈出視窗
             fig.add_trace(
                 go.Scatter(
-                    x=df_chart['dt'],
-                    y=df_chart['nav'],
-                    name="每日淨值", 
-                    fill='tozeroy',
-                    mode='lines', 
-                    line=dict(
-                        color=COLOR_NAV_MAIN, 
-                        width=2.5, 
-                        shape='spline', # 平滑曲線
-                        smoothing=0.8
-                    ),
+                    x=df_chart['dt'], y=df_chart['nav'], name="每日淨值", fill='tozeroy', mode='lines', 
+                    line=dict(color=COLOR_NAV_MAIN, width=2.5, shape='spline', smoothing=0.8),
                     fillcolor=COLOR_NAV_FILL,
-                    customdata=df_chart[['net_change', 'SMA20']].values, # 封裝其他數據供 hover 使用
-                    hovertemplate=(
-                        '<b>日期：%{x|%Y-%m-%d}</b><br><br>'
-                        '<b>每日淨值：</b> %{y:,.0f}<br>'
-                        '<b>淨值變化：</b> %{customdata[0]:+,.0f}<br>'
-                        '<b>NAV 20MA：</b> %{customdata[1]:,.0f}'
-                        '<extra></extra>' # 隱藏右側獨立的 trace 名稱標籤
-                    )
+                    customdata=df_chart[['net_change', 'SMA20']].values,
+                    hovertemplate='<b>日期：%{x|%Y-%m-%d}</b><br><br><b>每日淨值：</b> %{y:,.0f}<br><b>淨值變化：</b> <span style="color:%{customdata[0] > 0 ? \'#FF0000\' : \'#009900\'}">%{customdata[0]:+,.0f}</span><br><b>NAV 20MA：</b> %{customdata[1]:,.0f}<extra></extra>'
                 ),
                 row=1, col=1
             )
             
-            # 1.1 主圖：20日移動平均線 (Row 1)
             fig.add_trace(
-                go.Scatter(
-                    x=df_chart['dt'],
-                    y=df_chart['SMA20'],
-                    name="NAV 20MA",
-                    mode='lines',
-                    line=dict(color=COLOR_SMA, width=1.5, dash='dash'),
-                    hoverinfo='skip' # 關閉獨立 hover，已整合至主視窗
-                ),
+                go.Scatter(x=df_chart['dt'], y=df_chart['SMA20'], name="NAV 20MA", mode='lines', line=dict(color=COLOR_SMA, width=1.5, dash='dash'), hoverinfo='skip'),
                 row=1, col=1
             )
 
-            # 2. 副圖：動能底槽柱狀圖 (Row 2)
             fig.add_trace(
-                go.Bar(
-                    x=df_chart['dt'],
-                    y=df_chart['net_change'],
-                    name="淨值變化",
-                    marker_color=colors,
-                    opacity=0.75, 
-                    marker_line_width=0, 
-                    hoverinfo='skip' # 關閉獨立 hover，已整合至主視窗
-                ),
+                go.Bar(x=df_chart['dt'], y=df_chart['net_change'], name="淨值變化", marker_color=colors, opacity=0.75, marker_line_width=0, hoverinfo='skip'),
                 row=2, col=1
             )
 
-            # 版面優化設定 (Light Vibe & Modern Font)
             fig.update_layout(
-                template='plotly_white', # 改為亮色主題
-                hovermode="x", # 採用單一 X 軸對齊，配合自定義 hovertemplate 達成最簡潔效果
-                margin=dict(t=40, b=10, l=10, r=10),
-                plot_bgcolor=BG_COLOR,
-                paper_bgcolor=BG_COLOR,
-                font=dict(family=MODERN_FONT, size=13, color=TEXT_COLOR), # 應用清晰的無襯線字體
-                legend=dict(
-                    orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1,
-                    font=dict(family=MODERN_FONT, color=TEXT_COLOR)
-                ),
-                hoverlabel=dict(
-                    bgcolor="#FFFFFF",
-                    bordercolor=COLOR_NAV_MAIN,
-                    font_size=14,
-                    font_family=MODERN_FONT,
-                    font_color="#334155"
-                )
+                template='plotly_white', hovermode="x", margin=dict(t=40, b=10, l=10, r=10),
+                plot_bgcolor=BG_COLOR, paper_bgcolor=BG_COLOR,
+                font=dict(family=MODERN_FONT, size=13, color=TEXT_COLOR),
+                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(family=MODERN_FONT, color=TEXT_COLOR)),
+                hoverlabel=dict(bgcolor="#FFFFFF", bordercolor=COLOR_NAV_MAIN, font_size=14, font_family=MODERN_FONT, font_color="#334155")
             )
 
-            # X軸：共用設定
-            fig.update_xaxes(
-                showgrid=False, 
-                showspikes=True, 
-                spikemode="across",
-                spikesnap="cursor",
-                spikedash="solid",
-                spikethickness=1,
-                spikecolor="#CBD5E1", # 淺灰十字準線
-                showline=True,
-                linecolor=GRID_COLOR,
-                row=1, col=1
-            )
-            fig.update_xaxes(
-                showgrid=False, 
-                showline=True,
-                linecolor=GRID_COLOR,
-                row=2, col=1
-            )
+            fig.update_xaxes(showgrid=False, showspikes=True, spikemode="across", spikesnap="cursor", spikedash="solid", spikethickness=1, spikecolor="#CBD5E1", showline=True, linecolor=GRID_COLOR, row=1, col=1)
+            fig.update_xaxes(showgrid=False, showline=True, linecolor=GRID_COLOR, row=2, col=1)
             
-            # 戰略 Y 軸截斷邏輯與動態刻度 (Dynamic Tick Intervals)
             min_nav = df_chart['nav'].min()
             max_nav = df_chart['nav'].max()
             y_bottom = 1400000 if min_nav > 1400000 else min_nav * 0.95
             y_top = max_nav * 1.05
 
-            # 動態刻度設定邏輯：
-            # - 500萬以下：每 20萬一格
-            # - 500萬~1000萬：每 30萬一格
-            # - 1000萬以上：每 50萬一格
-            if max_nav < 5000000:
-                nav_dtick = 200000
-            elif max_nav < 10000000:
-                nav_dtick = 300000
-            else:
-                nav_dtick = 500000
+            if max_nav < 5000000: nav_dtick = 200000
+            elif max_nav < 10000000: nav_dtick = 300000
+            else: nav_dtick = 500000
 
-            # Y軸 (主圖)：NAV
-            fig.update_yaxes(
-                range=[y_bottom, y_top], # 實施 Y 軸壓縮，放大波動視覺
-                title_font=dict(family=MODERN_FONT, color=TEXT_COLOR, size=12),
-                tickformat=",.0f", 
-                dtick=nav_dtick, # 動態設定刻度間距
-                showgrid=True, 
-                gridwidth=1, 
-                gridcolor=GRID_COLOR,
-                showline=True,
-                linecolor=GRID_COLOR,
-                row=1, col=1
-            )
-            
-            # Y軸 (副圖)：動能槽設定
-            fig.update_yaxes(
-                showticklabels=False, 
-                showgrid=False, 
-                zeroline=True, 
-                zerolinecolor='#CBD5E1', # 絕對基準線 (淺灰)
-                zerolinewidth=1.5, 
-                row=2, col=1
-            )
+            fig.update_yaxes(range=[y_bottom, y_top], title_font=dict(family=MODERN_FONT, color=TEXT_COLOR, size=12), tickformat=",.0f", dtick=nav_dtick, showgrid=True, gridwidth=1, gridcolor=GRID_COLOR, showline=True, linecolor=GRID_COLOR, row=1, col=1)
+            fig.update_yaxes(showticklabels=False, showgrid=False, zeroline=True, zerolinecolor='#CBD5E1', zerolinewidth=1.5, row=2, col=1)
 
             return fig
     return None
 
 def plot_wealth_trajectory():
-    """繪製 NEGENTROPIC ATARAXIA 財富路徑導航圖"""
+    """繪製 NEGENTROPIC ATARAXIA 財富路徑導航圖 (含豐富戰略資訊)"""
     years = [2025, 2026, 2027, 2029, 2030, 2033, 2035, 2038, 2040]
     nav_low = [2.0, 3.28, 4.63, 7.0, 8.2, 12.99, 17.51, 27.14, 36.22]
     nav_high = [2.0, 3.38, 5.11, 8.59, 10.46, 18.62, 27.14, 47.44, 68.65]
@@ -298,55 +195,97 @@ def plot_wealth_trajectory():
 
     fig = go.Figure()
 
-    # 進攻路徑 (野心) - 放在下層避免遮擋，使用虛線與紅色警戒色
+    # 1. 區間填色 (財富潛力區間)
+    fig.add_trace(go.Scatter(
+        x=years + years[::-1],
+        y=nav_high + nav_low[::-1],
+        fill='toself',
+        fillcolor='rgba(0, 180, 216, 0.1)',
+        line=dict(color='rgba(255,255,255,0)'),
+        name='潛力區間 (15%-20%)',
+        hoverinfo='skip'
+    ))
+
+    # 2. 進攻路徑 (野心 20%) - 紅色虛線
     fig.add_trace(go.Scatter(
         x=years, y=nav_high,
-        name='進攻路徑 (Alpha)',
+        name='野心路徑 (Alpha 20%)',
         mode='lines+markers+text',
         text=[f"{v:.1f}M" for v in nav_high],
         textposition="top left",
         line=dict(color='#EF4444', width=2, dash='dash'),
         marker=dict(size=6, color='#EF4444'),
-        textfont=dict(color='#EF4444', size=11, family=MODERN_FONT)
+        textfont=dict(color='#EF4444', size=11, family=MODERN_FONT),
+        hovertemplate='<b>%{x} 野心</b>: %{y:.2f}M<extra></extra>'
     ))
 
-    # 保守路徑 (基準) - 疊加上層，作為主視覺錨點
+    # 3. 保守路徑 (基準 15%) - 深藍實線
     fig.add_trace(go.Scatter(
         x=years, y=nav_low,
-        name='保守路徑 (Base)',
+        name='保守路徑 (Base 15%)',
         mode='lines+markers+text',
         text=[f"{v:.1f}M" for v in nav_low],
         textposition="bottom right",
-        fill='tonexty', # 填滿至上一條線 (nav_high)
-        fillcolor='rgba(0, 180, 216, 0.1)',
-        line=dict(color='#007BFF', width=3),
-        marker=dict(size=8, color='#007BFF'),
-        textfont=dict(color='#007BFF', size=11, family=MODERN_FONT)
+        line=dict(color='#004C99', width=3),
+        marker=dict(size=8, color='#004C99'),
+        textfont=dict(color='#004C99', size=11, family=MODERN_FONT),
+        hovertemplate='<b>%{x} 保守</b>: %{y:.2f}M<extra></extra>'
     ))
 
-    fig.update_layout(
-        template='plotly_white',
-        hovermode="x unified",
-        margin=dict(t=20, b=20, l=10, r=10),
-        font=dict(family=MODERN_FONT, color='#334155'),
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-        plot_bgcolor='#FFFFFF',
-        paper_bgcolor='#FFFFFF',
-        xaxis_title="",
-        yaxis_title="總資產 NAV (百萬 TWD)",
-        height=500
+    # --- 戰略背景階段色塊 (Phases) ---
+    fig.add_vrect(x0=2026, x1=2027.5, fillcolor="#E0F2FE", opacity=0.4, line_width=0,
+                  annotation_text="<b>Phase 1</b><br>窒息期", annotation_position="top left", annotation_font_size=11)
+    fig.add_vrect(x0=2027.5, x1=2028.5, fillcolor="#DCFCE7", opacity=0.4, line_width=0,
+                  annotation_text="<b>Phase 2</b><br>注資釋放", annotation_position="top left", annotation_font_size=11)
+    fig.add_vrect(x0=2028.5, x1=2030, fillcolor="#FEF9C3", opacity=0.4, line_width=0,
+                  annotation_text="<b>Phase 3</b><br>加速期", annotation_position="top left", annotation_font_size=11)
+    fig.add_vrect(x0=2030, x1=2034, fillcolor="#F3E8FF", opacity=0.4, line_width=0,
+                  annotation_text="<b>Phase 4</b><br>隱形加速", annotation_position="top left", annotation_font_size=11)
+    fig.add_vrect(x0=2034, x1=2040, fillcolor="#FFE4E6", opacity=0.4, line_width=0,
+                  annotation_text="<b>Phase 5</b><br>自由區域", annotation_position="top left", annotation_font_size=11)
+
+    # --- 關鍵事件標註 (Annotations) ---
+    events = [
+        dict(x=2027.75, y=30, text="<b>2027 Q4 注資</b><br>約 NT$710-910K", color="#EA580C"),
+        dict(x=2029.75, y=30, text="<b>2029 Q4 注資</b><br>約 NT$550-900K", color="#0284C7"),
+        dict(x=2033, y=35, text="<b>2033 加速期</b><br>跨越千萬門檻", color="#7C3AED")
+    ]
+
+    for ev in events:
+        fig.add_annotation(
+            x=ev['x'], y=ev['y'],
+            text=ev['text'],
+            showarrow=True, arrowhead=2, arrowsize=1, arrowwidth=2, arrowcolor=ev['color'],
+            ax=0, ay=-40,
+            font=dict(color=ev['color'], size=11, family=MODERN_FONT),
+            bgcolor="rgba(255,255,255,0.8)", bordercolor=ev['color'], borderwidth=1, borderpad=4
+        )
+
+    # 車貸/分期結束標註
+    fig.add_annotation(
+        x=2027.4, y=15,
+        text="<b>2027/05 車貸結束</b><br>+10K/月<br><b>2027/07 分期結束</b><br>+2.8K/月",
+        showarrow=True, arrowhead=2, arrowcolor="#10B981", ax=-40, ay=-60,
+        font=dict(color="#10B981", size=11, family=MODERN_FONT),
+        bgcolor="rgba(255,255,255,0.8)", bordercolor="#10B981", borderwidth=1, borderpad=4
     )
 
-    fig.update_xaxes(
-        showgrid=True, gridcolor='#F1F5F9', 
-        tickvals=years, # 強制鎖定陣列中的關鍵年份刻度
-        showline=True, linecolor='#CBD5E1'
+    fig.update_layout(
+        title=dict(
+            text="<b>NEGENTROPIC ATARAXIA 10.0 財富路徑整合圖</b><br><span style='font-size:13px; color:#64748B;'>起點：2026/04 NAV 約 2.88M | 風控原則：E < 112, LDR < 115, 質押率 < 35%</span>",
+            font=dict(size=18, family=MODERN_FONT)
+        ),
+        template='plotly_white', hovermode="x unified",
+        margin=dict(t=80, b=40, l=40, r=20),
+        font=dict(family=MODERN_FONT, color='#334155'),
+        legend=dict(orientation="h", yanchor="top", y=0.98, xanchor="left", x=0.02, bgcolor="rgba(255,255,255,0.8)", bordercolor="#E2E8F0", borderwidth=1),
+        plot_bgcolor='#FFFFFF', paper_bgcolor='#FFFFFF',
+        xaxis_title="", yaxis_title="總資產 NAV (百萬 TWD)",
+        height=650
     )
-    fig.update_yaxes(
-        showgrid=True, gridcolor='#F1F5F9', 
-        showline=True, linecolor='#CBD5E1',
-        zeroline=False
-    )
+
+    fig.update_xaxes(showgrid=True, gridcolor='#F1F5F9', tickvals=list(range(2025, 2041)), showline=True, linecolor='#CBD5E1')
+    fig.update_yaxes(showgrid=True, gridcolor='#F1F5F9', showline=True, linecolor='#CBD5E1', zeroline=False, range=[0, 80], dtick=10)
 
     return fig
 
