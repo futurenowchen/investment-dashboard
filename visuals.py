@@ -252,12 +252,18 @@ def plot_wealth_trajectory():
     fig.add_vrect(x0=2034, x1=2040, fillcolor="#FFE4E6", opacity=0.4, line_width=0,
                   annotation_text="<b>Phase 5</b><br>自由區", annotation_position="top left", annotation_font_size=11)
 
+    # 新增：千萬門檻絕對基準線 (10M Threshold)
+    fig.add_hline(y=10.0, line_dash="dot", line_color="#7C3AED", line_width=1.5, opacity=0.6,
+                  annotation_text=" 10M 跨越門檻", annotation_position="top left", annotation_font_color="#7C3AED", annotation_font_size=11)
+
     # --- 關鍵事件標註 (Annotations) 物理錨定 ---
     events = [
-        # 錨定在當時的 基礎路徑 (18%) 數值上
-        dict(x=2027.75, y=5.0, text="<b>2027 Q4 注資</b><br>約 NT$710-910K", color="#EA580C"),
-        dict(x=2029.75, y=9.0, text="<b>2029 Q4 注資</b><br>約 NT$550-900K", color="#0284C7"),
-        dict(x=2033.00, y=15.5, text="<b>2033 加速期</b><br>跨越千萬門檻", color="#7C3AED")
+        # 重新精確計算物理座標，使其完美貼合基礎路徑 (18%) 線條
+        dict(x=2027.75, y=5.95, text="<b>2027 Q4 注資</b><br>約 NT$710-910K", color="#EA580C"),
+        dict(x=2029.75, y=8.91, text="<b>2029 Q4 注資</b><br>約 NT$550-900K", color="#0284C7"),
+        # 千萬門檻突破點：發生在 2030 (9.3M) 與 2033 (15.5M) 之間，精確交叉點為 2030.34
+        dict(x=2030.34, y=10.00, text="<b>跨越千萬門檻</b><br>進入資本質變期", color="#7C3AED"),
+        dict(x=2033.00, y=15.50, text="<b>2033 規模膨脹</b><br>NAV > 15M", color="#9333EA")
     ]
 
     for ev in events:
@@ -270,9 +276,9 @@ def plot_wealth_trajectory():
             bgcolor="rgba(255,255,255,0.9)", bordercolor=ev['color'], borderwidth=1, borderpad=4
         )
 
-    # 車貸/分期結束標註
+    # 車貸/分期結束標註 (物理高度同步校準)
     fig.add_annotation(
-        x=2027.4, y=4.87,
+        x=2027.41, y=5.46,
         text="<b>2027 車貸/分期解除</b><br>+12.8K/月",
         showarrow=True, arrowhead=2, arrowcolor="#10B981", 
         ax=-40, ay=45, # 箭頭由左下往右上指
