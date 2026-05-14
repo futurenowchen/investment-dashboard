@@ -2,6 +2,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import pandas as pd
+import numpy as np
 import data_manager as dm
 
 # --- CSS 樣式 ---
@@ -186,7 +187,7 @@ def plot_nav_trend(df_F):
     return None
 
 def plot_wealth_trajectory(df_F=None):
-    """繪製 NEGENTROPIC ATARAXIA 財富路徑導航圖 (雙視圖狙擊系統，畫布相對座標解耦)"""
+    """繪製 NEGENTROPIC ATARAXIA 財富路徑導航圖 (全平滑曲線化與多維對比顯示)"""
     
     # 嚴格依照圖表上的可見 X 軸節點
     years = [2026, 2027, 2028, 2029, 2030, 2033, 2035, 2036, 2038, 2039, 2040]
@@ -207,62 +208,62 @@ def plot_wealth_trajectory(df_F=None):
 
     fig = go.Figure()
 
-    # 0. 潛力區間填色 (獨立圖層)
+    # 0. 潛力區間填色 (使用雙虛擬軌跡來確保 Spline 填色邊界不產生迴圈破圖)
     fig.add_trace(go.Scatter(
-        x=years + years[::-1],
-        y=nav_20 + nav_15[::-1],
-        fill='toself',
-        fillcolor='rgba(44, 160, 44, 0.12)', # 淺綠色潛力區間
-        line=dict(color='rgba(255,255,255,0)'),
-        name='財富潛力區間 (15%-20%)',
-        hoverinfo='skip',
-        showlegend=True
+        x=years, y=nav_15,
+        mode='lines', line=dict(width=0), line_shape='spline',
+        hoverinfo='skip', showlegend=False
+    ))
+    fig.add_trace(go.Scatter(
+        x=years, y=nav_20,
+        fill='tonexty', fillcolor='rgba(44, 160, 44, 0.12)', # 淺綠色潛力區間
+        mode='lines', line=dict(width=0), line_shape='spline',
+        name='財富潛力區間 (15%-20%)', hoverinfo='skip', showlegend=True
     ))
 
-    # 1. 野心路徑 (20%) - 紅色實線，Hover 最上方
+    # --- 戰略軌跡繪製 (移除 markers，開啟 line_shape='spline' 達到全境平滑) ---
+
+    # 1. 野心路徑 (20%) - 紅色平滑曲線，Hover 最上方
     fig.add_trace(go.Scatter(
         x=years, y=nav_20,
         name='野心路徑 (年化 20%)',
-        mode='lines+markers+text',
+        mode='lines+text', # 移除 markers
         text=text_20, textposition="top left",
-        line=dict(color='#D62728', width=2),
-        marker=dict(size=6, color='#D62728'),
+        line=dict(color='#D62728', width=2), line_shape='spline',
         textfont=dict(color='#D62728', size=10, family=MODERN_FONT),
         hovertemplate='<b>%{x} 野心</b>: %{y:.1f}M<extra></extra>'
     ))
 
-    # 2. 基準路徑 (17.5%) - 綠色實線，Hover 中間
+    # 2. 基準路徑 (17.5%) - 綠色平滑曲線，Hover 中間
     fig.add_trace(go.Scatter(
         x=years, y=nav_175,
         name='基準路徑 (年化 17.5%)',
-        mode='lines+markers+text',
+        mode='lines+text', # 移除 markers
         text=text_175, textposition="top center",
-        line=dict(color='#2CA02C', width=3),
-        marker=dict(size=8, color='#2CA02C', line=dict(color='white', width=1)),
+        line=dict(color='#2CA02C', width=3), line_shape='spline',
         textfont=dict(color='#2CA02C', size=11, family=MODERN_FONT),
         hovertemplate='<b>%{x} 基準</b>: %{y:.1f}M<extra></extra>'
     ))
 
-    # 3. 保守路徑 (15%) - 藍色實線，Hover 最下方
+    # 3. 保守路徑 (15%) - 藍色平滑曲線，Hover 最下方
     fig.add_trace(go.Scatter(
         x=years, y=nav_15,
         name='保守路徑 (年化 15%)',
-        mode='lines+markers+text',
+        mode='lines+text', # 移除 markers
         text=text_15, textposition="bottom right",
-        line=dict(color='#1F77B4', width=2),
-        marker=dict(size=6, color='#1F77B4'),
+        line=dict(color='#1F77B4', width=2), line_shape='spline',
         textfont=dict(color='#1F77B4', size=10, family=MODERN_FONT),
         hovertemplate='<b>%{x} 保守</b>: %{y:.1f}M<extra></extra>'
     ))
 
-    # 4. 起點紫點
+    # 4. 起點紫點 (唯一保留的獨立節點錨點)
     fig.add_trace(go.Scatter(
         x=[2026], y=[2.887], name='實際 NAV (2026 起點)', mode='markers',
         marker=dict(size=10, color='#7C3AED'), hovertemplate='<b>起點</b>: 2.887M<extra></extra>'
     ))
 
     # ==========================================
-    # ⚡ 戰略更新：實時實際戰線 (Real-Time NAV Overlay)
+    # ⚡ 戰略更新：實時實際戰線與「跨維度數值對比」
     # ==========================================
     if df_F is not None and not df_F.empty:
         df_real = df_F.copy()
@@ -277,14 +278,30 @@ def plot_wealth_trajectory(df_F=None):
                 df_real['nav_m'] = df_real['實質NAV'].apply(dm.safe_float) / 1000000.0
                 df_real['date_str'] = df_real['dt'].dt.strftime('%Y-%m-%d')
                 
+                # 利用 numpy 幾何內插法 (Interpolation)，計算在該「實際天數」下，三條戰略曲線的理論應有數值
+                df_real['exp_20'] = np.interp(df_real['frac_year'], years, nav_20)
+                df_real['exp_175'] = np.interp(df_real['frac_year'], years, nav_175)
+                df_real['exp_15'] = np.interp(df_real['frac_year'], years, nav_15)
+
+                # 將真實資料與三種對比預測值封裝進 customdata 陣列中
+                customdata = df_real[['date_str', 'exp_20', 'exp_175', 'exp_15']].values
+                
                 fig.add_trace(go.Scatter(
                     x=df_real['frac_year'], y=df_real['nav_m'],
                     name='⚡ 實際戰線 (Real NAV)',
-                    mode='lines+markers',
-                    line=dict(color='#F59E0B', width=3.5), # 發光琥珀金
-                    marker=dict(size=6, color='#F59E0B', line=dict(color='white', width=1)),
-                    customdata=df_real['date_str'],
-                    hovertemplate='<b>%{customdata} 實際</b>: %{y:.3f}M<extra></extra>'
+                    mode='lines', # 實體戰線也移除節點，保持平滑光束感
+                    line=dict(color='#F59E0B', width=3.5), line_shape='spline',
+                    customdata=customdata,
+                    # 全新的多維度對比 Hover 視窗
+                    hovertemplate=(
+                        '<b>%{customdata[0]}</b><br>'
+                        '⚡ <b>實際戰線: %{y:.3f}M</b><br>'
+                        '<br><i>─ 當下座標對齊 (同期預期) ─</i><br>'
+                        '🔴 野心上限: %{customdata[1]:.2f}M<br>'
+                        '🟢 基準目標: %{customdata[2]:.2f}M<br>'
+                        '🔵 保守底線: %{customdata[3]:.2f}M'
+                        '<extra></extra>'
+                    )
                 ))
                 
                 last_x = df_real['frac_year'].iloc[-1]
@@ -302,9 +319,6 @@ def plot_wealth_trajectory(df_F=None):
                 ))
 
     # --- 戰略解耦：畫布相對座標 (yref='paper') ---
-    # 將所有標籤與色塊從資料 Y 軸解放，讓它們固定在圖表的實體頂端與底端，不受縮放影響。
-
-    # 高度交錯設定 (yref="paper"，1.0 為圖表框上緣，超過 1.0 為上方留白區)
     y_high = 1.10
     y_low = 1.02
 
@@ -324,7 +338,6 @@ def plot_wealth_trajectory(df_F=None):
     fig.add_annotation(x=2037.0, y=y_high, yref="paper", text="<b>Phase 5 自由區域</b><br>2034-2040<br>高資本自主導向", showarrow=False, font=dict(size=10, color="#660000"))
 
     # --- 像素級偏移事件標註 (Pixel Offset) ---
-    # 利用 ax=0, ay=-80，讓箭頭固定在資料點的上方 80 像素處，不會因縮放而跑到畫面外
     events = [
         dict(x=2027, y_data=5.1, text="<b>2027 Q4 注資</b><br>約 710K-910K", color="#FF6600", symbol="star"),
         dict(x=2029, y_data=8.6, text="<b>2029 Q4 注資</b><br>約 550K-900K", color="#0066CC", symbol="star"),
@@ -334,7 +347,7 @@ def plot_wealth_trajectory(df_F=None):
     for ev in events:
         fig.add_annotation(
             x=ev['x'], y=ev['y_data'],
-            ax=0, ay=-70, # 固定向上偏移 70 像素
+            ax=0, ay=-70,
             text=ev['text'], showarrow=True, arrowhead=2, arrowsize=1, arrowwidth=1.5, arrowcolor=ev['color'], opacity=0.8,
             font=dict(color=ev['color'], size=11, family=MODERN_FONT),
             bgcolor="rgba(255,255,255,0.8)", bordercolor=ev['color'], borderwidth=1, borderpad=4
@@ -344,7 +357,7 @@ def plot_wealth_trajectory(df_F=None):
 
     # 綠色車貸/分期結束標註 (像素級偏移)
     fig.add_annotation(
-        x=2027, y=2.9, ax=-40, ay=50, # 固定向左下偏移
+        x=2027, y=2.9, ax=-40, ay=50,
         text="<b>2027/05</b><br>車貸結束<br>現金流<br>+10K/月", showarrow=True, arrowhead=2, arrowcolor="#2CA02C", arrowwidth=1.5, opacity=0.8,
         font=dict(color="#2CA02C", size=9, family=MODERN_FONT),
         bgcolor="rgba(255,255,255,0.8)", bordercolor="#2CA02C", borderwidth=1, borderpad=4
@@ -356,8 +369,8 @@ def plot_wealth_trajectory(df_F=None):
         bgcolor="rgba(255,255,255,0.8)", bordercolor="#2CA02C", borderwidth=1, borderpad=4
     )
 
-    # --- 底部里程碑區塊 (yref='paper' 固定於圖表底端下方) ---
-    y_ms = -0.15 # 圖表框下緣再往下 15%
+    # --- 底部里程碑區塊 (yref='paper') ---
+    y_ms = -0.15 
     fig.add_annotation(x=2025.5, y=y_ms, yref="paper", text="<b>關鍵里程碑</b><br>(目標節點)", showarrow=False, bgcolor="#F1F5F9", bordercolor="#CBD5E1", borderwidth=1, borderpad=6, font=dict(size=10))
     fig.add_annotation(x=2027, y=y_ms, yref="paper", text="<b>2026</b><br><b>300 萬</b><br>可觸及區<br>站穩 300 萬穩態", showarrow=False, bgcolor="#E5F9E5", bordercolor="#2CA02C", borderwidth=1, borderpad=6, font=dict(size=10))
     fig.add_annotation(x=2028.5, y=y_ms, yref="paper", text="<b>2027</b><br><b>500 萬</b><br>臨界門檻<br>第一階 -> 第二階", showarrow=False, bgcolor="#FFF4E6", bordercolor="#FF6600", borderwidth=1, borderpad=6, font=dict(size=10))
@@ -371,18 +384,17 @@ def plot_wealth_trajectory(df_F=None):
             font=dict(size=16, family=MODERN_FONT), x=0.5, xanchor='center', y=0.98, yanchor='top'
         ),
         template='plotly_white', hovermode="x unified",
-        margin=dict(t=200, b=120, l=50, r=50), # 釋放充足的上下外圍空間給 Paper 標註
+        margin=dict(t=200, b=120, l=50, r=50), 
         font=dict(family=MODERN_FONT, color='#334155'),
         legend=dict(
             orientation="v", yanchor="top", y=0.88, xanchor="left", x=0.02,
             bgcolor="rgba(255,255,255,0.9)", bordercolor="#E2E8F0", borderwidth=1
         ),
-        # --- 雙視角切換器 (Tactical Optics) 修正 ---
         updatemenus=[
             dict(
                 type="buttons",
-                direction="right", # 校準為正確的參數 "right"
-                x=0.5, y=1.20, # 置中於標題下方
+                direction="right", 
+                x=0.5, y=1.20,
                 xanchor="center", yanchor="bottom",
                 showactive=True,
                 buttons=list([
@@ -394,7 +406,7 @@ def plot_wealth_trajectory(df_F=None):
                     dict(
                         label="🎯 近期戰區 (2025-2032)",
                         method="relayout",
-                        args=[{"xaxis.range": [2024.5, 2032.5], "yaxis.range": [0, 22]}] # 壓縮 Y 軸，讓前期破局點極度清晰
+                        args=[{"xaxis.range": [2024.5, 2032.5], "yaxis.range": [0, 22]}]
                     )
                 ])
             )
@@ -405,7 +417,6 @@ def plot_wealth_trajectory(df_F=None):
     )
 
     fig.update_xaxes(showgrid=True, gridcolor='#F1F5F9', tickvals=list(range(2025, 2041)), showline=True, linecolor='#CBD5E1', range=[2024.5, 2040.5])
-    # 預設為全景視角
     fig.update_yaxes(showgrid=True, gridcolor='#F1F5F9', showline=True, linecolor='#CBD5E1', zeroline=False, range=[0, 75], dtick=10)
 
     return fig
