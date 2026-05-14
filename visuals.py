@@ -377,11 +377,11 @@ def plot_wealth_trajectory(df_F=None):
             orientation="v", yanchor="top", y=0.88, xanchor="left", x=0.02,
             bgcolor="rgba(255,255,255,0.9)", bordercolor="#E2E8F0", borderwidth=1
         ),
-        # --- 雙視角切換器 (Tactical Optics) ---
+        # --- 雙視角切換器 (Tactical Optics) 修正 ---
         updatemenus=[
             dict(
                 type="buttons",
-                direction="horizontal",
+                direction="right", # 校準為正確的參數 "right"
                 x=0.5, y=1.20, # 置中於標題下方
                 xanchor="center", yanchor="bottom",
                 showactive=True,
