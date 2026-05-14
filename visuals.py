@@ -185,8 +185,8 @@ def plot_nav_trend(df_F):
             return fig
     return None
 
-def plot_wealth_trajectory():
-    """繪製 NEGENTROPIC ATARAXIA 財富路徑導航圖 (嚴格對齊 2026/04 基準圖片佈局，防擁擠最佳化)"""
+def plot_wealth_trajectory(df_F=None):
+    """繪製 NEGENTROPIC ATARAXIA 財富路徑導航圖 (含實時戰線疊加)"""
     
     # 嚴格依照圖表上的可見 X 軸節點
     years = [2026, 2027, 2028, 2029, 2030, 2033, 2035, 2036, 2038, 2039, 2040]
@@ -218,9 +218,6 @@ def plot_wealth_trajectory():
         hoverinfo='skip',
         showlegend=True
     ))
-
-    # --- 關鍵修正：確保 Hover 順序為 野心 -> 基準 -> 保守 ---
-    # Plotly unified hover 會依照 Trace 加入的順序顯示，所以我們先加野心(紅)，再加基準(綠)，最後保守(藍)
 
     # 1. 野心路徑 (20%) - 紅色實線，Hover 最上方
     fig.add_trace(go.Scatter(
@@ -263,6 +260,49 @@ def plot_wealth_trajectory():
         x=[2026], y=[2.887], name='實際 NAV (2026 起點)', mode='markers',
         marker=dict(size=10, color='#7C3AED'), hovertemplate='<b>起點</b>: 2.887M<extra></extra>'
     ))
+
+    # ==========================================
+    # ⚡ 戰略更新：實時實際戰線 (Real-Time NAV Overlay)
+    # ==========================================
+    if df_F is not None and not df_F.empty:
+        df_real = df_F.copy()
+        date_col = next((c for c in df_real.columns if '日期' in c), None)
+        if date_col and '實質NAV' in df_real.columns:
+            df_real['dt'] = pd.to_datetime(df_real[date_col], errors='coerce')
+            df_real = df_real.dropna(subset=['dt', '實質NAV'])
+            
+            if not df_real.empty:
+                df_real = df_real.sort_values('dt')
+                # 轉換為小數年份 (Fractional Year)，精確對應圖表的 X 軸
+                df_real['frac_year'] = df_real['dt'].dt.year + (df_real['dt'].dt.dayofyear - 1) / 365.25
+                df_real['nav_m'] = df_real['實質NAV'].apply(dm.safe_float) / 1000000.0
+                df_real['date_str'] = df_real['dt'].dt.strftime('%Y-%m-%d')
+                
+                # 過濾掉極端離群值或 2025 之前的歷史資料（如果需要），這邊預設全畫
+                fig.add_trace(go.Scatter(
+                    x=df_real['frac_year'], y=df_real['nav_m'],
+                    name='⚡ 實際戰線 (Real NAV)',
+                    mode='lines+markers',
+                    line=dict(color='#F59E0B', width=3.5), # 發光琥珀金
+                    marker=dict(size=6, color='#F59E0B', line=dict(color='white', width=1)),
+                    customdata=df_real['date_str'],
+                    hovertemplate='<b>%{customdata} 實際</b>: %{y:.3f}M<extra></extra>'
+                ))
+                
+                # 標註最新實體定位點 (You Are Here)
+                last_x = df_real['frac_year'].iloc[-1]
+                last_y = df_real['nav_m'].iloc[-1]
+                fig.add_trace(go.Scatter(
+                    x=[last_x], y=[last_y],
+                    name='最新定位點',
+                    mode='markers+text',
+                    text=[f"⚡ {last_y:.2f}M"],
+                    textposition="top left",
+                    marker=dict(size=14, symbol='star', color='#F59E0B', line=dict(color='white', width=1)),
+                    textfont=dict(color='#F59E0B', size=12, family=MODERN_FONT, weight='bold'),
+                    hoverinfo='skip',
+                    showlegend=False
+                ))
 
     # --- 頂部 5 大 Phase 色塊 (錯位排列防擁擠，高度徹底推升) ---
     y_base = 80   # 提高矩形底部
