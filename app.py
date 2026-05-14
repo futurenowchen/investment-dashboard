@@ -327,6 +327,16 @@ with c1:
     st.markdown("### 📝 持股明細") 
     if not df_A.empty:
         df_show = df_A.copy()
+        
+        # --- 戰術淨化：過濾空白行與未持有標的 ---
+        # 1. 濾除沒有股票代碼的空白行
+        df_show = df_show[df_show['股票'].astype(str).str.strip() != '']
+        df_show = df_show[df_show['股票'].astype(str).str.strip().str.lower() != 'nan']
+        # 2. 只保留持有數量大於 0 的實際部位
+        if '持有數量（股）' in df_show.columns:
+            df_show = df_show[df_show['持有數量（股）'].apply(dm.safe_float) > 0]
+        # ----------------------------------------
+
         if st.session_state['live_prices']:
             df_show['即時價'] = df_show['股票'].map(st.session_state['live_prices']).fillna('')
         
