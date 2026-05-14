@@ -501,6 +501,7 @@ else:
 
 st.markdown("---")
 st.subheader("🗺️ NEGENTROPIC ATARAXIA 10.0 財富路徑導航圖")
-fig_traj = vis.plot_wealth_trajectory()
+# 戰略升級：將每日淨值(df_F)輸入引擎，渲染實體戰線疊加
+fig_traj = vis.plot_wealth_trajectory(df_F)
 if fig_traj:
     st.plotly_chart(fig_traj, use_container_width=True)
