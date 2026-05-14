@@ -380,7 +380,7 @@ def plot_wealth_trajectory(df_F=None):
 
     fig.update_layout(
         title=dict(
-            text="<b>NEGENTROPIC ATARAXIA 10.0 財富路徑整合圖：保守 vs 野心 (2026 起點 · 2025–2040)</b><br><span style='font-size:12px; color:#64748B;'>起點：2026/04/24 NAV 約 NT$2,887,023 | 年化 15%–20% 區間 | 每年淨投入約 NT$150,000<br>兩次關鍵注資：2027 Q4 約 NT$710,000–910,000；2029 Q4 約 NT$550,000–900,000<br>風控原則：E < 112、LDR < 115、質押率長期 < 35%</span>",
+            text="<b>NEGENTROPIC ATARAXIA 10.0 財富路徑整合圖：保守 vs 野心 (2026 起點 · 2025–2040)</b><br><span style='font-size:12px; color:#64748B;'>起點：2026/04/24 NAV 約 NT$2,887,023 | 年化 15%–20% 區間 | 每年淨投入約 NT$150,000<br>兩次關鍵注注資：2027 Q4 約 NT$710,000–910,000；2029 Q4 約 NT$550,000–900,000<br>風控原則：E < 112、LDR < 115、質押率長期 < 35%</span>",
             font=dict(size=16, family=MODERN_FONT), x=0.5, xanchor='center', y=0.98, yanchor='top'
         ),
         template='plotly_white', hovermode="x unified",
@@ -390,24 +390,26 @@ def plot_wealth_trajectory(df_F=None):
             orientation="v", yanchor="top", y=0.88, xanchor="left", x=0.02,
             bgcolor="rgba(255,255,255,0.9)", bordercolor="#E2E8F0", borderwidth=1
         ),
+        # --- 戰術狙擊：逐年下拉式選單 (Dropdown) ---
         updatemenus=[
             dict(
-                type="buttons",
-                direction="right", 
+                type="dropdown",
+                direction="down",
                 x=0.5, y=1.20,
                 xanchor="center", yanchor="bottom",
                 showactive=True,
+                active=0,
+                bgcolor="#FFFFFF",
+                bordercolor="#CBD5E1",
+                font=dict(family=MODERN_FONT, color="#334155", size=14),
                 buttons=list([
-                    dict(
-                        label="🗺️ 戰略全景 (2025-2040)",
-                        method="relayout",
-                        args=[{"xaxis.range": [2024.5, 2040.5], "yaxis.range": [0, 75]}]
-                    ),
-                    dict(
-                        label="🎯 近期戰區 (2025-2032)",
-                        method="relayout",
-                        args=[{"xaxis.range": [2024.5, 2032.5], "yaxis.range": [0, 22]}]
-                    )
+                    dict(label="🗺️ 戰略全景 (2025-2040)", method="relayout", args=[{"xaxis.range": [2024.5, 2040.5], "yaxis.range": [0, 75]}]),
+                    dict(label="🎯 2026 戰區 (生存與建倉)", method="relayout", args=[{"xaxis.range": [2025.5, 2027.2], "yaxis.range": [0, 6]}]),
+                    dict(label="🎯 2027 戰區 (債務解除與注資)", method="relayout", args=[{"xaxis.range": [2026.5, 2028.2], "yaxis.range": [2, 8]}]),
+                    dict(label="🎯 2028 戰區 (複利加速)", method="relayout", args=[{"xaxis.range": [2027.5, 2029.2], "yaxis.range": [3, 10]}]),
+                    dict(label="🎯 2029 戰區 (二次注資)", method="relayout", args=[{"xaxis.range": [2028.5, 2030.2], "yaxis.range": [4.5, 12]}]),
+                    dict(label="🎯 2030 戰區 (千萬門檻)", method="relayout", args=[{"xaxis.range": [2029.5, 2031.5], "yaxis.range": [6, 15]}]),
+                    dict(label="🎯 2031-2033 (規模膨脹)", method="relayout", args=[{"xaxis.range": [2030.5, 2034.0], "yaxis.range": [8, 25]}]),
                 ])
             )
         ],
