@@ -286,7 +286,16 @@ def generate_daily_report(df_A, df_C, df_D, df_E, df_F, df_Monitor, live_prices_
     # --- 表A 持股 ---
     lines.append("\n[表A]")
     if not df_A.empty:
-        for _, row in df_A.iterrows():
+        # --- 戰術淨化：過濾空白行與未持有標的 ---
+        df_A_clean = df_A.copy()
+        if '股票' in df_A_clean.columns:
+            df_A_clean = df_A_clean[df_A_clean['股票'].astype(str).str.strip() != '']
+            df_A_clean = df_A_clean[df_A_clean['股票'].astype(str).str.strip().str.lower() != 'nan']
+        if '持有數量（股）' in df_A_clean.columns:
+            df_A_clean = df_A_clean[df_A_clean['持有數量（股）'].apply(safe_float) > 0]
+        # ----------------------------------------
+
+        for _, row in df_A_clean.iterrows():
             ticker = str(row.get('股票', '')).strip()
             name = str(row.get('股票名稱', '')) 
             qty = fmt_int(row.get('持有數量（股）', 0)) + "股"
