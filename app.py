@@ -293,7 +293,11 @@ def render_live_monitoring_fragment():
                 st.markdown(vis.render_mini_metric("VIX", vix_display_html), unsafe_allow_html=True) 
             
             st.markdown(f"<div style='font-size:1.1em;color:gray;margin-top:2px;margin-bottom:2px'>📊 操作指令 (60日乖離: {bias_val})</div>", unsafe_allow_html=True)
-            st.info(f"{cmd}")
+            
+            # --- 戰術修正：防止 Streamlit 將 $ 解析為 LaTeX 數學公式 ---
+            cmd_display = cmd.replace('$', r'\$')
+            st.info(f"{cmd_display}")
+            # -----------------------------------------------------------
             
             mindset_text = ""
             for i, row in df_Monitor.iterrows():
@@ -308,7 +312,9 @@ def render_live_monitoring_fragment():
                     break
             
             if mindset_text:
-                st.markdown(vis.render_mindset_card(mindset_text), unsafe_allow_html=True)
+                # 同步為心態提醒卡片加裝防爆機制
+                mindset_display = mindset_text.replace('$', r'\$')
+                st.markdown(vis.render_mindset_card(mindset_display), unsafe_allow_html=True)
                 
         except Exception as e: st.error(f"解析判斷數據時發生錯誤: {e}")
     else: st.warning('總覽數據載入失敗。請檢查 Secrets 設定或試算表網址。')
