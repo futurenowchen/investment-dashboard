@@ -187,27 +187,30 @@ def plot_nav_trend(df_F):
     return None
 
 def plot_wealth_trajectory(df_F=None):
-    """繪製 NEGENTROPIC ATARAXIA 財富路徑導航圖 (含時空錨點校準)"""
+    """繪製 NEGENTROPIC ATARAXIA 財富路徑導航圖 (含大盤防線與心理護城河)"""
     
     # 基本年份節點
     years = [2026, 2027, 2028, 2029, 2030, 2033, 2035, 2036, 2038, 2039, 2040]
     
-    # --- ⚡ 戰略時空校準 (Time Anchor Calibration) ---
-    # 因為指揮官的計畫起點並非 1 月 1 日，而是 2026/04/24。
-    # 4/24 是一年中的第 114 天，113 / 365.25 ≈ 0.3093 (為簡化顯示四捨五入抓 0.31)
-    # 將理論路徑的 X 軸全部向右平移 0.31，使其完美貼合實際日曆進度，消滅「時間軸錯位」導致的理論過高現象。
-    anchor_offset = 113 / 365.25
+    # ⚡ 戰略時空校準 (Time Anchor Calibration)
+    anchor_offset = 113 / 365.25 # 對齊 2026/04/24 起點
     theoretical_x = [y + anchor_offset for y in years]
     
-    # 保守路徑 (15%) - 藍線
-    nav_15 =   [2.9, 3.9, 4.8, 5.7, 6.6, 10.2, 13.7, 15.7, 19.0, 21.7, 24.2]
-    text_15 =  ['2.9M', '3.9M', '', '5.7M', '6.6M', '10.2M', '13.7M', '15.7M', '19.0M', '21.7M', '24.2M']
+    # --- 戰略路徑定義 ---
     
-    # 基準路徑 (17.5%) - 綠線
+    # 🛡️ 傳統大盤防線 (約 8%，模擬無槓桿純現金投入的底層基準)
+    nav_8 =    [2.9, 3.3, 4.6, 5.1, 6.4, 8.6, 10.3, 11.3, 13.4, 14.7, 16.0]
+    text_8 =   ['2.9M', '3.3M', '', '5.1M', '6.4M', '8.6M', '10.3M', '', '13.4M', '', '16.0M']
+    
+    # 🔵 槓桿保守 (15%) - 藍線
+    nav_15 =   [2.9, 3.9, 4.8, 5.7, 6.6, 10.2, 13.7, 15.7, 19.0, 21.7, 24.2]
+    text_15 =  ['', '3.9M', '', '5.7M', '6.6M', '10.2M', '13.7M', '15.7M', '19.0M', '21.7M', '24.2M']
+    
+    # 🟢 基準目標 (17.5%) - 綠線
     nav_175 =  [2.9, 4.6, 5.5, 7.0, 8.1, 13.0, 17.5, 20.0, 30.0, 33.8, 36.2]
     text_175 = ['', '', '', '', '8.1M', '', '17.5M', '20.0M', '30.0M', '33.8M', '36.2M']
     
-    # 野心路徑 (20%) - 紅線
+    # 🔴 野心上限 (20%) - 紅線
     nav_20 =   [2.9, 5.1, 6.8, 8.6, 10.5, 18.6, 27.1, 37.0, 57.0, 63.6, 68.7]
     text_20 =  ['', '5.1M', '', '8.6M', '10.5M', '18.6M', '27.1M', '37.0M', '57.0M', '63.6M', '68.7M']
 
@@ -215,7 +218,25 @@ def plot_wealth_trajectory(df_F=None):
 
     fig = go.Figure()
 
-    # 0. 潛力區間填色 (使用時空校準後的 theoretical_x)
+    # ==========================================
+    # 圖層 0: 視覺護城河 (填色區間)
+    # ==========================================
+    
+    # 0.1 底層：超額報酬護城河 (8% ~ 15%)
+    # 這層用來接住實際 NAV，讓指揮官知道「只要在這層之上，我們依然擊敗了市場傳統預期」
+    fig.add_trace(go.Scatter(
+        x=theoretical_x, y=nav_8,
+        mode='lines', line=dict(width=0), line_shape='spline',
+        hoverinfo='skip', showlegend=False
+    ))
+    fig.add_trace(go.Scatter(
+        x=theoretical_x, y=nav_15,
+        fill='tonexty', fillcolor='rgba(148, 163, 184, 0.15)', # 淺灰藍色護城河
+        mode='lines', line=dict(width=0), line_shape='spline',
+        name='大盤超額護城河 (8%-15%)', hoverinfo='skip', showlegend=True
+    ))
+
+    # 0.2 上層：高槓桿潛力區間 (15% ~ 20%)
     fig.add_trace(go.Scatter(
         x=theoretical_x, y=nav_15,
         mode='lines', line=dict(width=0), line_shape='spline',
@@ -223,15 +244,31 @@ def plot_wealth_trajectory(df_F=None):
     ))
     fig.add_trace(go.Scatter(
         x=theoretical_x, y=nav_20,
-        fill='tonexty', fillcolor='rgba(44, 160, 44, 0.12)',
+        fill='tonexty', fillcolor='rgba(44, 160, 44, 0.10)', # 淺綠色潛力區間
         mode='lines', line=dict(width=0), line_shape='spline',
-        name='財富潛力區間 (15%-20%)', hoverinfo='skip', showlegend=True
+        name='槓桿潛力區間 (15%-20%)', hoverinfo='skip', showlegend=True
     ))
 
-    # 1. 野心路徑 (20%)
+
+    # ==========================================
+    # 圖層 1: 戰略軌跡線條
+    # ==========================================
+    
+    # 1. 🛡️ 大盤防線 (8%) - 灰色虛線
+    fig.add_trace(go.Scatter(
+        x=theoretical_x, y=nav_8,
+        name='🛡️ 大盤防線 (年化 8%)',
+        mode='lines+text',
+        text=text_8, textposition="bottom right",
+        line=dict(color='#94A3B8', width=2, dash='dot'), line_shape='spline',
+        textfont=dict(color='#94A3B8', size=9, family=MODERN_FONT),
+        hovertemplate='<b>預期目標</b>: %{y:.1f}M<extra></extra>'
+    ))
+
+    # 2. 🔴 野心路徑 (20%)
     fig.add_trace(go.Scatter(
         x=theoretical_x, y=nav_20,
-        name='野心路徑 (年化 20%)',
+        name='🔴 野心上限 (年化 20%)',
         mode='lines+text',
         text=text_20, textposition="top left",
         line=dict(color='#D62728', width=2), line_shape='spline',
@@ -239,10 +276,10 @@ def plot_wealth_trajectory(df_F=None):
         hovertemplate='<b>預期目標</b>: %{y:.1f}M<extra></extra>'
     ))
 
-    # 2. 基準路徑 (17.5%)
+    # 3. 🟢 基準路徑 (17.5%)
     fig.add_trace(go.Scatter(
         x=theoretical_x, y=nav_175,
-        name='基準路徑 (年化 17.5%)',
+        name='🟢 基準目標 (年化 17.5%)',
         mode='lines+text',
         text=text_175, textposition="top center",
         line=dict(color='#2CA02C', width=3), line_shape='spline',
@@ -250,10 +287,10 @@ def plot_wealth_trajectory(df_F=None):
         hovertemplate='<b>預期目標</b>: %{y:.1f}M<extra></extra>'
     ))
 
-    # 3. 保守路徑 (15%)
+    # 4. 🔵 保守路徑 (15%)
     fig.add_trace(go.Scatter(
         x=theoretical_x, y=nav_15,
-        name='保守路徑 (年化 15%)',
+        name='🔵 槓桿保守 (年化 15%)',
         mode='lines+text',
         text=text_15, textposition="bottom right",
         line=dict(color='#1F77B4', width=2), line_shape='spline',
@@ -261,7 +298,7 @@ def plot_wealth_trajectory(df_F=None):
         hovertemplate='<b>預期目標</b>: %{y:.1f}M<extra></extra>'
     ))
 
-    # 4. 起點紫點 (錨定於 2026.31)
+    # 5. 起點紫點 (錨定於 2026.31)
     fig.add_trace(go.Scatter(
         x=[2026 + anchor_offset], y=[2.887], name='實際 NAV (2026 起點)', mode='markers',
         marker=dict(size=10, color='#7C3AED'), hovertemplate='<b>2026/04 起點</b>: 2.887M<extra></extra>'
@@ -283,12 +320,13 @@ def plot_wealth_trajectory(df_F=None):
                 df_real['nav_m'] = df_real['實質NAV'].apply(dm.safe_float) / 1000000.0
                 df_real['date_str'] = df_real['dt'].dt.strftime('%Y-%m-%d')
                 
-                # 採用平移後的 theoretical_x 來計算內插，徹底消滅偷跑誤差
+                # 內插法計算所有階層的同期預期值
                 df_real['exp_20'] = np.interp(df_real['frac_year'], theoretical_x, nav_20)
                 df_real['exp_175'] = np.interp(df_real['frac_year'], theoretical_x, nav_175)
                 df_real['exp_15'] = np.interp(df_real['frac_year'], theoretical_x, nav_15)
+                df_real['exp_8'] = np.interp(df_real['frac_year'], theoretical_x, nav_8)
 
-                customdata = df_real[['date_str', 'exp_20', 'exp_175', 'exp_15']].values
+                customdata = df_real[['date_str', 'exp_20', 'exp_175', 'exp_15', 'exp_8']].values
                 
                 fig.add_trace(go.Scatter(
                     x=df_real['frac_year'], y=df_real['nav_m'],
@@ -302,7 +340,8 @@ def plot_wealth_trajectory(df_F=None):
                         '<br><i>─ 當下座標對齊 (同期預期) ─</i><br>'
                         '🔴 野心上限: %{customdata[1]:.2f}M<br>'
                         '🟢 基準目標: %{customdata[2]:.2f}M<br>'
-                        '🔵 保守底線: %{customdata[3]:.2f}M'
+                        '🔵 槓桿保守: %{customdata[3]:.2f}M<br>'
+                        '🛡️ 大盤防線: %{customdata[4]:.2f}M'
                         '<extra></extra>'
                     )
                 ))
@@ -384,7 +423,7 @@ def plot_wealth_trajectory(df_F=None):
     # --- 介面全局佈局 ---
     fig.update_layout(
         title=dict(
-            text="<b>NEGENTROPIC ATARAXIA 10.0 財富路徑整合圖：保守 vs 野心 (2026 起點 · 2025–2040)</b><br><span style='font-size:12px; color:#64748B;'>起點：2026/04/24 NAV 約 2.88M | 年化 15%–20% | 每年投入 150K | 注資: 2027 Q4 / 2029 Q4<br>風控: E < 112、LDR < 115、質押長期 < 35%</span>",
+            text="<b>NEGENTROPIC ATARAXIA 10.0 財富路徑整合圖：保守 vs 野心 (2026 起點 · 2025–2040)</b><br><span style='font-size:12px; color:#64748B;'>起點：2026/04 NAV 約 2.88M | 年化 15%–20% | 每年投入 150K | 注資: 2027 Q4 / 2029 Q4<br>風控: E < 112、LDR < 115、質押長期 < 35%</span>",
             font=dict(size=16, family=MODERN_FONT), x=0.5, xanchor='center', y=0.98, yanchor='top'
         ),
         template='plotly_white', hovermode="x unified",
