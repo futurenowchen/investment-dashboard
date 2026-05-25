@@ -10,7 +10,6 @@ import data_manager as dm
 def get_custom_css():
     return """
     <style>
-    /* 1. 調整頁面頂部留白 */
     .block-container {
         padding-top: 5rem;
         padding-bottom: 2rem;
@@ -21,12 +20,10 @@ def get_custom_css():
     h2 { font-size: 1.6em; padding-top: 0.5rem; }
     h3 { font-size: 1.4em; }
 
-    /* 表格設定：隱藏表頭 */
     [data-testid="stDataFrame"] thead {
         display: none;
     }
 
-    /* 側邊欄按鈕樣式 */
     div[data-testid="stSidebar"] .stButton button {
         width: 100%;
         height: 45px;
@@ -34,12 +31,10 @@ def get_custom_css():
         border: 1px solid #ccc;
     }
 
-    /* 進度條顏色 */
     .stProgress > div > div > div > div {
         background-color: #00b4d8;
     }
 
-    /* 自訂指標卡片樣式 */
     .custom-metric-card {
         background-color: #f8f9fa;
         border: 1px solid #e9ecef;
@@ -76,7 +71,6 @@ def get_custom_css():
         margin-bottom: 10px;
     }
 
-    /* 心態提醒卡片樣式 */
     .mindset-card {
         background-color: #e8f4f8;
         border-left: 5px solid #00b4d8;
@@ -99,6 +93,7 @@ def plot_asset_allocation(df_B):
     if not df_B.empty and '市值（元）' in df_B.columns:
         df_B = df_B.copy()
         df_B['num'] = df_B['市值（元）'].apply(dm.safe_float)
+
         chart_data = df_B[
             (df_B['num'] > 0)
             & (~df_B['股票'].astype(str).str.contains('總資產|Total', na=False))
@@ -106,12 +101,14 @@ def plot_asset_allocation(df_B):
 
         if not chart_data.empty:
             color_discrete_sequence = ['#0077b6', '#00b4d8', '#90e0ef', '#caf0f8']
+
             fig = px.pie(
                 chart_data,
                 values='num',
                 names='股票',
                 color_discrete_sequence=color_discrete_sequence
             )
+
             fig.update_layout(
                 margin=dict(t=10, b=10, l=10, r=10),
                 legend=dict(
@@ -122,6 +119,7 @@ def plot_asset_allocation(df_B):
                     x=0.5
                 )
             )
+
             return fig
 
     return None
@@ -254,6 +252,7 @@ def plot_nav_trend(df_F):
                 row=1,
                 col=1
             )
+
             fig.update_xaxes(
                 showgrid=False,
                 showline=True,
@@ -287,6 +286,7 @@ def plot_nav_trend(df_F):
                 row=1,
                 col=1
             )
+
             fig.update_yaxes(
                 showticklabels=False,
                 showgrid=False,
@@ -458,8 +458,11 @@ def plot_wealth_trajectory(df_F=None):
     ))
 
     # ==========================================
-    # 實際戰線：線本身不參與 hover，另設透明 hover 控制層
+    # 實際戰線資料準備
     # ==========================================
+    has_real = False
+    df_real = pd.DataFrame()
+
     if df_F is not None and not df_F.empty:
         df_real = df_F.copy()
         date_col = next((c for c in df_real.columns if '日期' in c), None)
@@ -471,19 +474,13 @@ def plot_wealth_trajectory(df_F=None):
             df_real = df_real[df_real['nav_raw'] > 0]
 
             if not df_real.empty:
+                has_real = True
                 df_real = df_real.sort_values('dt')
                 df_real['frac_year'] = df_real['dt'].dt.year + (df_real['dt'].dt.dayofyear - 1) / 365.25
                 df_real['nav_m'] = df_real['nav_raw'] / 1000000.0
                 df_real['date_str'] = df_real['dt'].dt.strftime('%Y-%m-%d')
 
-                df_real['exp_20'] = np.interp(df_real['frac_year'], theoretical_x, nav_20)
-                df_real['exp_175'] = np.interp(df_real['frac_year'], theoretical_x, nav_175)
-                df_real['exp_15'] = np.interp(df_real['frac_year'], theoretical_x, nav_15)
-                df_real['exp_8'] = np.interp(df_real['frac_year'], theoretical_x, nav_8)
-
-                customdata = df_real[['date_str', 'exp_20', 'exp_175', 'exp_15', 'exp_8']].values
-
-                # 實際戰線視覺線
+                # 實際戰線視覺線，不參與 hover
                 fig.add_trace(go.Scatter(
                     x=df_real['frac_year'],
                     y=df_real['nav_m'],
@@ -494,33 +491,10 @@ def plot_wealth_trajectory(df_F=None):
                     hoverinfo='skip'
                 ))
 
-                # 實際戰線 hover 控制層
-                fig.add_trace(go.Scatter(
-                    x=df_real['frac_year'],
-                    y=df_real['nav_m'],
-                    name='⚡ 實際戰線定位',
-                    mode='markers',
-                    marker=dict(
-                        size=18,
-                        color='rgba(245,158,11,0.01)',
-                        line=dict(width=0)
-                    ),
-                    customdata=customdata,
-                    showlegend=False,
-                    hovertemplate=(
-                        '<b>⚡ 實際戰線定位｜%{customdata[0]}</b><br><br>'
-                        '⚡ 實際戰線：<b>%{y:.2f}M</b><br>'
-                        '🔴 野心上限：%{customdata[1]:.2f}M<br>'
-                        '🟢 基準目標：%{customdata[2]:.2f}M<br>'
-                        '🔵 保守路徑：%{customdata[3]:.2f}M<br>'
-                        '🛡️ 大盤防線：%{customdata[4]:.2f}M'
-                        '<extra></extra>'
-                    )
-                ))
-
-                # 最新定位點，僅顯示星號與文字，不參與 hover
+                # 最新定位點，不參與 hover
                 last_x = df_real['frac_year'].iloc[-1]
                 last_y = df_real['nav_m'].iloc[-1]
+
                 fig.add_trace(go.Scatter(
                     x=[last_x],
                     y=[last_y],
@@ -544,6 +518,83 @@ def plot_wealth_trajectory(df_F=None):
                 ))
 
     # ==========================================
+    # 全圖 Hover 雷達軌：唯一參與 hover 的 trace
+    # ==========================================
+    hover_x = list(theoretical_x)
+
+    if has_real:
+        hover_x += df_real['frac_year'].tolist()
+
+    hover_x = sorted(set([round(float(x), 6) for x in hover_x]))
+    hover_df = pd.DataFrame({'frac_year': hover_x})
+
+    hover_df['exp_20'] = np.interp(hover_df['frac_year'], theoretical_x, nav_20)
+    hover_df['exp_175'] = np.interp(hover_df['frac_year'], theoretical_x, nav_175)
+    hover_df['exp_15'] = np.interp(hover_df['frac_year'], theoretical_x, nav_15)
+    hover_df['exp_8'] = np.interp(hover_df['frac_year'], theoretical_x, nav_8)
+
+    if has_real:
+        real_x = df_real['frac_year'].values
+        real_y = df_real['nav_m'].values
+
+        min_real_x = real_x.min()
+        max_real_x = real_x.max()
+
+        hover_df['real_nav'] = np.where(
+            (hover_df['frac_year'] >= min_real_x) & (hover_df['frac_year'] <= max_real_x),
+            np.interp(hover_df['frac_year'], real_x, real_y),
+            np.nan
+        )
+
+        real_date_map = dict(zip(
+            df_real['frac_year'].round(6),
+            df_real['date_str']
+        ))
+
+        hover_df['date_label'] = hover_df['frac_year'].round(6).map(real_date_map)
+        hover_df['date_label'] = hover_df['date_label'].fillna(
+            hover_df['frac_year'].apply(lambda x: f"{x:.2f}")
+        )
+    else:
+        hover_df['real_nav'] = np.nan
+        hover_df['date_label'] = hover_df['frac_year'].apply(lambda x: f"{x:.2f}")
+
+    hover_df['real_text'] = hover_df['real_nav'].apply(
+        lambda v: f"{v:.2f}M" if pd.notna(v) else "尚無實際資料"
+    )
+
+    hover_customdata = hover_df[
+        ['date_label', 'real_text', 'exp_20', 'exp_175', 'exp_15', 'exp_8']
+    ].values
+
+    # 透明雷達軌：
+    # mode 用 lines+markers，讓 x unified 可以沿著未來路徑掃描；
+    # 線與點都接近透明，但仍能接住 hover。
+    fig.add_trace(go.Scatter(
+        x=hover_df['frac_year'],
+        y=hover_df['exp_175'],
+        name='📌 戰略座標雷達',
+        mode='lines+markers',
+        line=dict(color='rgba(0,0,0,0.01)', width=18),
+        marker=dict(
+            size=20,
+            color='rgba(0,0,0,0.01)',
+            line=dict(width=0)
+        ),
+        customdata=hover_customdata,
+        showlegend=False,
+        hovertemplate=(
+            '<b>📌 戰略座標｜%{customdata[0]}</b><br><br>'
+            '⚡ 實際戰線：<b>%{customdata[1]}</b><br>'
+            '🔴 野心上限：%{customdata[2]:.2f}M<br>'
+            '🟢 基準目標：%{customdata[3]:.2f}M<br>'
+            '🔵 保守路徑：%{customdata[4]:.2f}M<br>'
+            '🛡️ 大盤防線：%{customdata[5]:.2f}M'
+            '<extra></extra>'
+        )
+    ))
+
+    # ==========================================
     # Phase 背景區塊
     # ==========================================
     y_high = 0.95
@@ -561,6 +612,7 @@ def plot_wealth_trajectory(df_F=None):
         layer="below",
         opacity=0.4
     )
+
     fig.add_annotation(
         x=2026.75,
         y=y_high,
@@ -582,6 +634,7 @@ def plot_wealth_trajectory(df_F=None):
         layer="below",
         opacity=0.4
     )
+
     fig.add_annotation(
         x=2028.0,
         y=y_low,
@@ -603,6 +656,7 @@ def plot_wealth_trajectory(df_F=None):
         layer="below",
         opacity=0.4
     )
+
     fig.add_annotation(
         x=2029.25,
         y=y_high,
@@ -624,6 +678,7 @@ def plot_wealth_trajectory(df_F=None):
         layer="below",
         opacity=0.4
     )
+
     fig.add_annotation(
         x=2032.0,
         y=y_low,
@@ -645,6 +700,7 @@ def plot_wealth_trajectory(df_F=None):
         layer="below",
         opacity=0.4
     )
+
     fig.add_annotation(
         x=2037.0,
         y=y_high,
@@ -858,7 +914,7 @@ def plot_wealth_trajectory(df_F=None):
             yanchor='top'
         ),
         template='plotly_white',
-        hovermode="closest",
+        hovermode="x unified",
         margin=dict(t=150, b=150, l=50, r=50),
         font=dict(family=modern_font, color='#334155'),
         legend=dict(
@@ -944,7 +1000,8 @@ def plot_wealth_trajectory(df_F=None):
         tickvals=list(range(2025, 2041)),
         showline=True,
         linecolor='#CBD5E1',
-        range=[2024.5, 2040.5]
+        range=[2024.5, 2040.5],
+        hoverformat=".2f"
     )
 
     fig.update_yaxes(
