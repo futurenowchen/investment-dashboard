@@ -486,8 +486,8 @@ def plot_wealth_trajectory(df_F=None):
                     y=df_real['nav_m'],
                     name='⚡ 實際戰線 (Real NAV)',
                     mode='lines',
-                    line=dict(color='#F59E0B', width=3.5),
-                    line_shape='spline',
+                    line=dict(color='#F59E0B', width=3),
+                    line_shape='linear',
                     hoverinfo='skip'
                 ))
 
@@ -568,17 +568,15 @@ def plot_wealth_trajectory(df_F=None):
     ].values
 
     # 透明雷達軌：
-    # mode 用 lines+markers，讓 x unified 可以沿著未來路徑掃描；
-    # 線與點都接近透明，但仍能接住 hover。
+    # 使用不可見 markers 承接 hover，避免半透明粗線造成灰黑色螢光殘影。
     fig.add_trace(go.Scatter(
         x=hover_df['frac_year'],
         y=hover_df['exp_175'],
         name='📌 戰略座標雷達',
-        mode='lines+markers',
-        line=dict(color='rgba(0,0,0,0.01)', width=18),
+        mode='markers',
         marker=dict(
             size=20,
-            color='rgba(0,0,0,0.01)',
+            color='rgba(0,0,0,0)',
             line=dict(width=0)
         ),
         customdata=hover_customdata,
