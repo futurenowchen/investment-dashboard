@@ -431,7 +431,7 @@ def plot_wealth_trajectory(df_F=None):
     fig.add_annotation(x=2028.0, y=ms_y1, yref="paper", text="<b>2027</b><br><b>500 萬</b><br>臨界門檻", showarrow=False, bgcolor="#FFF4E6", bordercolor="#FF6600", borderwidth=1, borderpad=4, font=dict(size=10))
     fig.add_annotation(x=2030.5, y=ms_y2, yref="paper", text="<b>2030</b><br><b>1,000 萬</b><br>射程內", showarrow=False, bgcolor="#E5F3FF", bordercolor="#1F77B4", borderwidth=1, borderpad=4, font=dict(size=10))
     fig.add_annotation(x=2034.0, y=ms_y1, yref="paper", text="<b>2033</b><br>主場開始<br>效應放大", showarrow=False, bgcolor="#F2E6FF", bordercolor="#9933CC", borderwidth=1, borderpad=4, font=dict(size=10))
-    fig.add_annotation(x=2039.0, y=ms_y2, yref="paper", text="<b>2040</b><br>美元百萬<br>自由區域", yref="paper", showarrow=False, bgcolor="#FFE6E6", bordercolor="#D62728", borderwidth=1, borderpad=4, font=dict(size=10))
+    fig.add_annotation(x=2039.0, y=ms_y2, yref="paper", text="<b>2040</b><br>美元百萬<br>自由區域", showarrow=False, bgcolor="#FFE6E6", bordercolor="#D62728", borderwidth=1, borderpad=4, font=dict(size=10))
 
     # --- 介面全局佈局 ---
     fig.update_layout(
