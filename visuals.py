@@ -486,8 +486,8 @@ def plot_wealth_trajectory(df_F=None):
                     y=df_real['nav_m'],
                     name='⚡ 實際戰線 (Real NAV)',
                     mode='lines',
-                    line=dict(color='#F59E0B', width=3.5),
-                    line_shape='spline',
+                    line=dict(color='#F59E0B', width=3),
+                    line_shape='linear',
                     hoverinfo='skip'
                 ))
 

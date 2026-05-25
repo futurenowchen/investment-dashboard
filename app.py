@@ -40,6 +40,13 @@ if st.sidebar.button("🔄 重新載入全域資料"):
     dm.load_data.clear()
     st.rerun()
 
+# 強制同步：清除 Streamlit 快取避免前端仍顯示舊圖
+if st.sidebar.button("🧹 強制清除快取並重跑"):
+    st.cache_data.clear()
+    st.cache_resource.clear()
+    dm.load_data.clear()
+    st.rerun()
+
 # 戰術升級：局部無感跳動開關
 auto_refresh = st.sidebar.checkbox("⏱️ 啟動局部無感跳動 (每 60 秒)", value=False)
 refresh_interval = 60 if auto_refresh else None
