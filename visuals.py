@@ -501,45 +501,76 @@ def plot_wealth_trajectory(df_F=None):
             fig.add_annotation(x=x, y=y, text=frac_year_to_quarter_label(x), showarrow=False,
                                yshift=16, font=dict(size=12, color='#166534', family=modern_font))
 
-    # hover 雷達
-    start_q = 2025.5   # 2025 Q3
-    end_q = 2040.75    # 2040 Q4
-    hover_x = np.arange(start_q, end_q + 0.001, 1 / 52)
-    hover_x = np.round(hover_x, 6)
-    hover_df = pd.DataFrame({'frac_year': hover_x})
+    # hover 雷達：每日節點，X 軸仍維持季度/半年標籤
+    # 設計原則：
+    # 1. hover 手感採每日一格，讓實際戰線與未來理論路徑都能平滑滑行。
+    # 2. 理論路徑每日用 np.interp() 內插。
+    # 3. 實際 NAV 採嚴格顯示：只有 df_F 真實存在的日期才顯示，其他日期顯示「—」。
+    # 4. 透明雷達軌在已有實際資料區間跟隨實際航跡，未來則跟隨基準目標線。
+    start_date = pd.Timestamp('2025-07-01')
+    end_date = pd.Timestamp('2040-12-31')
+    daily_dates = pd.date_range(start_date, end_date, freq='D')
+
+    hover_df = pd.DataFrame({'date': daily_dates})
+    hover_df['date_label'] = hover_df['date'].dt.strftime('%Y-%m-%d')
+    hover_df['frac_year'] = (
+        hover_df['date'].dt.year
+        + (hover_df['date'].dt.dayofyear - 1) / 365.25
+    )
+
     hover_df['exp_20'] = np.interp(hover_df['frac_year'], theoretical_x, nav_20)
     hover_df['exp_175'] = np.interp(hover_df['frac_year'], theoretical_x, nav_175)
     hover_df['exp_15'] = np.interp(hover_df['frac_year'], theoretical_x, nav_15)
     hover_df['exp_8'] = np.interp(hover_df['frac_year'], theoretical_x, nav_8)
 
+    hover_df['real_nav'] = np.nan
+    hover_df['hover_y'] = hover_df['exp_175']
+
     if has_real:
+        # 嚴格實際值：只有表F真正存在的日期才顯示 NAV。
+        real_daily = (
+            df_real[['date_str', 'nav_m']]
+            .dropna()
+            .groupby('date_str', as_index=False)
+            .last()
+        )
+        real_nav_map = real_daily.set_index('date_str')['nav_m'].to_dict()
+        hover_df['real_nav'] = hover_df['date_label'].map(real_nav_map)
+
+        # hover 命中軌：已知實際區間跟隨實際航跡，未來跟隨基準線。
+        # 注意：這只用於滑鼠命中位置，不代表 hover 內顯示的實際 NAV。
         real_x = df_real['frac_year'].values
         real_y = df_real['nav_m'].values
-        hover_df['real_nav'] = np.where((hover_df['frac_year'] >= real_x.min()) & (hover_df['frac_year'] <= real_x.max()),
-                                        np.interp(hover_df['frac_year'], real_x, real_y), np.nan)
-        real_dates_x = df_real['frac_year'].values
-        real_dates_label = df_real['date_str'].values
-        date_match_threshold = 10 / 365.25  # 約 10 天內顯示實際日期
+        if len(real_x) >= 2:
+            in_real_range = (
+                (hover_df['frac_year'] >= real_x.min())
+                & (hover_df['frac_year'] <= real_x.max())
+            )
+            hover_df.loc[in_real_range, 'hover_y'] = np.interp(
+                hover_df.loc[in_real_range, 'frac_year'],
+                real_x,
+                real_y
+            )
+        elif len(real_x) == 1:
+            only_x = real_x[0]
+            only_y = real_y[0]
+            near_only_point = np.abs(hover_df['frac_year'] - only_x) <= (1 / 365.25)
+            hover_df.loc[near_only_point, 'hover_y'] = only_y
 
-        def resolve_hover_label(x):
-            idx = np.abs(real_dates_x - x).argmin()
-            if abs(real_dates_x[idx] - x) <= date_match_threshold:
-                return real_dates_label[idx]
-            return frac_year_to_quarter_label(x)
+    hover_df['real_text'] = hover_df['real_nav'].apply(
+        lambda v: f'{v:.2f}M' if pd.notna(v) else '—'
+    )
 
-        hover_df['date_label'] = hover_df['frac_year'].apply(resolve_hover_label)
-    else:
-        hover_df['real_nav'] = np.nan
-        hover_df['date_label'] = hover_df['frac_year'].apply(frac_year_to_quarter_label)
+    hover_customdata = hover_df[
+        ['date_label', 'real_text', 'exp_20', 'exp_175', 'exp_15', 'exp_8']
+    ].values
 
-    hover_df['real_text'] = hover_df['real_nav'].apply(lambda v: f'{v:.2f}M' if pd.notna(v) else '—')
-    hover_customdata = hover_df[['date_label', 'real_text', 'exp_20', 'exp_175', 'exp_15', 'exp_8']].values
     fig.add_trace(go.Scatter(
         x=hover_df['frac_year'],
-        y=hover_df['exp_175'],
+        y=hover_df['hover_y'],
         name='📌 戰略座標雷達',
         mode='lines',
-        line=dict(color='rgba(0,0,0,0.01)', width=26),
+        line=dict(color='rgba(0,0,0,0.01)', width=28),
         customdata=hover_customdata,
         showlegend=False,
         hovertemplate=(
