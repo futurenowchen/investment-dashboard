@@ -392,9 +392,11 @@ def plot_wealth_trajectory(df_F=None):
     """繪製 NEGENTROPIC ATARAXIA 財富路徑導航圖"""
 
     def frac_year_to_quarter_label(x):
-        year = int(np.floor(x))
-        frac = x - year
-        quarter = int(np.floor(frac * 4)) + 1
+        q_index = int(np.round((float(x) - 2025.0) * 4))
+        y = 2025.0 + q_index / 4.0
+        year = int(np.floor(y))
+        frac = y - year
+        quarter = int(np.round(frac * 4)) + 1
         quarter = min(max(quarter, 1), 4)
         return f"{year} Q{quarter}"
 
@@ -452,16 +454,23 @@ def plot_wealth_trajectory(df_F=None):
                 df_real['nav_m'] = df_real['nav_raw'] / 1000000.0
                 df_real['date_str'] = df_real['dt'].dt.strftime('%Y-%m-%d')
 
-                fig.add_trace(go.Scatter(x=df_real['frac_year'], y=df_real['nav_m'],
-                                         name='⚡ 實際戰線', mode='lines',
-                                         line=dict(color='#F59E0B', width=4.8), hoverinfo='skip'))
+                fig.add_trace(go.Scatter(
+                    x=df_real['frac_year'], y=df_real['nav_m'], name='⚡ 實際戰線光暈',
+                    mode='lines', line=dict(color='rgba(245, 158, 11, 0.20)', width=9),
+                    line_shape='linear', hoverinfo='skip', showlegend=False
+                ))
+                fig.add_trace(go.Scatter(
+                    x=df_real['frac_year'], y=df_real['nav_m'], name='⚡ 實際戰線',
+                    mode='lines', line=dict(color='#F59E0B', width=4),
+                    line_shape='linear', hoverinfo='skip'
+                ))
 
                 last_x = df_real['frac_year'].iloc[-1]
                 last_y = df_real['nav_m'].iloc[-1]
                 fig.add_trace(go.Scatter(x=[last_x], y=[last_y], name='最新定位點', mode='markers+text',
                                          text=[f'⚡ {last_y:.2f}M'], textposition='top left',
-                                         marker=dict(size=11, color='#F59E0B', symbol='circle',
-                                                     line=dict(color='white', width=1.2)),
+                                         marker=dict(size=13, symbol='circle', color='#F59E0B',
+                                                     line=dict(color='white', width=2)),
                                          textfont=dict(size=12, color='#B45309', family=modern_font),
                                          hoverinfo='skip', showlegend=False))
 
@@ -493,10 +502,10 @@ def plot_wealth_trajectory(df_F=None):
                                yshift=16, font=dict(size=12, color='#166534', family=modern_font))
 
     # hover 雷達
-    hover_x = list(theoretical_x)
-    if has_real:
-        hover_x += df_real['frac_year'].tolist()
-    hover_x = sorted(set(round(float(x), 6) for x in hover_x))
+    start_q = 2025.5   # 2025 Q3
+    end_q = 2040.75    # 2040 Q4
+    hover_x = np.arange(start_q, end_q + 0.001, 0.25)
+    hover_x = np.round(hover_x, 6)
     hover_df = pd.DataFrame({'frac_year': hover_x})
     hover_df['exp_20'] = np.interp(hover_df['frac_year'], theoretical_x, nav_20)
     hover_df['exp_175'] = np.interp(hover_df['frac_year'], theoretical_x, nav_175)
@@ -508,14 +517,16 @@ def plot_wealth_trajectory(df_F=None):
         real_y = df_real['nav_m'].values
         hover_df['real_nav'] = np.where((hover_df['frac_year'] >= real_x.min()) & (hover_df['frac_year'] <= real_x.max()),
                                         np.interp(hover_df['frac_year'], real_x, real_y), np.nan)
-        real_date_map = dict(zip(df_real['frac_year'].round(6), df_real['date_str']))
-        hover_df['date_label'] = hover_df['frac_year'].round(6).map(real_date_map)
+        df_real_q = df_real.copy()
+        df_real_q['q_frac'] = np.round(np.round((df_real_q['frac_year'] - 2025.0) * 4) / 4.0 + 2025.0, 6)
+        real_date_map = df_real_q.groupby('q_frac')['date_str'].last().to_dict()
+        hover_df['date_label'] = hover_df['frac_year'].map(real_date_map)
         hover_df['date_label'] = hover_df['date_label'].fillna(hover_df['frac_year'].apply(frac_year_to_quarter_label))
     else:
         hover_df['real_nav'] = np.nan
         hover_df['date_label'] = hover_df['frac_year'].apply(frac_year_to_quarter_label)
 
-    hover_df['real_text'] = hover_df['real_nav'].apply(lambda v: f'{v:.2f}M' if pd.notna(v) else '尚無實際資料')
+    hover_df['real_text'] = hover_df['real_nav'].apply(lambda v: f'{v:.2f}M' if pd.notna(v) else '—')
     hover_customdata = hover_df[['date_label', 'real_text', 'exp_20', 'exp_175', 'exp_15', 'exp_8']].values
     fig.add_trace(go.Scatter(
         x=hover_df['frac_year'], y=hover_df['exp_175'], mode='markers', showlegend=False,
