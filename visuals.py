@@ -457,12 +457,12 @@ def plot_wealth_trajectory(df_F=None):
                 fig.add_trace(go.Scatter(
                     x=df_real['frac_year'], y=df_real['nav_m'], name='⚡ 實際戰線光暈',
                     mode='lines', line=dict(color='rgba(245, 158, 11, 0.20)', width=9),
-                    line_shape='linear', hoverinfo='skip', showlegend=False
+                    line_shape='spline', hoverinfo='skip', showlegend=False
                 ))
                 fig.add_trace(go.Scatter(
                     x=df_real['frac_year'], y=df_real['nav_m'], name='⚡ 實際戰線',
                     mode='lines', line=dict(color='#F59E0B', width=4),
-                    line_shape='linear', hoverinfo='skip'
+                    line_shape='spline', hoverinfo='skip'
                 ))
 
                 last_x = df_real['frac_year'].iloc[-1]
@@ -504,7 +504,7 @@ def plot_wealth_trajectory(df_F=None):
     # hover 雷達
     start_q = 2025.5   # 2025 Q3
     end_q = 2040.75    # 2040 Q4
-    hover_x = np.arange(start_q, end_q + 0.001, 0.25)
+    hover_x = np.arange(start_q, end_q + 0.001, 1 / 52)
     hover_x = np.round(hover_x, 6)
     hover_df = pd.DataFrame({'frac_year': hover_x})
     hover_df['exp_20'] = np.interp(hover_df['frac_year'], theoretical_x, nav_20)
@@ -517,11 +517,17 @@ def plot_wealth_trajectory(df_F=None):
         real_y = df_real['nav_m'].values
         hover_df['real_nav'] = np.where((hover_df['frac_year'] >= real_x.min()) & (hover_df['frac_year'] <= real_x.max()),
                                         np.interp(hover_df['frac_year'], real_x, real_y), np.nan)
-        df_real_q = df_real.copy()
-        df_real_q['q_frac'] = np.round(np.round((df_real_q['frac_year'] - 2025.0) * 4) / 4.0 + 2025.0, 6)
-        real_date_map = df_real_q.groupby('q_frac')['date_str'].last().to_dict()
-        hover_df['date_label'] = hover_df['frac_year'].map(real_date_map)
-        hover_df['date_label'] = hover_df['date_label'].fillna(hover_df['frac_year'].apply(frac_year_to_quarter_label))
+        real_dates_x = df_real['frac_year'].values
+        real_dates_label = df_real['date_str'].values
+        date_match_threshold = 10 / 365.25  # 約 10 天內顯示實際日期
+
+        def resolve_hover_label(x):
+            idx = np.abs(real_dates_x - x).argmin()
+            if abs(real_dates_x[idx] - x) <= date_match_threshold:
+                return real_dates_label[idx]
+            return frac_year_to_quarter_label(x)
+
+        hover_df['date_label'] = hover_df['frac_year'].apply(resolve_hover_label)
     else:
         hover_df['real_nav'] = np.nan
         hover_df['date_label'] = hover_df['frac_year'].apply(frac_year_to_quarter_label)
@@ -532,9 +538,8 @@ def plot_wealth_trajectory(df_F=None):
         x=hover_df['frac_year'],
         y=hover_df['exp_175'],
         name='📌 戰略座標雷達',
-        mode='lines+markers',
-        line=dict(color='rgba(0,0,0,0.01)', width=22),
-        marker=dict(size=20, color='rgba(0,0,0,0.01)', line=dict(width=0)),
+        mode='lines',
+        line=dict(color='rgba(0,0,0,0.01)', width=26),
         customdata=hover_customdata,
         showlegend=False,
         hovertemplate=(
