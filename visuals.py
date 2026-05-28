@@ -74,14 +74,100 @@ def get_custom_css():
     .mindset-card {
         background-color: #e8f4f8;
         border-left: 5px solid #00b4d8;
-        padding: 15px;
+        padding: 14px 16px;
         border-radius: 5px;
-        margin-top: 15px;
+        margin-top: 12px;
         color: #0f5132;
         font-size: 1.0em;
         display: flex;
         align-items: center;
+        min-height: 64px;
         width: 100%;
+        line-height: 1.35;
+        overflow-wrap: anywhere;
+        word-break: break-word;
+        transition: background-color 0.35s ease, box-shadow 0.35s ease, border-color 0.35s ease;
+        animation: cardFadeIn 0.35s ease-out;
+    }
+
+    .live-card {
+        background-color:#f8f9fa;
+        padding:14px 16px;
+        border-radius:10px;
+        margin-bottom:10px;
+        border:1px solid #e9ecef;
+        min-height:118px;
+        display:flex;
+        flex-direction:column;
+        justify-content:center;
+        align-items:center;
+        text-align:center;
+        line-height:1.2;
+        overflow:hidden;
+        transition: background-color 0.3s ease, box-shadow 0.3s ease, transform 0.25s ease;
+        animation: cardFadeIn 0.3s ease-out;
+    }
+
+    .live-card-label {
+        min-height: 24px;
+        font-size:1em;
+        color:#6c757d;
+        line-height:1.25;
+        margin-bottom:4px;
+        overflow-wrap:anywhere;
+        word-break:break-word;
+    }
+
+    .live-card-value {
+        min-height: 48px;
+        font-size:2.2em;
+        font-weight:700;
+        line-height:1.1;
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        overflow-wrap:anywhere;
+        word-break:break-word;
+    }
+
+    .mini-metric-card {
+        min-height: 92px;
+        padding: 4px 0;
+        display:flex;
+        flex-direction:column;
+        justify-content:center;
+        transition: color 0.3s ease;
+        animation: cardFadeIn 0.3s ease-out;
+    }
+
+    .mini-metric-label {
+        min-height: 24px;
+        font-size:1.05rem;
+        color:gray;
+        margin-bottom:2px;
+        line-height:1.2;
+        overflow-wrap:anywhere;
+    }
+
+    .mini-metric-value {
+        min-height: 54px;
+        font-size:1.75rem;
+        font-weight:700;
+        line-height:1.15;
+        display:flex;
+        flex-direction:column;
+        justify-content:center;
+        overflow-wrap:anywhere;
+        word-break:break-word;
+    }
+
+    .live-highlight {
+        box-shadow: 0 0 0 1px rgba(0, 180, 216, 0.18), 0 8px 16px rgba(15, 23, 42, 0.05);
+    }
+
+    @keyframes cardFadeIn {
+        from { opacity: 0.88; }
+        to { opacity: 1; }
     }
     </style>
     """
@@ -1030,15 +1116,15 @@ def render_risk_metric_card(risk_text, lev_value, style_dict):
 
 def render_goal_progress_card(target, gap, pct):
     return f"""
-    <div style="background-color:#f8f9fa; padding:15px; border-radius:10px; margin-bottom:10px; border:1px solid #e9ecef; height: 100%; display: flex; flex-direction: column; justify-content: center;">
-        <div style="font-size:1.0em; color:#6c757d; margin-bottom:5px;">達成進度</div>
-        <div style="font-size:2.2em; font-weight:bold; color:#007BFF; line-height:1.1;">
+    <div class="live-card live-highlight">
+        <div class="live-card-label">達成進度</div>
+        <div class="live-card-value" style="color:#007BFF;">
             {pct*100:.1f}%
         </div>
-        <div style="margin-top:8px; font-size:0.85em; display:flex; justify-content:space-between; color:#495057;">
+        <div style="margin-top:8px; min-height:20px; font-size:0.85em; display:flex; justify-content:space-between; color:#495057; line-height:1.25; width:100%;">
             <span>目標: <b>{dm.fmt_int(target)}</b></span>
         </div>
-        <div style="text-align:right; font-size:0.8em; color:#e63946; margin-top:2px;">
+        <div style="min-height:18px; text-align:right; font-size:0.8em; color:#e63946; margin-top:2px; line-height:1.2; width:100%;">
             (差 {dm.fmt_int(gap)})
         </div>
     </div>
@@ -1065,9 +1151,9 @@ def render_house_plan_card(r_display, dp_target, est_year):
 def render_simple_card(title, value, value_color="#212529"):
     """通用數值展示卡片"""
     return f"""
-    <div style="background-color:#f8f9fa; padding:15px; border-radius:10px; margin-bottom:10px; border:1px solid #e9ecef; height: 100%; display: flex; flex-direction: column; justify-content: center;">
-        <div style="font-size:1.0em; color:#6c757d; margin-bottom:5px;">{title}</div>
-        <div style="font-size:2.2em; font-weight:bold; color:{value_color}; line-height:1.1;">
+    <div class="live-card live-highlight">
+        <div class="live-card-label">{title}</div>
+        <div class="live-card-value" style="color:{value_color};">
             {value}
         </div>
     </div>
@@ -1077,15 +1163,15 @@ def render_simple_card(title, value, value_color="#212529"):
 def render_mindset_card(mindset_text):
     return f"""
     <div class="mindset-card">
-        💡 <b>心態提醒：</b> {mindset_text}
+        <div style="line-height:1.35;">💡 <b>心態提醒：</b> {mindset_text}</div>
     </div>
     """
 
 
 def render_mini_metric(label, value, color="black"):
     return f"""
-    <div style='margin-bottom:0px;'>
-        <div style='font-size:1.1rem; color:gray; margin-bottom:2px; white-space: nowrap;'>{label}</div>
-        <div style='font-size:1.8rem; font-weight:bold; color:{color}; line-height:1.2; white-space: normal; word-break: break-word;'>{value}</div>
+    <div class='mini-metric-card'>
+        <div class='mini-metric-label'>{label}</div>
+        <div class='mini-metric-value' style='color:{color};'>{value}</div>
     </div>
     """
