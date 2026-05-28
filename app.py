@@ -20,13 +20,13 @@ if 'live_prices' not in st.session_state:
 # 載入基礎資料 (供側邊欄與下方區塊使用)
 df_A = dm.load_data('表A_持股總表')
 df_B = dm.load_data('表B_持股比例')
-df_C_base = dm.load_data('表C_總覽')
+df_C_base = dm.load_live_data('表C_總覽')
 df_D = dm.load_data('表D_現金流')
 df_E = dm.load_data('表E_已實現損益')
 df_F = dm.load_data('表F_每日淨值')
 df_G = dm.load_data('表G_財富藍圖') 
-df_Monitor_base = dm.load_data('即時監控面板')
-df_Market_base = dm.load_data('Market')
+df_Monitor_base = dm.load_live_data('即時監控面板')
+df_Market_base = dm.load_live_data('Market')
 
 # 決定標題日期字串 (直接抓取系統今日時間)
 today = datetime.now()
@@ -38,6 +38,7 @@ st.title(f'💰 投資組合儀表板{date_str}')
 st.sidebar.header("🎯 數據管理")
 if st.sidebar.button("🔄 重新載入全域資料"):
     dm.load_data.clear()
+    dm.load_live_data.clear()
     st.rerun()
 
 # 強制同步：清除 Streamlit 快取避免前端仍顯示舊圖
@@ -45,13 +46,15 @@ if st.sidebar.button("🧹 強制清除快取並重跑"):
     st.cache_data.clear()
     st.cache_resource.clear()
     dm.load_data.clear()
+    dm.load_live_data.clear()
     st.rerun()
 
 # 戰術升級：局部無感跳動開關
-auto_refresh = st.sidebar.checkbox("⏱️ 啟動局部無感跳動 (每 60 秒)", value=False)
-refresh_interval = 60 if auto_refresh else None
+auto_refresh = st.sidebar.checkbox("⏱️ 啟動局部無感跳動", value=False)
+refresh_seconds = st.sidebar.selectbox("更新頻率", [15, 20, 30, 60], index=1, format_func=lambda x: f"{x} 秒")
+refresh_interval = refresh_seconds if auto_refresh else None
 if auto_refresh:
-    st.sidebar.info("🟢 戰術雷達：局部掃描啟動")
+    st.sidebar.info(f"🟢 戰術雷達：局部掃描啟動（每 {refresh_seconds} 秒）")
 
 if st.sidebar.button("💾 更新股價至 Google Sheets", type="primary"):
     if not df_A.empty and '股票' in df_A.columns:
@@ -90,9 +93,9 @@ st.sidebar.markdown("---")
 @st.fragment(run_every=refresh_interval)
 def render_live_monitoring_fragment():
     # 每次局部重載時，讀取最新快取資料 (透過 TTL 60 秒機制確保數據為最新)
-    df_Monitor = dm.load_data('即時監控面板')
-    df_C = dm.load_data('表C_總覽')
-    df_Market = dm.load_data('Market')
+    df_Monitor = dm.load_live_data('即時監控面板')
+    df_C = dm.load_live_data('表C_總覽')
+    df_Market = dm.load_live_data('Market')
 
     st.header('1. 投資總覽')
 
@@ -169,17 +172,17 @@ def render_live_monitoring_fragment():
 
     # 第一排卡片：總資產、現金、NAV淨變動、NAV波動率
     row1_col1, row1_col2, row1_col3, row1_col4 = st.columns(4)
-    with row1_col1: st.markdown(vis.render_simple_card('總資產', tot_asset_str), unsafe_allow_html=True)
-    with row1_col2: st.markdown(vis.render_simple_card('現金', cash_str), unsafe_allow_html=True)
-    with row1_col3: st.markdown(vis.render_simple_card('NAV淨變動', nav_nc_str, nav_nc_color), unsafe_allow_html=True)
-    with row1_col4: st.markdown(vis.render_simple_card('NAV波動率', nav_vol_str, nav_vol_color), unsafe_allow_html=True)
+    with row1_col1: st.empty().markdown(vis.render_simple_card('總資產', tot_asset_str), unsafe_allow_html=True)
+    with row1_col2: st.empty().markdown(vis.render_simple_card('現金', cash_str), unsafe_allow_html=True)
+    with row1_col3: st.empty().markdown(vis.render_simple_card('NAV淨變動', nav_nc_str, nav_nc_color), unsafe_allow_html=True)
+    with row1_col4: st.empty().markdown(vis.render_simple_card('NAV波動率', nav_vol_str, nav_vol_color), unsafe_allow_html=True)
 
     # 第二排卡片：股票市值、股市淨變動、股市波動率、達成進度
     row2_col1, row2_col2, row2_col3, row2_col4 = st.columns(4)
-    with row2_col1: st.markdown(vis.render_simple_card('股票市值', stock_value_str), unsafe_allow_html=True)
-    with row2_col2: st.markdown(vis.render_simple_card('股市淨變動', stock_nc_str, stock_nc_color), unsafe_allow_html=True)
-    with row2_col3: st.markdown(vis.render_simple_card('股市波動率', stock_vol_str, stock_vol_color), unsafe_allow_html=True)
-    with row2_col4: st.markdown(vis.render_goal_progress_card(target, gap, pct_float), unsafe_allow_html=True)
+    with row2_col1: st.empty().markdown(vis.render_simple_card('股票市值', stock_value_str), unsafe_allow_html=True)
+    with row2_col2: st.empty().markdown(vis.render_simple_card('股市淨變動', stock_nc_str, stock_nc_color), unsafe_allow_html=True)
+    with row2_col3: st.empty().markdown(vis.render_simple_card('股市波動率', stock_vol_str, stock_vol_color), unsafe_allow_html=True)
+    with row2_col4: st.empty().markdown(vis.render_goal_progress_card(target, gap, pct_float), unsafe_allow_html=True)
 
     # 📅 今日判斷 & 市場狀態
     st.markdown("<h3 style='margin-top: 0.5rem; margin-bottom: 0.5rem;'>📅 今日判斷 & 市場狀態</h3>", unsafe_allow_html=True)
@@ -268,8 +271,8 @@ def render_live_monitoring_fragment():
 
             m_cols = st.columns(6)
             
-            with m_cols[0]: st.markdown(vis.render_mini_metric("LDR", ldr_display, ldr_color), unsafe_allow_html=True)
-            with m_cols[1]: st.markdown(vis.render_mini_metric("曝險倍數", e_display, e_color), unsafe_allow_html=True)
+            with m_cols[0]: st.empty().markdown(vis.render_mini_metric("LDR", ldr_display, ldr_color), unsafe_allow_html=True)
+            with m_cols[1]: st.empty().markdown(vis.render_mini_metric("曝險倍數", e_display, e_color), unsafe_allow_html=True)
             with m_cols[2]:
                 match = re.search(r"(.+?)\s*([\(（].+?[\)）])", risk_today)
                 if match:
@@ -278,16 +281,16 @@ def render_live_monitoring_fragment():
                     r_sub_clean = re.sub(r"[（）\(\)]", "", r_sub)
                     risk_display_html = f"{r_main}<div style='font-size: 1rem; line-height: 1.0; margin-top: 2px; white-space: normal; word-break: break-word;'>{r_sub_clean}</div>"
                 else: risk_display_html = risk_today
-                st.markdown(vis.render_mini_metric("風險等級", risk_display_html, risk_color), unsafe_allow_html=True)
+                st.empty().markdown(vis.render_mini_metric("風險等級", risk_display_html, risk_color), unsafe_allow_html=True)
                 
-            with m_cols[3]: st.markdown(vis.render_mini_metric("質押率", pledge_display, p_color), unsafe_allow_html=True)
+            with m_cols[3]: st.empty().markdown(vis.render_mini_metric("質押率", pledge_display, p_color), unsafe_allow_html=True)
             with m_cols[4]:
                 bias_display = "N/A"
                 if bias_val != "N/A":
                         bv = dm.safe_float(bias_val)
                         bias_display = f"{bv:.2f}%"
                 val_str = f"{market_pos}<div style='font-size: 1rem; line-height: 1.0; margin-top: 2px;'>{bias_display}</div>"
-                st.markdown(vis.render_mini_metric("盤勢", val_str), unsafe_allow_html=True)
+                st.empty().markdown(vis.render_mini_metric("盤勢", val_str), unsafe_allow_html=True)
             with m_cols[5]:
                 v_html = vix_status
                 match = re.search(r"(.+?)\s*([\(（].+?[\)）])", vix_status, re.DOTALL)
@@ -297,13 +300,13 @@ def render_live_monitoring_fragment():
                     v_sub_clean = re.sub(r"[（）\(\)]", "", v_sub).replace('\n', ' ')
                     v_html = f"{v_main}<div style='font-size: 1rem; line-height: 1.3; margin-top: 2px; white-space: normal; color: gray;'>{v_sub_clean}</div>"
                 vix_display_html = f"{vix_val}<div style='font-size: 1rem; line-height: 1.2; margin-top: 2px;'>{v_html}</div>"
-                st.markdown(vis.render_mini_metric("VIX", vix_display_html), unsafe_allow_html=True) 
+                st.empty().markdown(vis.render_mini_metric("VIX", vix_display_html), unsafe_allow_html=True) 
             
-            st.markdown(f"<div style='font-size:1.1em;color:gray;margin-top:2px;margin-bottom:2px'>📊 操作指令 (60日乖離: {bias_val})</div>", unsafe_allow_html=True)
+            st.empty().markdown(f"<div style='font-size:1.1em;color:gray;margin-top:2px;margin-bottom:2px'>📊 操作指令 (60日乖離: {bias_val})</div>", unsafe_allow_html=True)
             
             # --- 戰術修正：防止 Streamlit 將 $ 解析為 LaTeX 數學公式 ---
             cmd_display = cmd.replace('$', r'\$')
-            st.info(f"{cmd_display}")
+            st.empty().info(f"{cmd_display}")
             # -----------------------------------------------------------
             
             mindset_text = ""
@@ -321,7 +324,7 @@ def render_live_monitoring_fragment():
             if mindset_text:
                 # 同步為心態提醒卡片加裝防爆機制
                 mindset_display = mindset_text.replace('$', r'\$')
-                st.markdown(vis.render_mindset_card(mindset_display), unsafe_allow_html=True)
+                st.empty().markdown(vis.render_mindset_card(mindset_display), unsafe_allow_html=True)
                 
         except Exception as e: st.error(f"解析判斷數據時發生錯誤: {e}")
     else: st.warning('總覽數據載入失敗。請檢查 Secrets 設定或試算表網址。')
