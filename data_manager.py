@@ -71,9 +71,7 @@ def get_gsheet_connection():
         st.error(f"❌ 連線錯誤: {e}")
         return None, None
 
-# 戰術修改：將 TTL 從 300 秒降為 60 秒，允許每分鐘高頻更新
-@st.cache_data(ttl=60) 
-def load_data(sheet_name): 
+def _load_sheet_data(sheet_name):
     max_retries = 3
     for attempt in range(max_retries):
         with st.spinner(f"讀取: {sheet_name}..."):
@@ -106,6 +104,16 @@ def load_data(sheet_name):
             except Exception as e:
                 time.sleep(2)
     return pd.DataFrame()
+
+# 一般資料：維持較低頻快取
+@st.cache_data(ttl=60)
+def load_data(sheet_name):
+    return _load_sheet_data(sheet_name)
+
+# 高頻監控資料：用於 fragment 局部刷新
+@st.cache_data(ttl=20)
+def load_live_data(sheet_name):
+    return _load_sheet_data(sheet_name)
 
 @st.cache_data(ttl=60) 
 def fetch_current_prices(tickers):
