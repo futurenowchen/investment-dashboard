@@ -391,174 +391,60 @@ def plot_nav_trend(df_F):
 def plot_wealth_trajectory(df_F=None):
     """繪製 NEGENTROPIC ATARAXIA 財富路徑導航圖"""
 
+    def frac_year_to_quarter_label(x):
+        year = int(np.floor(x))
+        frac = x - year
+        quarter = int(np.floor(frac * 4)) + 1
+        quarter = min(max(quarter, 1), 4)
+        return f"{year} Q{quarter}"
+
     anchor_offset = 113 / 365.25
     years = [2026, 2027, 2028, 2029, 2030, 2033, 2035, 2036, 2038, 2039, 2040]
     theoretical_x = [2025.67, 2026.0] + [y + anchor_offset for y in years]
 
-    # 🛡️ 大盤防線 8%
     nav_8 = [1.47, 2.058] + [2.9, 3.3, 4.6, 5.1, 6.4, 8.6, 10.3, 11.3, 13.4, 14.7, 16.0]
-    text_8 = ['', ''] + ['2.9M', '', '', '', '', '', '10.3M', '', '', '', '16.0M']
-
-    # 🔵 保守路徑 15%
     nav_15 = [1.47, 2.058] + [2.9, 3.9, 4.8, 5.7, 6.6, 10.2, 13.7, 15.7, 19.0, 21.7, 24.2]
-    text_15 = ['', ''] + ['', '', '', '', '', '10.2M', '', '', '19.0M', '', '24.2M']
-
-    # 🟢 基準目標 17.5%
     nav_175 = [1.47, 2.058] + [2.9, 4.6, 5.5, 7.0, 8.1, 13.0, 17.5, 20.0, 30.0, 33.8, 36.2]
-    text_175 = ['', ''] + ['', '', '', '', '8.1M', '', '17.5M', '', '30.0M', '', '36.2M']
-
-    # 🔴 野心上限 20%
     nav_20 = [1.47, 2.058] + [2.9, 5.1, 6.8, 8.6, 10.5, 18.6, 27.1, 37.0, 57.0, 63.6, 68.7]
-    text_20 = ['', ''] + ['', '', '', '', '10.5M', '', '27.1M', '', '57.0M', '', '68.7M']
 
     modern_font = "Arial, 'Heiti TC', 'Microsoft JhengHei', sans-serif"
-
     fig = go.Figure()
 
-    # ==========================================
-    # 圖層 0：護城河填色，只做視覺，不參與 hover
-    # ==========================================
-    fig.add_trace(go.Scatter(
-        x=theoretical_x,
-        y=nav_8,
-        mode='lines',
-        line=dict(width=0),
-        line_shape='spline',
-        hoverinfo='skip',
-        showlegend=False
-    ))
+    # 淡化戰略區域底色
+    phase_blocks = [
+        (2026.0, 2027.5, '#DBEAFE', 'Phase 1｜窒息期 2026–2027'),
+        (2027.5, 2028.5, '#DCFCE7', 'Phase 2｜注資期 2027.5–2028.5'),
+        (2028.5, 2030.0, '#FEF3C7', 'Phase 3｜加速期 2028.5–2030'),
+        (2030.0, 2034.0, '#EDE9FE', 'Phase 4｜隱形加速 2030–2034'),
+        (2034.0, 2040.0, '#FEE2E2', 'Phase 5｜自由區域 2034–2040'),
+    ]
+    for x0, x1, c, t in phase_blocks:
+        fig.add_shape(type='rect', x0=x0, x1=x1, y0=0, y1=1, yref='paper', line_width=0,
+                      fillcolor=c, opacity=0.15, layer='below')
+        fig.add_annotation(x=(x0 + x1) / 2, y=0.965, yref='paper', text=t, showarrow=False,
+                           font=dict(size=12, color='#64748B', family=modern_font))
 
-    fig.add_trace(go.Scatter(
-        x=theoretical_x,
-        y=nav_15,
-        fill='tonexty',
-        fillcolor='rgba(148, 163, 184, 0.15)',
-        mode='lines',
-        line=dict(width=0),
-        line_shape='spline',
-        name='大盤超額護城河 (8%-15%)',
-        hoverinfo='skip',
-        showlegend=True
-    ))
+    # 五條核心路徑
+    fig.add_trace(go.Scatter(x=theoretical_x, y=nav_20, name='🔴 野心上限', mode='lines',
+                             line=dict(color='#DC2626', width=2.6), line_shape='spline', hoverinfo='skip'))
+    fig.add_trace(go.Scatter(x=theoretical_x, y=nav_175, name='🟢 基準目標', mode='lines',
+                             line=dict(color='#166534', width=3.0), line_shape='spline', hoverinfo='skip'))
+    fig.add_trace(go.Scatter(x=theoretical_x, y=nav_15, name='🔵 保守路徑', mode='lines',
+                             line=dict(color='#1D4ED8', width=2.4), line_shape='spline', hoverinfo='skip'))
+    fig.add_trace(go.Scatter(x=theoretical_x, y=nav_8, name='🛡️ 大盤防線', mode='lines',
+                             line=dict(color='#94A3B8', width=2.0, dash='dash'), line_shape='spline', hoverinfo='skip'))
 
-    fig.add_trace(go.Scatter(
-        x=theoretical_x,
-        y=nav_15,
-        mode='lines',
-        line=dict(width=0),
-        line_shape='spline',
-        hoverinfo='skip',
-        showlegend=False
-    ))
-
-    fig.add_trace(go.Scatter(
-        x=theoretical_x,
-        y=nav_20,
-        fill='tonexty',
-        fillcolor='rgba(44, 160, 44, 0.10)',
-        mode='lines',
-        line=dict(width=0),
-        line_shape='spline',
-        name='槓桿潛力區間 (15%-20%)',
-        hoverinfo='skip',
-        showlegend=True
-    ))
-
-    # ==========================================
-    # 圖層 1：理論路徑線，只顯示圖形，不參與 hover
-    # ==========================================
-    fig.add_trace(go.Scatter(
-        x=theoretical_x,
-        y=nav_8,
-        name='🛡️ 大盤防線',
-        mode='lines+text',
-        text=text_8,
-        textposition="bottom right",
-        line=dict(color='#94A3B8', width=1.8, dash='dot'),
-        line_shape='spline',
-        textfont=dict(color='#94A3B8', size=9, family=modern_font),
-        hoverinfo='skip'
-    ))
-
-    fig.add_trace(go.Scatter(
-        x=theoretical_x,
-        y=nav_20,
-        name='🔴 野心上限',
-        mode='lines+text',
-        text=text_20,
-        textposition="top left",
-        line=dict(color='#D62728', width=2.2),
-        line_shape='spline',
-        textfont=dict(color='#D62728', size=10, family=modern_font),
-        hoverinfo='skip'
-    ))
-
-    fig.add_trace(go.Scatter(
-        x=theoretical_x,
-        y=nav_175,
-        name='🟢 基準目標',
-        mode='lines+text',
-        text=text_175,
-        textposition="top center",
-        line=dict(color='#2CA02C', width=2.4),
-        line_shape='spline',
-        textfont=dict(color='#2CA02C', size=11, family=modern_font),
-        hoverinfo='skip'
-    ))
-
-    fig.add_trace(go.Scatter(
-        x=theoretical_x,
-        y=nav_15,
-        name='🔵 保守路徑',
-        mode='lines+text',
-        text=text_15,
-        textposition="bottom right",
-        line=dict(color='#1F77B4', width=2.1),
-        line_shape='spline',
-        textfont=dict(color='#1F77B4', size=10, family=modern_font),
-        hoverinfo='skip'
-    ))
-
-    # ==========================================
-    # 起點標記：顯示圖形，但不參與 hover
-    # ==========================================
-    fig.add_trace(go.Scatter(
-        x=[2026.0],
-        y=[2.058],
-        name='2026 初始出發點',
-        mode='markers+text',
-        text=["2.06M"],
-        textposition="top left",
-        marker=dict(size=8, color='#9333EA'),
-        textfont=dict(color='#9333EA', size=10, family=modern_font),
-        hoverinfo='skip'
-    ))
-
-    fig.add_trace(go.Scatter(
-        x=[2026 + anchor_offset],
-        y=[2.887],
-        name='穩態基準點',
-        mode='markers',
-        marker=dict(size=10, color='#7C3AED', symbol='diamond'),
-        hoverinfo='skip'
-    ))
-
-    # ==========================================
-    # 實際戰線資料準備
-    # ==========================================
+    # 實際戰線
     has_real = False
     df_real = pd.DataFrame()
-
     if df_F is not None and not df_F.empty:
         df_real = df_F.copy()
         date_col = next((c for c in df_real.columns if '日期' in c), None)
-
         if date_col and '實質NAV' in df_real.columns:
             df_real['dt'] = pd.to_datetime(df_real[date_col], errors='coerce')
             df_real['nav_raw'] = df_real['實質NAV'].apply(dm.safe_float)
             df_real = df_real.dropna(subset=['dt'])
             df_real = df_real[df_real['nav_raw'] > 0]
-
             if not df_real.empty:
                 has_real = True
                 df_real = df_real.sort_values('dt')
@@ -566,54 +452,52 @@ def plot_wealth_trajectory(df_F=None):
                 df_real['nav_m'] = df_real['nav_raw'] / 1000000.0
                 df_real['date_str'] = df_real['dt'].dt.strftime('%Y-%m-%d')
 
-                # 實際戰線視覺線，不參與 hover
-                fig.add_trace(go.Scatter(
-                    x=df_real['frac_year'],
-                    y=df_real['nav_m'],
-                    name='⚡ 實際戰線 (Real NAV)',
-                    mode='lines',
-                    line=dict(color='#F59E0B', width=4.6),
-                    line_shape='linear',
-                    hoverinfo='skip'
-                ))
+                fig.add_trace(go.Scatter(x=df_real['frac_year'], y=df_real['nav_m'],
+                                         name='⚡ 實際戰線', mode='lines',
+                                         line=dict(color='#F59E0B', width=4.8), hoverinfo='skip'))
 
-                # 最新定位點，不參與 hover
                 last_x = df_real['frac_year'].iloc[-1]
                 last_y = df_real['nav_m'].iloc[-1]
+                fig.add_trace(go.Scatter(x=[last_x], y=[last_y], name='最新定位點', mode='markers+text',
+                                         text=[f'⚡ {last_y:.2f}M'], textposition='top left',
+                                         marker=dict(size=11, color='#F59E0B', symbol='circle',
+                                                     line=dict(color='white', width=1.2)),
+                                         textfont=dict(size=12, color='#B45309', family=modern_font),
+                                         hoverinfo='skip', showlegend=False))
 
-                fig.add_trace(go.Scatter(
-                    x=[last_x],
-                    y=[last_y],
-                    name='最新定位點',
-                    mode='markers+text',
-                    text=[f"⚡ {last_y:.2f}M"],
-                    textposition="top left",
-                    marker=dict(
-                        size=12,
-                        symbol='star',
-                        color='#F59E0B',
-                        line=dict(color='white', width=1.2)
-                    ),
-                    textfont=dict(
-                        color='#F59E0B',
-                        size=11,
-                        family=modern_font
-                    ),
-                    hoverinfo='skip',
-                    showlegend=False
-                ))
+    # 事件線統一
+    events = [
+        (2027 + anchor_offset, '2027/05 車貸結束'),
+        (2027.75, '2027 Q4 注資'),
+        (2029.75, '2029 Q4 注資'),
+        (2030.0, '2030 千萬檢查點'),
+    ]
+    for x, label in events:
+        fig.add_vline(x=x, line_width=1, line_dash='dot', line_color='rgba(100,116,139,0.50)', layer='below')
+        fig.add_annotation(x=x, y=0.93, yref='paper', text=label, showarrow=False,
+                           font=dict(size=12, color='#475569', family=modern_font),
+                           bgcolor='rgba(255,255,255,0.75)', bordercolor='rgba(148,163,184,0.35)', borderwidth=1)
 
-    # ==========================================
-    # 全圖 Hover 雷達軌：唯一參與 hover 的 trace
-    # ==========================================
+    # 里程碑改為水平參考線
+    for lvl, label in [(3, '3M｜穩態防守線'), (5, '5M｜臨界門檻'), (10, '10M｜千萬射程'), (35, '35M｜自由區')]:
+        fig.add_hline(y=lvl, line_width=1, line_dash='dash', line_color='rgba(148,163,184,0.45)', layer='below')
+        fig.add_annotation(x=2040.35, y=lvl, text=label, xanchor='left', showarrow=False,
+                           font=dict(size=12, color='#64748B', family=modern_font),
+                           bgcolor='rgba(255,255,255,0.68)')
+
+    # 稀疏理論關鍵節點標註
+    key_years = {2026, 2027, 2030, 2035, 2040}
+    for x, y in zip(theoretical_x, nav_175):
+        if int(np.floor(x)) in key_years:
+            fig.add_annotation(x=x, y=y, text=frac_year_to_quarter_label(x), showarrow=False,
+                               yshift=16, font=dict(size=12, color='#166534', family=modern_font))
+
+    # hover 雷達
     hover_x = list(theoretical_x)
-
     if has_real:
         hover_x += df_real['frac_year'].tolist()
-
-    hover_x = sorted(set([round(float(x), 6) for x in hover_x]))
+    hover_x = sorted(set(round(float(x), 6) for x in hover_x))
     hover_df = pd.DataFrame({'frac_year': hover_x})
-
     hover_df['exp_20'] = np.interp(hover_df['frac_year'], theoretical_x, nav_20)
     hover_df['exp_175'] = np.interp(hover_df['frac_year'], theoretical_x, nav_175)
     hover_df['exp_15'] = np.interp(hover_df['frac_year'], theoretical_x, nav_15)
@@ -622,51 +506,20 @@ def plot_wealth_trajectory(df_F=None):
     if has_real:
         real_x = df_real['frac_year'].values
         real_y = df_real['nav_m'].values
-
-        min_real_x = real_x.min()
-        max_real_x = real_x.max()
-
-        hover_df['real_nav'] = np.where(
-            (hover_df['frac_year'] >= min_real_x) & (hover_df['frac_year'] <= max_real_x),
-            np.interp(hover_df['frac_year'], real_x, real_y),
-            np.nan
-        )
-
-        real_date_map = dict(zip(
-            df_real['frac_year'].round(6),
-            df_real['date_str']
-        ))
-
+        hover_df['real_nav'] = np.where((hover_df['frac_year'] >= real_x.min()) & (hover_df['frac_year'] <= real_x.max()),
+                                        np.interp(hover_df['frac_year'], real_x, real_y), np.nan)
+        real_date_map = dict(zip(df_real['frac_year'].round(6), df_real['date_str']))
         hover_df['date_label'] = hover_df['frac_year'].round(6).map(real_date_map)
-        hover_df['date_label'] = hover_df['date_label'].fillna(
-            hover_df['frac_year'].apply(lambda x: f"{x:.2f}")
-        )
+        hover_df['date_label'] = hover_df['date_label'].fillna(hover_df['frac_year'].apply(frac_year_to_quarter_label))
     else:
         hover_df['real_nav'] = np.nan
-        hover_df['date_label'] = hover_df['frac_year'].apply(lambda x: f"{x:.2f}")
+        hover_df['date_label'] = hover_df['frac_year'].apply(frac_year_to_quarter_label)
 
-    hover_df['real_text'] = hover_df['real_nav'].apply(
-        lambda v: f"{v:.2f}M" if pd.notna(v) else "尚無實際資料"
-    )
-
-    hover_customdata = hover_df[
-        ['date_label', 'real_text', 'exp_20', 'exp_175', 'exp_15', 'exp_8']
-    ].values
-
-    # 透明雷達軌：
-    # 使用不可見 markers 承接 hover，避免半透明粗線造成灰黑色螢光殘影。
+    hover_df['real_text'] = hover_df['real_nav'].apply(lambda v: f'{v:.2f}M' if pd.notna(v) else '尚無實際資料')
+    hover_customdata = hover_df[['date_label', 'real_text', 'exp_20', 'exp_175', 'exp_15', 'exp_8']].values
     fig.add_trace(go.Scatter(
-        x=hover_df['frac_year'],
-        y=hover_df['exp_175'],
-        name='📌 戰略座標雷達',
-        mode='markers',
-        marker=dict(
-            size=20,
-            color='rgba(0,0,0,0)',
-            line=dict(width=0)
-        ),
-        customdata=hover_customdata,
-        showlegend=False,
+        x=hover_df['frac_year'], y=hover_df['exp_175'], mode='markers', showlegend=False,
+        marker=dict(size=20, color='rgba(0,0,0,0)', line=dict(width=0)), customdata=hover_customdata,
         hovertemplate=(
             '<b>📌 戰略座標｜%{customdata[0]}</b><br><br>'
             '⚡ 實際戰線：<b>%{customdata[1]}</b><br>'
@@ -678,337 +531,43 @@ def plot_wealth_trajectory(df_F=None):
         )
     ))
 
-    # ==========================================
-    # Phase 背景區塊
-    # ==========================================
-    y_high = 0.94
-    y_low = 0.89
+    # 半年刻度標籤
+    tickvals = np.arange(2025.5, 2040.6, 0.5)
+    ticktext = [frac_year_to_quarter_label(x) for x in tickvals]
 
-    fig.add_shape(
-        type="rect",
-        x0=2026,
-        y0=0,
-        x1=2027.5,
-        y1=1,
-        yref="paper",
-        fillcolor="#E5F3FF",
-        line_width=0,
-        layer="below",
-        opacity=0.16
-    )
-
-    fig.add_annotation(
-        x=2026.75,
-        y=y_high,
-        yref="paper",
-        text="Phase 1｜2026 Q1–2027 Q2",
-        showarrow=False,
-        font=dict(size=9, color="#64748B", family=modern_font)
-    )
-
-    fig.add_shape(
-        type="rect",
-        x0=2027.5,
-        y0=0,
-        x1=2028.5,
-        y1=1,
-        yref="paper",
-        fillcolor="#E5F9E5",
-        line_width=0,
-        layer="below",
-        opacity=0.14
-    )
-
-    fig.add_annotation(
-        x=2028.0,
-        y=y_low,
-        yref="paper",
-        text="Phase 2｜2027 Q3–Q4",
-        showarrow=False,
-        font=dict(size=9, color="#64748B", family=modern_font)
-    )
-
-    fig.add_shape(
-        type="rect",
-        x0=2028.5,
-        y0=0,
-        x1=2030,
-        y1=1,
-        yref="paper",
-        fillcolor="#FFFBE6",
-        line_width=0,
-        layer="below",
-        opacity=0.14
-    )
-
-    fig.add_annotation(
-        x=2029.25,
-        y=y_high,
-        yref="paper",
-        text="Phase 3｜2028–2029",
-        showarrow=False,
-        font=dict(size=9, color="#64748B", family=modern_font)
-    )
-
-    fig.add_shape(
-        type="rect",
-        x0=2030,
-        y0=0,
-        x1=2034,
-        y1=1,
-        yref="paper",
-        fillcolor="#F2E6FF",
-        line_width=0,
-        layer="below",
-        opacity=0.14
-    )
-
-    fig.add_annotation(
-        x=2032.0,
-        y=y_low,
-        yref="paper",
-        text="Phase 4｜2030–2033",
-        showarrow=False,
-        font=dict(size=9, color="#64748B", family=modern_font)
-    )
-
-    fig.add_shape(
-        type="rect",
-        x0=2034,
-        y0=0,
-        x1=2040,
-        y1=1,
-        yref="paper",
-        fillcolor="#FFE6E6",
-        line_width=0,
-        layer="below",
-        opacity=0.14
-    )
-
-    fig.add_annotation(
-        x=2037.0,
-        y=y_high,
-        yref="paper",
-        text="Phase 5｜2034–2040",
-        showarrow=False,
-        font=dict(size=9, color="#64748B", family=modern_font)
-    )
-
-    # ==========================================
-    # 關鍵事件標註
-    # ==========================================
-    events = [
-        dict(
-            x=2027.75,
-            y_data=5.1,
-            ay=56,
-            text="2027 Q4 注資",
-            color="#475569"
-        ),
-        dict(
-            x=2029.75,
-            y_data=8.6,
-            ay=56,
-            text="2029 Q4 注資",
-            color="#475569"
-        ),
-        dict(
-            x=2033 + anchor_offset,
-            y_data=18.6,
-            ay=56,
-            text="2033 加速期",
-            color="#475569"
-        )
-    ]
-
-    for ev in events:
-        fig.add_vline(
-            x=ev['x'],
-            line_width=1,
-            line_dash="dot",
-            line_color="rgba(71,85,105,0.45)",
-            layer="below"
-        )
-        fig.add_annotation(
-            x=ev['x'],
-            y=ev['y_data'],
-            yshift=ev['ay'],
-            text=ev['text'],
-            showarrow=False,
-            opacity=0.95,
-            font=dict(color=ev['color'], size=9, family=modern_font),
-            bgcolor="rgba(255,255,255,0.75)",
-            bordercolor="rgba(148,163,184,0.55)",
-            borderwidth=1,
-            borderpad=2
-        )
-
-    fig.add_annotation(
-        x=2027 + anchor_offset,
-        y=3.9,
-        text="2027/05 車貸結束",
-        yshift=42,
-        showarrow=False,
-        font=dict(color="#475569", size=9, family=modern_font),
-        bgcolor="rgba(255,255,255,0.75)",
-        bordercolor="rgba(148,163,184,0.55)",
-        borderwidth=1,
-        borderpad=2
-    )
-
-    fig.add_annotation(
-        x=2028 + anchor_offset,
-        y=4.8,
-        text="2027/07 分期結束",
-        yshift=42,
-        showarrow=False,
-        font=dict(color="#475569", size=9, family=modern_font),
-        bgcolor="rgba(255,255,255,0.75)",
-        bordercolor="rgba(148,163,184,0.55)",
-        borderwidth=1,
-        borderpad=2
-    )
-
-    # ==========================================
-    # 底部里程碑
-    # ==========================================
-    milestone_levels = [(3, "3M"), (5, "5M"), (10, "10M"), (35, "35M")]
-    for lvl, label in milestone_levels:
-        fig.add_hline(
-            y=lvl,
-            line_width=1,
-            line_dash="dot",
-            line_color="rgba(148,163,184,0.45)",
-            layer="below"
-        )
-        fig.add_annotation(
-            x=2040.35,
-            y=lvl,
-            text=label,
-            showarrow=False,
-            xanchor="left",
-            font=dict(size=9, color="#64748B", family=modern_font),
-            bgcolor="rgba(255,255,255,0.65)"
-        )
-
-    # ==========================================
-    # 全局 layout
-    # ==========================================
     fig.update_layout(
         title=dict(
-            text=(
-                "<b>NEGENTROPIC ATARAXIA 財富路徑航線圖 (2025–2040)</b>"
-                "<br>"
-                "<span style='font-size:12px; color:#64748B;'>"
-                "起點：2026/01 2.06M → 2026/04 2.89M｜注資：2027 Q4、2029 Q4"
-                "</span>"
-            ),
-            font=dict(size=16, family=modern_font),
-            x=0.5,
-            xanchor='center',
-            y=0.98,
-            yanchor='top'
+            text=("<b>NEGENTROPIC ATARAXIA 個人資產戰略航線圖</b><br>"
+                  "<span style='font-size:14px; color:#64748B;'>"
+                  "主視角：2026–2030｜路徑：300 → 500 → 1000 → 自由區"
+                  "</span>"),
+            font=dict(size=20, family=modern_font), x=0.5, xanchor='center', y=0.98, yanchor='top'
         ),
         template='plotly_white',
-        hovermode="x unified",
-        margin=dict(t=140, b=70, l=50, r=80),
-        font=dict(family=modern_font, color='#334155'),
-        legend=dict(
-            orientation="h",
-            yanchor="bottom",
-            y=1.02,
-            xanchor="center",
-            x=0.5,
-            bgcolor="rgba(255,255,255,0.9)",
-            bordercolor="#E2E8F0",
-            borderwidth=1
-        ),
-        hoverlabel=dict(
-            bgcolor="#FFFFFF",
-            bordercolor="#CBD5E1",
-            font_size=13,
-            font_family=modern_font,
-            font_color="#334155",
-            align="left"
-        ),
-        updatemenus=[
-            dict(
-                type="dropdown",
-                direction="down",
-                x=0.0,
-                y=1.15,
-                xanchor="left",
-                yanchor="bottom",
-                showactive=True,
-                active=0,
-                bgcolor="#FFFFFF",
-                bordercolor="#CBD5E1",
-                font=dict(family=modern_font, color="#334155", size=13),
-                buttons=list([
-                    dict(
-                        label="全景 2025–2040",
-                        method="relayout",
-                        args=[{"xaxis.range": [2024.5, 2040.5], "yaxis.range": [0, 75]}]
-                    ),
-                    dict(
-                        label="2026 建倉",
-                        method="relayout",
-                        args=[{"xaxis.range": [2025.5, 2027.2], "yaxis.range": [0, 6]}]
-                    ),
-                    dict(
-                        label="2027 注資",
-                        method="relayout",
-                        args=[{"xaxis.range": [2026.5, 2028.2], "yaxis.range": [2, 8]}]
-                    ),
-                    dict(
-                        label="2028 加速",
-                        method="relayout",
-                        args=[{"xaxis.range": [2027.5, 2029.2], "yaxis.range": [3, 10]}]
-                    ),
-                    dict(
-                        label="2029 二次注資",
-                        method="relayout",
-                        args=[{"xaxis.range": [2028.5, 2030.2], "yaxis.range": [4.5, 12]}]
-                    ),
-                    dict(
-                        label="2030 千萬門檻",
-                        method="relayout",
-                        args=[{"xaxis.range": [2029.5, 2031.5], "yaxis.range": [6, 15]}]
-                    ),
-                    dict(
-                        label="2031–2033 規模化",
-                        method="relayout",
-                        args=[{"xaxis.range": [2030.5, 2034.0], "yaxis.range": [8, 25]}]
-                    ),
-                ])
-            )
-        ],
-        plot_bgcolor='#FFFFFF',
-        paper_bgcolor='#FFFFFF',
-        xaxis_title="",
-        yaxis_title="總資產 NAV (百萬 TWD)",
-        height=850
+        hovermode='x unified',
+        margin=dict(t=170, b=125, l=70, r=70),
+        font=dict(family=modern_font, color='#334155', size=13),
+        legend=dict(orientation='h', yanchor='bottom', y=1.03, xanchor='center', x=0.5,
+                    font=dict(size=15), bgcolor='rgba(255,255,255,0.9)', bordercolor='#E2E8F0', borderwidth=1),
+        hoverlabel=dict(bgcolor='#FFFFFF', bordercolor='#CBD5E1', font_size=15, font_family=modern_font,
+                        font_color='#334155', align='left'),
+        updatemenus=[dict(type='dropdown', direction='down', x=0.0, y=1.13, xanchor='left', yanchor='bottom',
+                          showactive=True, active=0, bgcolor='#FFFFFF', bordercolor='#CBD5E1',
+                          font=dict(family=modern_font, color='#334155', size=14),
+                          buttons=[
+                              dict(label='🎯 主戰區 2026–2030', method='relayout', args=[{'xaxis.range':[2025.75,2030.5],'yaxis.range':[1,12]}]),
+                              dict(label='🛡️ 窒息期 2026–2027', method='relayout', args=[{'xaxis.range':[2025.75,2027.6],'yaxis.range':[1,6]}]),
+                              dict(label='🚀 加速期 2028–2030', method='relayout', args=[{'xaxis.range':[2027.5,2030.5],'yaxis.range':[3,15]}]),
+                              dict(label='🏔️ 自由區 2030–2040', method='relayout', args=[{'xaxis.range':[2030,2040.5],'yaxis.range':[8,75]}]),
+                              dict(label='🗺️ 全景 2025–2040', method='relayout', args=[{'xaxis.range':[2024.5,2040.5],'yaxis.range':[0,75]}]),
+                          ])],
+        plot_bgcolor='#FFFFFF', paper_bgcolor='#FFFFFF', xaxis_title='', yaxis_title='總資產 NAV (百萬 TWD)', height=980
     )
 
-    fig.update_xaxes(
-        showgrid=True,
-        gridcolor='#F1F5F9',
-        tickvals=list(range(2025, 2041)),
-        showline=True,
-        linecolor='#CBD5E1',
-        range=[2024.5, 2040.5],
-        hoverformat=".2f"
-    )
-
-    fig.update_yaxes(
-        showgrid=True,
-        gridcolor='#F1F5F9',
-        showline=True,
-        linecolor='#CBD5E1',
-        zeroline=False,
-        range=[0, 75],
-        dtick=10
-    )
+    fig.update_xaxes(showgrid=True, gridcolor='#F1F5F9', tickvals=tickvals, ticktext=ticktext,
+                     tickfont=dict(size=12), showline=True, linecolor='#CBD5E1', range=[2025.75, 2030.5])
+    fig.update_yaxes(showgrid=True, gridcolor='#F1F5F9', showline=True, linecolor='#CBD5E1', zeroline=False,
+                     range=[1, 12], dtick=1, tickfont=dict(size=13), title_font=dict(size=14))
 
     return fig
 
