@@ -529,8 +529,14 @@ def plot_wealth_trajectory(df_F=None):
     hover_df['real_text'] = hover_df['real_nav'].apply(lambda v: f'{v:.2f}M' if pd.notna(v) else '—')
     hover_customdata = hover_df[['date_label', 'real_text', 'exp_20', 'exp_175', 'exp_15', 'exp_8']].values
     fig.add_trace(go.Scatter(
-        x=hover_df['frac_year'], y=hover_df['exp_175'], mode='markers', showlegend=False,
-        marker=dict(size=20, color='rgba(0,0,0,0)', line=dict(width=0)), customdata=hover_customdata,
+        x=hover_df['frac_year'],
+        y=hover_df['exp_175'],
+        name='📌 戰略座標雷達',
+        mode='lines+markers',
+        line=dict(color='rgba(0,0,0,0.01)', width=22),
+        marker=dict(size=20, color='rgba(0,0,0,0.01)', line=dict(width=0)),
+        customdata=hover_customdata,
+        showlegend=False,
         hovertemplate=(
             '<b>📌 戰略座標｜%{customdata[0]}</b><br><br>'
             '⚡ 實際戰線：<b>%{customdata[1]}</b><br>'
