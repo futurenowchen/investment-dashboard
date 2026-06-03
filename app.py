@@ -113,7 +113,11 @@ def render_live_monitoring_fragment():
     stock_nc_color = "#212529"
     stock_vol_color = "#212529"
 
+    # 達成進度預設值
+    # 注意：pct_float 最終會優先由「表C_總覽」的短期財務目標 / 差距反推，
+    # 避免即時監控面板的舊百分比或公式封頂造成錯誤顯示。
     pct_float = 0.0
+
     lev_str = "0%"
     e_val = "0%"
 
@@ -121,38 +125,48 @@ def render_live_monitoring_fragment():
         tot_asset_str = dm.fmt_int(df_Monitor['總資產'].iloc[0]) if '總資產' in df_Monitor.columns else "0"
         cash_str = dm.fmt_int(df_Monitor['現金'].iloc[0]) if '現金' in df_Monitor.columns else "0"
         stock_value_str = dm.fmt_int(df_Monitor['股票市值'].iloc[0]) if '股票市值' in df_Monitor.columns else "0"
-        
+
         # NAV淨變動
         nnc_val = dm.safe_float(df_Monitor['NAV淨變動'].iloc[0]) if 'NAV淨變動' in df_Monitor.columns else 0
         nav_nc_str = f"+{dm.fmt_int(nnc_val)}" if nnc_val > 0 else dm.fmt_int(nnc_val)
-        if nnc_val > 0: nav_nc_color = "#FF0000" 
-        elif nnc_val < 0: nav_nc_color = "#009900"
-        
+        if nnc_val > 0:
+            nav_nc_color = "#FF0000"
+        elif nnc_val < 0:
+            nav_nc_color = "#009900"
+
         # NAV波動率
         nv_raw = df_Monitor['NAV波動率'].iloc[0] if 'NAV波動率' in df_Monitor.columns else '0%'
         nv_val = dm.safe_float(nv_raw)
         nav_vol_str = nv_raw if isinstance(nv_raw, str) and '%' in nv_raw else dm.fmt_pct(nv_val)
-        if nv_val > 0: nav_vol_color = "#FF0000"
-        elif nv_val < 0: nav_vol_color = "#009900"
+        if nv_val > 0:
+            nav_vol_color = "#FF0000"
+        elif nv_val < 0:
+            nav_vol_color = "#009900"
 
         # 股市淨變動
         snc_val = dm.safe_float(df_Monitor['股市淨變動'].iloc[0]) if '股市淨變動' in df_Monitor.columns else 0
         stock_nc_str = f"+{dm.fmt_int(snc_val)}" if snc_val > 0 else dm.fmt_int(snc_val)
-        if snc_val > 0: stock_nc_color = "#FF0000" 
-        elif snc_val < 0: stock_nc_color = "#009900"
+        if snc_val > 0:
+            stock_nc_color = "#FF0000"
+        elif snc_val < 0:
+            stock_nc_color = "#009900"
 
         # 股市波動率
         sv_raw = df_Monitor['股市波動率'].iloc[0] if '股市波動率' in df_Monitor.columns else '0%'
         sv_val = dm.safe_float(sv_raw)
         stock_vol_str = sv_raw if isinstance(sv_raw, str) and '%' in sv_raw else dm.fmt_pct(sv_val)
-        if sv_val > 0: stock_vol_color = "#FF0000"
-        elif sv_val < 0: stock_vol_color = "#009900"
-        
-        # 達成進度
-        p_val = df_Monitor['達成進度'].iloc[0] if '達成進度' in df_Monitor.columns else '0%'
-        pct_float = dm.safe_float(p_val)
-        pct_float = pct_float / 100.0 if pct_float > 1 else pct_float
-        
+        if sv_val > 0:
+            stock_vol_color = "#FF0000"
+        elif sv_val < 0:
+            stock_vol_color = "#009900"
+
+        # 達成進度 fallback：
+        # 這裡只作為表C讀不到時的備援，不作為主要來源。
+        if '達成進度' in df_Monitor.columns:
+            p_val = df_Monitor['達成進度'].iloc[0]
+            pct_float = dm.safe_float(p_val)
+            pct_float = pct_float / 100.0 if pct_float > 1 else pct_float
+
         # 曝險指標 E
         e_val = df_Monitor['曝險指標 E'].iloc[0] if '曝險指標 E' in df_Monitor.columns else '0%'
         lev_str = e_val if isinstance(e_val, str) and '%' in e_val else dm.fmt_pct(e_val)
@@ -170,19 +184,36 @@ def render_live_monitoring_fragment():
         target = dm.safe_float(df_c.loc['短期財務目標', col_val]) if '短期財務目標' in df_c.index else 0
         gap = dm.safe_float(df_c.loc['短期財務目標差距', col_val]) if '短期財務目標差距' in df_c.index else 0
 
+        # 達成進度主來源：
+        # 直接用「短期財務目標」與「短期財務目標差距」反推，
+        # 避免即時監控面板的舊百分比或公式封頂造成顯示 100%。
+        if target > 0:
+            current_for_goal = target - gap
+            pct_float = current_for_goal / target
+        else:
+            pct_float = 0.0
+
     # 第一排卡片：總資產、現金、NAV淨變動、NAV波動率
     row1_col1, row1_col2, row1_col3, row1_col4 = st.columns(4)
-    with row1_col1: st.markdown(vis.render_simple_card('總資產', tot_asset_str), unsafe_allow_html=True)
-    with row1_col2: st.markdown(vis.render_simple_card('現金', cash_str), unsafe_allow_html=True)
-    with row1_col3: st.markdown(vis.render_simple_card('NAV淨變動', nav_nc_str, nav_nc_color), unsafe_allow_html=True)
-    with row1_col4: st.markdown(vis.render_simple_card('NAV波動率', nav_vol_str, nav_vol_color), unsafe_allow_html=True)
+    with row1_col1:
+        st.markdown(vis.render_simple_card('總資產', tot_asset_str), unsafe_allow_html=True)
+    with row1_col2:
+        st.markdown(vis.render_simple_card('現金', cash_str), unsafe_allow_html=True)
+    with row1_col3:
+        st.markdown(vis.render_simple_card('NAV淨變動', nav_nc_str, nav_nc_color), unsafe_allow_html=True)
+    with row1_col4:
+        st.markdown(vis.render_simple_card('NAV波動率', nav_vol_str, nav_vol_color), unsafe_allow_html=True)
 
     # 第二排卡片：股票市值、股市淨變動、股市波動率、達成進度
     row2_col1, row2_col2, row2_col3, row2_col4 = st.columns(4)
-    with row2_col1: st.markdown(vis.render_simple_card('股票市值', stock_value_str), unsafe_allow_html=True)
-    with row2_col2: st.markdown(vis.render_simple_card('股市淨變動', stock_nc_str, stock_nc_color), unsafe_allow_html=True)
-    with row2_col3: st.markdown(vis.render_simple_card('股市波動率', stock_vol_str, stock_vol_color), unsafe_allow_html=True)
-    with row2_col4: st.markdown(vis.render_goal_progress_card(target, gap, pct_float), unsafe_allow_html=True)
+    with row2_col1:
+        st.markdown(vis.render_simple_card('股票市值', stock_value_str), unsafe_allow_html=True)
+    with row2_col2:
+        st.markdown(vis.render_simple_card('股市淨變動', stock_nc_str, stock_nc_color), unsafe_allow_html=True)
+    with row2_col3:
+        st.markdown(vis.render_simple_card('股市波動率', stock_vol_str, stock_vol_color), unsafe_allow_html=True)
+    with row2_col4:
+        st.markdown(vis.render_goal_progress_card(target, gap, pct_float), unsafe_allow_html=True)
 
     # 📅 今日判斷 & 市場狀態
     st.markdown("<h3 style='margin-top: 0.5rem; margin-bottom: 0.5rem;'>📅 今日判斷 & 市場狀態</h3>", unsafe_allow_html=True)
@@ -204,55 +235,74 @@ def render_live_monitoring_fragment():
             cmd = str(monitor_bottom_dict.get('今日指令', 'N/A'))
             cmd = re.sub(r"【Debug.*?】", "", cmd, flags=re.DOTALL).strip()
             market_pos = str(monitor_bottom_dict.get('盤勢位置', 'N/A'))
-            
+
             ldr_val_num = dm.safe_float(ldr_raw)
             ldr_ratio = ldr_val_num / 100.0 if ldr_val_num > 5 else ldr_val_num
-            
+
             # 使用正紅/正綠
-            if ldr_ratio <= 1.0: ldr_status_txt, ldr_color = "黃金結構", "#009900"
-            elif ldr_ratio <= 1.05: ldr_status_txt, ldr_color = "偏熱", "#F59E0B"
-            elif ldr_ratio < 1.08: ldr_status_txt, ldr_color = "過熱", "#EA580C"
-            else: ldr_status_txt, ldr_color = "危險", "#FF0000"
-            
+            if ldr_ratio <= 1.0:
+                ldr_status_txt, ldr_color = "黃金結構", "#009900"
+            elif ldr_ratio <= 1.05:
+                ldr_status_txt, ldr_color = "偏熱", "#F59E0B"
+            elif ldr_ratio < 1.08:
+                ldr_status_txt, ldr_color = "過熱", "#EA580C"
+            else:
+                ldr_status_txt, ldr_color = "危險", "#FF0000"
+
             ldr_display = f"{ldr_val_num:.2f}%<div style='font-size: 1rem; line-height: 1.0; margin-top: 2px;'>{ldr_status_txt}</div>"
 
             # 曝險倍數狀態判定
             e_val_num = dm.safe_float(e_val)
             e_ratio = e_val_num / 100.0 if e_val_num > 5 else e_val_num
-            
-            if e_ratio < 1.10: e_status_txt, e_color = "安全", "#009900"
-            elif e_ratio <= 1.12: e_status_txt, e_color = "警戒", "#F59E0B"
-            else: e_status_txt, e_color = "危險", "#FF0000"
-            
+
+            if e_ratio < 1.10:
+                e_status_txt, e_color = "安全", "#009900"
+            elif e_ratio <= 1.12:
+                e_status_txt, e_color = "警戒", "#F59E0B"
+            else:
+                e_status_txt, e_color = "危險", "#FF0000"
+
             e_display = f"{lev_str}<div style='font-size: 1rem; line-height: 1.0; margin-top: 2px;'>{e_status_txt}</div>"
 
             raw_pledge = dm.safe_float(monitor_bottom_dict.get('總質押率', 0))
             pledge_val = raw_pledge * 100 if abs(raw_pledge) <= 5.0 else raw_pledge
-            
+
             sheet_pledge_status = ""
             if not df_C.empty:
-                 p_status_raw = dm.fuzzy_get(df_C.set_index(df_C.columns[0]), '質押率燈號')
-                 if p_status_raw: sheet_pledge_status = str(p_status_raw).strip()
+                p_status_raw = dm.fuzzy_get(df_C.set_index(df_C.columns[0]), '質押率燈號')
+                if p_status_raw:
+                    sheet_pledge_status = str(p_status_raw).strip()
 
             if sheet_pledge_status:
-                 p_status = sheet_pledge_status
-                 if "安全" in p_status: p_color = "#009900"
-                 elif "謹慎" in p_status: p_color = "#0EA5E9"
-                 elif "高警戒" in p_status: p_color = "#EA580C"
-                 elif "警戒" in p_status: p_color = "#F59E0B"
-                 elif "危險" in p_status: p_color = "#FF0000"
-                 else: p_color = "#334155"
+                p_status = sheet_pledge_status
+                if "安全" in p_status:
+                    p_color = "#009900"
+                elif "謹慎" in p_status:
+                    p_color = "#0EA5E9"
+                elif "高警戒" in p_status:
+                    p_color = "#EA580C"
+                elif "警戒" in p_status:
+                    p_color = "#F59E0B"
+                elif "危險" in p_status:
+                    p_color = "#FF0000"
+                else:
+                    p_color = "#334155"
             else:
-                if pledge_val < 30: p_status, p_color = "安全（絕對安全區）", "#009900"
-                elif pledge_val < 35: p_status, p_color = "謹慎可開火區", "#0EA5E9"
-                elif pledge_val < 40: p_status, p_color = "警戒（火力鎖定區）", "#F59E0B"
-                elif pledge_val < 45: p_status, p_color = "高警戒", "#EA580C"
-                else: p_status, p_color = "危險", "#FF0000"
-            
+                if pledge_val < 30:
+                    p_status, p_color = "安全（絕對安全區）", "#009900"
+                elif pledge_val < 35:
+                    p_status, p_color = "謹慎可開火區", "#0EA5E9"
+                elif pledge_val < 40:
+                    p_status, p_color = "警戒（火力鎖定區）", "#F59E0B"
+                elif pledge_val < 45:
+                    p_status, p_color = "高警戒", "#EA580C"
+                else:
+                    p_status, p_color = "危險", "#FF0000"
+
             pledge_display = f"{pledge_val:.2f}%<div style='font-size: 1rem; line-height: 1.0; margin-top: 2px; white-space: normal; word-break: break-word;'>{p_status}</div>"
-            
+
             bias_val = str(monitor_bottom_dict.get('季線乖離', 'N/A'))
-            
+
             vix_val, vix_status = "N/A", ""
             if not df_Market.empty:
                 idx_col = df_Market.columns[0]
@@ -264,15 +314,23 @@ def render_live_monitoring_fragment():
                         vix_status = str(vix_row.iloc[0].iloc[3]).strip()
 
             risk_color = "#334155"
-            if "紅" in risk_today: risk_color = "#FF0000"
-            elif "橘" in risk_today: risk_color = "#EA580C"
-            elif "黃" in risk_today: risk_color = "#F59E0B"
-            elif "綠" in risk_today: risk_color = "#009900"
+            if "紅" in risk_today:
+                risk_color = "#FF0000"
+            elif "橘" in risk_today:
+                risk_color = "#EA580C"
+            elif "黃" in risk_today:
+                risk_color = "#F59E0B"
+            elif "綠" in risk_today:
+                risk_color = "#009900"
 
             m_cols = st.columns(6)
-            
-            with m_cols[0]: st.markdown(vis.render_mini_metric("LDR", ldr_display, ldr_color), unsafe_allow_html=True)
-            with m_cols[1]: st.markdown(vis.render_mini_metric("曝險倍數", e_display, e_color), unsafe_allow_html=True)
+
+            with m_cols[0]:
+                st.markdown(vis.render_mini_metric("LDR", ldr_display, ldr_color), unsafe_allow_html=True)
+
+            with m_cols[1]:
+                st.markdown(vis.render_mini_metric("曝險倍數", e_display, e_color), unsafe_allow_html=True)
+
             with m_cols[2]:
                 match = re.search(r"(.+?)\s*([\(（].+?[\)）])", risk_today)
                 if match:
@@ -280,17 +338,21 @@ def render_live_monitoring_fragment():
                     r_sub = match.group(2).strip()
                     r_sub_clean = re.sub(r"[（）\(\)]", "", r_sub)
                     risk_display_html = f"{r_main}<div style='font-size: 1rem; line-height: 1.0; margin-top: 2px; white-space: normal; word-break: break-word;'>{r_sub_clean}</div>"
-                else: risk_display_html = risk_today
+                else:
+                    risk_display_html = risk_today
                 st.markdown(vis.render_mini_metric("風險等級", risk_display_html, risk_color), unsafe_allow_html=True)
-                
-            with m_cols[3]: st.markdown(vis.render_mini_metric("質押率", pledge_display, p_color), unsafe_allow_html=True)
+
+            with m_cols[3]:
+                st.markdown(vis.render_mini_metric("質押率", pledge_display, p_color), unsafe_allow_html=True)
+
             with m_cols[4]:
                 bias_display = "N/A"
                 if bias_val != "N/A":
-                        bv = dm.safe_float(bias_val)
-                        bias_display = f"{bv:.2f}%"
+                    bv = dm.safe_float(bias_val)
+                    bias_display = f"{bv:.2f}%"
                 val_str = f"{market_pos}<div style='font-size: 1rem; line-height: 1.0; margin-top: 2px;'>{bias_display}</div>"
                 st.markdown(vis.render_mini_metric("盤勢", val_str), unsafe_allow_html=True)
+
             with m_cols[5]:
                 v_html = vix_status
                 match = re.search(r"(.+?)\s*([\(（].+?[\)）])", vix_status, re.DOTALL)
@@ -300,10 +362,13 @@ def render_live_monitoring_fragment():
                     v_sub_clean = re.sub(r"[（）\(\)]", "", v_sub).replace('\n', ' ')
                     v_html = f"{v_main}<div style='font-size: 1rem; line-height: 1.3; margin-top: 2px; white-space: normal; color: gray;'>{v_sub_clean}</div>"
                 vix_display_html = f"{vix_val}<div style='font-size: 1rem; line-height: 1.2; margin-top: 2px;'>{v_html}</div>"
-                st.markdown(vis.render_mini_metric("VIX", vix_display_html), unsafe_allow_html=True) 
-            
-            st.markdown(f"<div style='font-size:1.1em;color:gray;margin-top:2px;margin-bottom:2px;min-height:28px;line-height:1.3;'>📊 操作指令 (60日乖離: {bias_val})</div>", unsafe_allow_html=True)
-            
+                st.markdown(vis.render_mini_metric("VIX", vix_display_html), unsafe_allow_html=True)
+
+            st.markdown(
+                f"<div style='font-size:1.1em;color:gray;margin-top:2px;margin-bottom:2px;min-height:28px;line-height:1.3;'>📊 操作指令 (60日乖離: {bias_val})</div>",
+                unsafe_allow_html=True
+            )
+
             # --- 戰術修正：防止 Streamlit 將 $ 解析為 LaTeX 數學公式 ---
             cmd_display = cmd.replace('$', r'\$')
             st.markdown(
@@ -311,8 +376,7 @@ def render_live_monitoring_fragment():
                 f"{cmd_display}</div>",
                 unsafe_allow_html=True
             )
-            # -----------------------------------------------------------
-            
+
             mindset_text = ""
             for i, row in df_Monitor.iterrows():
                 if '心態短句' in row.values or '提醒' in row.values:
@@ -324,12 +388,11 @@ def render_live_monitoring_fragment():
                         if mindset_col:
                             mindset_text = str(m_dict.get(mindset_col, '')).strip()
                     break
-            
+
             if mindset_text:
-                # 同步為心態提醒卡片加裝防爆機制
                 mindset_display = mindset_text.replace('$', r'\$')
                 st.markdown(vis.render_mindset_card(mindset_display), unsafe_allow_html=True)
-                
+
         except Exception as e:
             st.markdown(
                 f"<div style='min-height:52px;border:1px solid #fecaca;background:#fff1f2;border-radius:8px;padding:10px 12px;color:#b91c1c;'>解析判斷數據時發生錯誤: {e}</div>",
@@ -340,7 +403,9 @@ def render_live_monitoring_fragment():
             "<div style='min-height:52px;border:1px solid #fde68a;background:#fffbeb;border-radius:8px;padding:10px 12px;color:#92400e;'>總覽數據載入失敗。請檢查 Secrets 設定或試算表網址。</div>",
             unsafe_allow_html=True
         )
+
     st.markdown("---")
+
 
 # === 執行局部無感跳動區塊 ===
 render_live_monitoring_fragment()
