@@ -39,6 +39,7 @@ st.sidebar.header("🎯 數據管理")
 if st.sidebar.button("🔄 重新載入全域資料"):
     dm.load_data.clear()
     dm.load_live_data.clear()
+    dm.load_firepower_mode.clear()
     st.rerun()
 
 # 強制同步：清除 Streamlit 快取避免前端仍顯示舊圖
@@ -47,6 +48,7 @@ if st.sidebar.button("🧹 強制清除快取並重跑"):
     st.cache_resource.clear()
     dm.load_data.clear()
     dm.load_live_data.clear()
+    dm.load_firepower_mode.clear()
     st.rerun()
 
 # 戰術升級：局部無感跳動開關
@@ -96,6 +98,8 @@ def render_live_monitoring_fragment():
     df_Monitor = dm.load_live_data('即時監控面板')
     df_C = dm.load_live_data('表C_總覽')
     df_Market = dm.load_live_data('Market')
+    firepower_mode = dm.load_firepower_mode()
+    firepower_profile = dm.get_firepower_profile(firepower_mode)
 
     st.header('1. 投資總覽')
 
@@ -236,20 +240,14 @@ def render_live_monitoring_fragment():
             cmd = re.sub(r"【Debug.*?】", "", cmd, flags=re.DOTALL).strip()
             market_pos = str(monitor_bottom_dict.get('盤勢位置', 'N/A'))
 
+            ldr_info = dm.classify_ldr_by_firepower(ldr_raw, firepower_mode)
             ldr_val_num = dm.safe_float(ldr_raw)
-            ldr_ratio = ldr_val_num / 100.0 if ldr_val_num > 5 else ldr_val_num
+            ldr_ratio = ldr_info["ldr_ratio"]
+            ldr_status_txt = ldr_info["status"]
+            ldr_color = ldr_info["color"]
 
-            # 使用正紅/正綠
-            if ldr_ratio <= 1.0:
-                ldr_status_txt, ldr_color = "黃金結構", "#009900"
-            elif ldr_ratio <= 1.05:
-                ldr_status_txt, ldr_color = "偏熱", "#F59E0B"
-            elif ldr_ratio < 1.08:
-                ldr_status_txt, ldr_color = "過熱", "#EA580C"
-            else:
-                ldr_status_txt, ldr_color = "危險", "#FF0000"
-
-            ldr_display = f"{ldr_val_num:.2f}%<div style='font-size: 1rem; line-height: 1.0; margin-top: 2px;'>{ldr_status_txt}</div>"
+            ldr_display = f"{ldr_ratio * 100:.2f}%<div style='font-size: 1rem; line-height: 1.0; margin-top: 2px;'>{ldr_status_txt}</div>"
+            firepower_display = f"{firepower_mode}<div style='font-size: 1rem; line-height: 1.0; margin-top: 2px;'>正二 {firepower_profile['target_range']}</div>"
 
             # 曝險倍數狀態判定
             e_val_num = dm.safe_float(e_val)
@@ -323,15 +321,18 @@ def render_live_monitoring_fragment():
             elif "綠" in risk_today:
                 risk_color = "#009900"
 
-            m_cols = st.columns(6)
+            m_cols = st.columns(7)
 
             with m_cols[0]:
-                st.markdown(vis.render_mini_metric("LDR", ldr_display, ldr_color), unsafe_allow_html=True)
+                st.markdown(vis.render_mini_metric("火力模式", firepower_display), unsafe_allow_html=True)
 
             with m_cols[1]:
-                st.markdown(vis.render_mini_metric("曝險倍數", e_display, e_color), unsafe_allow_html=True)
+                st.markdown(vis.render_mini_metric("LDR", ldr_display, ldr_color), unsafe_allow_html=True)
 
             with m_cols[2]:
+                st.markdown(vis.render_mini_metric("曝險倍數", e_display, e_color), unsafe_allow_html=True)
+
+            with m_cols[3]:
                 match = re.search(r"(.+?)\s*([\(（].+?[\)）])", risk_today)
                 if match:
                     r_main = match.group(1).strip()
@@ -342,10 +343,10 @@ def render_live_monitoring_fragment():
                     risk_display_html = risk_today
                 st.markdown(vis.render_mini_metric("風險等級", risk_display_html, risk_color), unsafe_allow_html=True)
 
-            with m_cols[3]:
+            with m_cols[4]:
                 st.markdown(vis.render_mini_metric("質押率", pledge_display, p_color), unsafe_allow_html=True)
 
-            with m_cols[4]:
+            with m_cols[5]:
                 bias_display = "N/A"
                 if bias_val != "N/A":
                     bv = dm.safe_float(bias_val)
@@ -353,7 +354,7 @@ def render_live_monitoring_fragment():
                 val_str = f"{market_pos}<div style='font-size: 1rem; line-height: 1.0; margin-top: 2px;'>{bias_display}</div>"
                 st.markdown(vis.render_mini_metric("盤勢", val_str), unsafe_allow_html=True)
 
-            with m_cols[5]:
+            with m_cols[6]:
                 v_html = vix_status
                 match = re.search(r"(.+?)\s*([\(（].+?[\)）])", vix_status, re.DOTALL)
                 if match:
