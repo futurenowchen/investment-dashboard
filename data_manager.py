@@ -22,6 +22,75 @@ def safe_float(value):
         return float(s)
     except: return 0.0
 
+FIREPOWER_MODES = {
+    "System10": {
+        "target_range": "45–50%",
+        "hard_cap": "55%",
+        "golden_limit": 1.00,
+        "warm_limit": 1.05,
+        "danger_limit": 1.08,
+    },
+    "Phase 1+": {
+        "target_range": "55–60%",
+        "hard_cap": "60%",
+        "golden_limit": 1.30,
+        "warm_limit": 1.45,
+        "danger_limit": 1.60,
+    },
+    "Phase 2": {
+        "target_range": "60–65%",
+        "hard_cap": "65%",
+        "golden_limit": 1.60,
+        "warm_limit": 1.80,
+        "danger_limit": 2.00,
+    },
+    "Phase 2+": {
+        "target_range": "65–70%",
+        "hard_cap": "70%",
+        "golden_limit": 1.90,
+        "warm_limit": 2.20,
+        "danger_limit": 2.35,
+    },
+}
+
+def normalize_firepower_mode(mode):
+    mode_text = str(mode).strip() if mode is not None else ""
+    return mode_text if mode_text in FIREPOWER_MODES else "System10"
+
+def get_firepower_profile(mode):
+    normalized_mode = normalize_firepower_mode(mode)
+    return FIREPOWER_MODES[normalized_mode]
+
+def normalize_ldr_ratio(ldr_value):
+    value = safe_float(ldr_value)
+    return value / 100.0 if value > 5 else value
+
+def classify_ldr_by_firepower(ldr_value, mode):
+    normalized_mode = normalize_firepower_mode(mode)
+    profile = get_firepower_profile(normalized_mode)
+    ldr_ratio = normalize_ldr_ratio(ldr_value)
+
+    if ldr_ratio <= profile["golden_limit"]:
+        status = "黃金結構"
+        color = "#009900"
+    elif ldr_ratio <= profile["warm_limit"]:
+        status = "偏熱"
+        color = "#F59E0B"
+    elif ldr_ratio < profile["danger_limit"]:
+        status = "過熱"
+        color = "#EA580C"
+    else:
+        status = "危險"
+        color = "#FF0000"
+
+    return {
+        "status": status,
+        "color": color,
+        "ldr_ratio": ldr_ratio,
+        "mode": normalized_mode,
+        "profile": profile,
+    }
+
 def fmt_money(value):
     val = safe_float(value)
     return f"{val:,.2f}" if val != 0 else "0.00"
@@ -114,6 +183,17 @@ def load_data(sheet_name):
 @st.cache_data(ttl=20)
 def load_live_data(sheet_name):
     return _load_sheet_data(sheet_name)
+
+@st.cache_data(ttl=20)
+def load_firepower_mode():
+    try:
+        _, sh = get_gsheet_connection()
+        if not sh:
+            return "System10"
+        ws = sh.worksheet("即時監控面板")
+        return normalize_firepower_mode(ws.acell("AB10").value)
+    except Exception:
+        return "System10"
 
 @st.cache_data(ttl=60) 
 def fetch_current_prices(tickers):
@@ -228,6 +308,7 @@ def generate_daily_report(df_A, df_C, df_D, df_E, df_F, df_Monitor, live_prices_
     lines.append("\n[即時監控狀態]")
     if not df_Monitor.empty:
         try:
+            firepower_mode = load_firepower_mode()
             # 提取上半部：變動與波動率
             snc_val = safe_float(df_Monitor['股市淨變動'].iloc[0]) if '股市淨變動' in df_Monitor.columns else 0
             stock_nc_str = f"+{fmt_int(snc_val)}" if snc_val > 0 else fmt_int(snc_val)
@@ -274,6 +355,7 @@ def generate_daily_report(df_A, df_C, df_D, df_E, df_F, df_Monitor, live_prices_
                     c_val = safe_float(chg_val)
                     chg_str = f"{c_val:.2f}%"
 
+            lines.append(f"火力模式：{firepower_mode}")
             lines.append(f"LDR：{ldr}")
             lines.append(f"曝險倍數：{lev_str}")
             lines.append(f"風險等級：{risk}")
