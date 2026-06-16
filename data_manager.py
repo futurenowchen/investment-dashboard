@@ -33,23 +33,23 @@ FIREPOWER_MODES = {
     "Phase 1+": {
         "target_range": "55–60%",
         "hard_cap": "60%",
-        "golden_limit": 1.30,
-        "warm_limit": 1.45,
-        "danger_limit": 1.60,
+        "golden_limit": 1.00,
+        "warm_limit": 1.08,
+        "danger_limit": 1.20,
     },
     "Phase 2": {
         "target_range": "60–65%",
         "hard_cap": "65%",
-        "golden_limit": 1.60,
-        "warm_limit": 1.80,
-        "danger_limit": 2.00,
+        "golden_limit": 1.00,
+        "warm_limit": 1.08,
+        "danger_limit": 1.20,
     },
     "Phase 2+": {
         "target_range": "65–70%",
         "hard_cap": "70%",
-        "golden_limit": 1.90,
-        "warm_limit": 2.20,
-        "danger_limit": 2.35,
+        "golden_limit": 1.00,
+        "warm_limit": 1.08,
+        "danger_limit": 1.20,
     },
 }
 
@@ -73,7 +73,7 @@ def classify_ldr_by_firepower(ldr_value, mode):
     if ldr_ratio <= profile["golden_limit"]:
         status = "黃金結構"
         color = "#009900"
-    elif ldr_ratio <= profile["warm_limit"]:
+    elif ldr_ratio < profile["warm_limit"]:
         status = "偏熱"
         color = "#F59E0B"
     elif ldr_ratio < profile["danger_limit"]:
