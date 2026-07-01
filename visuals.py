@@ -246,7 +246,7 @@ def plot_nav_trend(df_F):
             color_nav_main = '#00B4D8'
             color_nav_fill = 'rgba(0, 180, 216, 0.08)'
             color_sma = '#94A3B8'
-            color_stock_value = '#6366F1'
+            color_stock_value = 'rgba(99, 102, 241, 0.28)'
             text_color = '#334155'
             modern_font = "Arial, 'Heiti TC', 'Microsoft JhengHei', sans-serif"
 
@@ -320,7 +320,7 @@ def plot_nav_trend(df_F):
                         y=df_chart['stock_value'],
                         name="股市市值",
                         mode='lines',
-                        line=dict(color=color_stock_value, width=2, shape='spline', smoothing=0.8),
+                        line=dict(color=color_stock_value, width=1.2, shape='spline', smoothing=0.8),
                         hoverinfo='skip'
                     ),
                     row=1,
