@@ -219,6 +219,10 @@ def plot_nav_trend(df_F):
         if '實質NAV' in df_calc.columns and '日期' in df_calc.columns:
             df_calc['dt'] = pd.to_datetime(df_calc['日期'], errors='coerce')
             df_calc['nav'] = df_calc['實質NAV'].apply(dm.safe_float)
+            if '股票市值' in df_calc.columns:
+                df_calc['stock_value'] = df_calc['股票市值'].apply(dm.safe_float)
+            else:
+                df_calc['stock_value'] = np.nan
 
             if 'NAV淨變動' in df_calc.columns:
                 df_calc['net_change'] = df_calc['NAV淨變動'].apply(dm.safe_float)
@@ -228,6 +232,11 @@ def plot_nav_trend(df_F):
                 df_calc['net_change'] = 0.0
 
             df_chart = df_calc.sort_values('dt').reset_index(drop=True)
+            if '股市市值變化' in df_chart.columns:
+                df_chart['stock_value_change'] = df_chart['股市市值變化'].apply(dm.safe_float)
+            else:
+                df_chart['stock_value_change'] = df_chart['stock_value'].diff().fillna(0)
+
             df_chart['SMA20'] = df_chart['nav'].rolling(window=20, min_periods=1).mean()
 
             bg_color = '#FFFFFF'
@@ -237,11 +246,18 @@ def plot_nav_trend(df_F):
             color_nav_main = '#00B4D8'
             color_nav_fill = 'rgba(0, 180, 216, 0.08)'
             color_sma = '#94A3B8'
+            color_stock_value = '#6366F1'
             text_color = '#334155'
             modern_font = "Arial, 'Heiti TC', 'Microsoft JhengHei', sans-serif"
 
             colors = [color_rise if val > 0 else color_fall for val in df_chart['net_change']]
             df_chart['hover_color'] = colors
+            df_chart['stock_change_color'] = np.where(
+                df_chart['stock_value_change'] > 0,
+                color_rise,
+                np.where(df_chart['stock_value_change'] < 0, color_fall, text_color)
+            )
+            has_stock_value = df_chart['stock_value'].notna().any()
 
             fig = make_subplots(
                 rows=2,
@@ -260,13 +276,23 @@ def plot_nav_trend(df_F):
                     mode='lines',
                     line=dict(color=color_nav_main, width=2.5, shape='spline', smoothing=0.8),
                     fillcolor=color_nav_fill,
-                    customdata=df_chart[['net_change', 'SMA20', 'hover_color']].values,
+                    customdata=df_chart[[
+                        'net_change',
+                        'SMA20',
+                        'hover_color',
+                        'stock_value',
+                        'stock_value_change',
+                        'stock_change_color'
+                    ]].values,
                     hovertemplate=(
                         '<b>日期：%{x|%Y-%m-%d}</b><br><br>'
                         '<b>每日淨值：</b> %{y:,.0f}<br>'
                         '<b>淨值變化：</b> '
                         '<span style="color:%{customdata[2]}">%{customdata[0]:+,.0f}</span><br>'
-                        '<b>NAV 20MA：</b> %{customdata[1]:,.0f}'
+                        '<b>NAV 20MA：</b> %{customdata[1]:,.0f}<br>'
+                        '<b>股市市值：</b> %{customdata[3]:,.0f}<br>'
+                        '<b>股市市值變化：</b> '
+                        '<span style="color:%{customdata[5]}">%{customdata[4]:+,.0f}</span>'
                         '<extra></extra>'
                     )
                 ),
@@ -286,6 +312,20 @@ def plot_nav_trend(df_F):
                 row=1,
                 col=1
             )
+
+            if has_stock_value:
+                fig.add_trace(
+                    go.Scatter(
+                        x=df_chart['dt'],
+                        y=df_chart['stock_value'],
+                        name="股市市值",
+                        mode='lines',
+                        line=dict(color=color_stock_value, width=2, shape='spline', smoothing=0.8),
+                        hoverinfo='skip'
+                    ),
+                    row=1,
+                    col=1
+                )
 
             fig.add_trace(
                 go.Bar(
@@ -347,14 +387,18 @@ def plot_nav_trend(df_F):
                 col=1
             )
 
-            min_nav = df_chart['nav'].min()
-            max_nav = df_chart['nav'].max()
-            y_bottom = 1400000 if min_nav > 1400000 else min_nav * 0.95
-            y_top = max_nav * 1.05
+            value_cols = ['nav']
+            if has_stock_value:
+                value_cols.append('stock_value')
 
-            if max_nav < 5000000:
+            y_min = df_chart[value_cols].min().min()
+            y_max = df_chart[value_cols].max().max()
+            y_bottom = 1400000 if y_min > 1400000 else y_min * 0.95
+            y_top = y_max * 1.05
+
+            if y_max < 5000000:
                 nav_dtick = 200000
-            elif max_nav < 10000000:
+            elif y_max < 10000000:
                 nav_dtick = 300000
             else:
                 nav_dtick = 500000
