@@ -389,7 +389,7 @@ def generate_daily_report(df_A, df_C, df_D, df_E, df_F, df_Monitor, live_prices_
             lines.append(f"曝險倍數：{lev_str}")
             lines.append(f"風險等級：{risk}")
             lines.append(f"質押率：{pledge}")
-            lines.append(f"季線乖離：{bias}")
+            lines.append(f"季線乖離基準：{bias}（前一交易日資料）")
             lines.append(f"股市淨變動：{stock_nc_str}")
             lines.append(f"股市波動率：{stock_vol_str}")
             lines.append(f"NAV淨變動：{nav_nc_str}")
@@ -451,20 +451,35 @@ def generate_daily_report(df_A, df_C, df_D, df_E, df_F, df_Monitor, live_prices_
     if not df_F.empty:
         try:
             df_f = df_F.copy()
-            date_col = next((c for c in df_f.columns if '日期' in c), None)
+            date_col = find_report_col(df_f, ['日期', 'date', 'Date'])
+            stock_col = find_report_col(df_f, ['股票市值', '股市市值', '股票總市值', '市值'])
+            nav_col = find_report_col(df_f, ['實質NAV', 'NAV', '淨值', '總資產', '總資產市值'])
+            total_col = find_report_col(df_f, ['總資產', '總資產市值', '實質NAV', 'NAV', '淨值'])
             if date_col:
                 df_f['dt'] = pd.to_datetime(df_f[date_col], errors='coerce')
                 unique_dates = sorted(df_f['dt'].dt.date.dropna().unique(), reverse=True)[:3]
                 last_3 = df_f[df_f['dt'].dt.date.isin(unique_dates)].sort_values('dt', ascending=True)
                 
+                prev_stock_val = None
+                prev_nav_val = None
                 for _, row in last_3.iterrows():
                     d = fmt_date(row[date_col])
-                    stk_v = "股票市值" + fmt_int(row.get('股票市值', 0))
-                    tot = "總資產" + fmt_int(row.get('總資產', 0)) 
+                    stock_val = safe_float(row.get(stock_col, 0)) if stock_col else 0
+                    nav_val = safe_float(row.get(nav_col, 0)) if nav_col else 0
+                    stock_change_val = 0 if prev_stock_val is None else stock_val - prev_stock_val
+                    nav_change_val = 0 if prev_nav_val is None else nav_val - prev_nav_val
+                    stock_change = fmt_int(stock_change_val)
+                    nav_change = fmt_int(nav_change_val)
+                    if stock_change_val > 0:
+                        stock_change = "+" + stock_change
+                    if nav_change_val > 0:
+                        nav_change = "+" + nav_change
+                    stk_v = "股票市值" + fmt_int(stock_val)
+                    stock_chg = "股票變動" + stock_change
+                    tot = "總資產" + fmt_int(row.get(total_col, 0)) if total_col else "總資產0"
+                    nav_chg = "NAV變動" + nav_change
                     cash = "現金" + fmt_int(row.get('現金', 0))
-                    chg_val = safe_float(row.get('當日淨變動', 0))
-                    chg = "當日淨變動" + fmt_int(chg_val)
-                    nav = "NAV" + fmt_int(row.get('實質NAV', 0))
+                    nav = "NAV" + fmt_int(nav_val)
                     
                     beta_raw = row.get('曝險指標 E', row.get('槓桿倍數β', 0))
                     beta_val = safe_float(beta_raw)
@@ -472,7 +487,9 @@ def generate_daily_report(df_A, df_C, df_D, df_E, df_F, df_Monitor, live_prices_
                     if beta_val <= 5.0: beta = f"E{beta_val*100:.2f}%"
                     else: beta = f"E{beta_val:.2f}%"
                     
-                    lines.append(f"{d} {stk_v} {tot} {cash} {chg} {nav} {beta}")
+                    lines.append(f"{d} {stk_v} {stock_chg} {tot} {nav_chg} {cash} {nav} {beta}")
+                    prev_stock_val = stock_val
+                    prev_nav_val = nav_val
             else:
                 lines.append("表F無日期欄位")
         except: lines.append("表F解析錯誤")
