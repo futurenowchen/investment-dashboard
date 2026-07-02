@@ -311,11 +311,30 @@ def generate_daily_report(df_A, df_C, df_D, df_E, df_F, df_Monitor, live_prices_
             firepower_mode = load_firepower_mode()
             # 提取上半部：變動與波動率
             snc_val = safe_float(df_Monitor['股市淨變動'].iloc[0]) if '股市淨變動' in df_Monitor.columns else 0
+            nnc_val = safe_float(df_Monitor['NAV淨變動'].iloc[0]) if 'NAV淨變動' in df_Monitor.columns else 0
+
+            # 淨變動優先使用表F最近兩個有效日期計算，避免即時監控面板公式空白或歸零時失真。
+            if not df_F.empty:
+                try:
+                    df_f = df_F.copy()
+                    date_col = '日期' if '日期' in df_f.columns else next((c for c in df_f.columns if '日期' in c), None)
+                    required_cols = {'股票市值', '實質NAV'}
+                    if date_col and required_cols.issubset(df_f.columns):
+                        df_f['dt'] = pd.to_datetime(df_f[date_col], errors='coerce')
+                        df_f = df_f.dropna(subset=['dt']).sort_values('dt')
+                        df_latest = df_f.groupby(df_f['dt'].dt.date).tail(1)
+                        if len(df_latest) >= 2:
+                            today_row = df_latest.iloc[-1]
+                            prev_row = df_latest.iloc[-2]
+                            snc_val = safe_float(today_row.get('股票市值', 0)) - safe_float(prev_row.get('股票市值', 0))
+                            nnc_val = safe_float(today_row.get('實質NAV', 0)) - safe_float(prev_row.get('實質NAV', 0))
+                except Exception:
+                    pass
+
             stock_nc_str = f"+{fmt_int(snc_val)}" if snc_val > 0 else fmt_int(snc_val)
             sv_val = df_Monitor['股市波動率'].iloc[0] if '股市波動率' in df_Monitor.columns else '0%'
             stock_vol_str = sv_val if isinstance(sv_val, str) and '%' in sv_val else fmt_pct(sv_val)
             
-            nnc_val = safe_float(df_Monitor['NAV淨變動'].iloc[0]) if 'NAV淨變動' in df_Monitor.columns else 0
             nav_nc_str = f"+{fmt_int(nnc_val)}" if nnc_val > 0 else fmt_int(nnc_val)
             nv_val = df_Monitor['NAV波動率'].iloc[0] if 'NAV波動率' in df_Monitor.columns else '0%'
             nav_vol_str = nv_val if isinstance(nv_val, str) and '%' in nv_val else fmt_pct(nv_val)
