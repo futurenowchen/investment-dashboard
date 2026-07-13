@@ -1,8 +1,7 @@
-streamlit
-pandas
-numpy
-plotly
-openpyxl
-gspread
-yfinance
-
+streamlit==1.49.1
+pandas==2.2.3
+numpy==2.1.3
+plotly==5.24.1
+openpyxl==3.1.5
+gspread==6.1.4
+yfinance==0.2.54
