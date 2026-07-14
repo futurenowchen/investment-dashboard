@@ -85,15 +85,24 @@ if st.sidebar.button("🧹 強制清除快取並重跑"):
     st.rerun()
 
 # 戰術升級：局部無感跳動開關
-# DIAGNOSTIC: temporarily disabled to isolate Streamlit rerun crash
-# auto_refresh = st.sidebar.checkbox("⏱️ 啟動局部無感跳動", value=False)
-# refresh_seconds = st.sidebar.selectbox("更新頻率", [15, 20, 30, 60], index=1, format_func=lambda x: f"{x} 秒")
-# refresh_interval = refresh_seconds if auto_refresh else None
-# if auto_refresh:
-#     st.sidebar.info(f"🟢 戰術雷達：局部掃描啟動（每 {refresh_seconds} 秒）")
-auto_refresh = False
-refresh_interval = None
-st.sidebar.caption("⏸️ 自動刷新暫停：執行穩定性診斷中")
+auto_refresh = st.sidebar.checkbox(
+    "⏱️ 啟動局部無感跳動",
+    value=False
+)
+
+refresh_seconds = st.sidebar.selectbox(
+    "更新頻率",
+    [15, 20, 30, 60],
+    index=1,
+    format_func=lambda x: f"{x} 秒"
+)
+
+refresh_interval = refresh_seconds if auto_refresh else None
+
+if auto_refresh:
+    st.sidebar.info(
+        f"🟢 戰術雷達：局部掃描啟動（每 {refresh_seconds} 秒）"
+    )
 
 if st.sidebar.button("💾 更新股價至 Google Sheets", type="primary"):
     if not df_A.empty and '股票' in df_A.columns:
@@ -129,6 +138,7 @@ st.sidebar.markdown("---")
 # ==========================================
 # 🛡️ 戰略高頻監控區 (Fragment Protocol 局部重載)
 # ==========================================
+@st.fragment(run_every=refresh_interval)
 def render_live_monitoring_fragment():
     # 每次局部重載時，只讀取高頻監控資料
     df_Monitor = dm.load_live_data('即時監控面板')
