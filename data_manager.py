@@ -263,8 +263,12 @@ def generate_daily_report(df_A, df_C, df_D, df_E, df_F, df_Monitor, live_prices_
     df_Market: 傳入 Market 表格資料以讀取指數資訊
     """
     lines = []
-    today = datetime.now().strftime('%Y/%m/%d')
+    report_date = datetime.now().date()
+    today = report_date.strftime('%Y/%m/%d')
     lines.append(f"[日期] {today}\n")
+
+    current_stock = None
+    current_nav = None
 
     # --- 表C 總覽 ---
     lines.append("[表C]")
@@ -297,6 +301,10 @@ def generate_daily_report(df_A, df_C, df_D, df_E, df_F, df_Monitor, live_prices_
             for key, label in items.items():
                 if key in df_c.index:
                     val = df_c.loc[key, col]
+                    if key == '股票市值':
+                        current_stock = safe_float(val)
+                    elif key == '實質NAV':
+                        current_nav = safe_float(val)
                     val_str = str(val)
                     if key in ['達成進度', '槓桿倍數β', '曝險指標 E', '質押率', '槓桿密度比LDR']:
                         if isinstance(val, str) and '%' in val:
@@ -321,7 +329,7 @@ def generate_daily_report(df_A, df_C, df_D, df_E, df_F, df_Monitor, live_prices_
             nnc_val = safe_float(df_Monitor['NAV淨變動'].iloc[0]) if 'NAV淨變動' in df_Monitor.columns else 0
             net_change_source = "即時監控面板fallback"
 
-            # 淨變動優先使用表F最近兩個有效日期計算，避免即時監控面板公式空白或歸零時失真。
+            # 淨變動需先比對表F最新日期與日報日期：表F尚未寫入當日時，改用表C當日對表F最新日。
             if not df_F.empty:
                 try:
                     df_f = df_F.copy()
@@ -331,13 +339,19 @@ def generate_daily_report(df_A, df_C, df_D, df_E, df_F, df_Monitor, live_prices_
                     if date_col and stock_col and nav_col:
                         df_f['dt'] = pd.to_datetime(df_f[date_col], errors='coerce')
                         df_latest = df_f.dropna(subset=['dt']).sort_values('dt')
-                        df_latest = df_latest.groupby(df_latest['dt'].dt.date).tail(1)
-                        if len(df_latest) >= 2:
-                            today_row = df_latest.iloc[-1]
-                            prev_row = df_latest.iloc[-2]
-                            snc_val = safe_float(today_row.get(stock_col, 0)) - safe_float(prev_row.get(stock_col, 0))
-                            nnc_val = safe_float(today_row.get(nav_col, 0)) - safe_float(prev_row.get(nav_col, 0))
-                            net_change_source = "表F最近兩日"
+                        df_latest = df_latest.groupby(df_latest['dt'].dt.date).tail(1).sort_values('dt')
+                        if not df_latest.empty:
+                            latest_row = df_latest.iloc[-1]
+                            latest_f_date = latest_row['dt'].date()
+                            if latest_f_date == report_date and len(df_latest) >= 2:
+                                prev_row = df_latest.iloc[-2]
+                                snc_val = safe_float(latest_row.get(stock_col, 0)) - safe_float(prev_row.get(stock_col, 0))
+                                nnc_val = safe_float(latest_row.get(nav_col, 0)) - safe_float(prev_row.get(nav_col, 0))
+                                net_change_source = "表F當日與前一交易日"
+                            elif latest_f_date < report_date and current_stock is not None and current_nav is not None:
+                                snc_val = current_stock - safe_float(latest_row.get(stock_col, 0))
+                                nnc_val = current_nav - safe_float(latest_row.get(nav_col, 0))
+                                net_change_source = "表C當日 vs 表F前一交易日"
                 except Exception:
                     net_change_source = "即時監控面板fallback"
 
@@ -457,17 +471,24 @@ def generate_daily_report(df_A, df_C, df_D, df_E, df_F, df_Monitor, live_prices_
             total_col = find_report_col(df_f, ['總資產', '總資產市值', '實質NAV', 'NAV', '淨值'])
             if date_col:
                 df_f['dt'] = pd.to_datetime(df_f[date_col], errors='coerce')
-                unique_dates = sorted(df_f['dt'].dt.date.dropna().unique(), reverse=True)[:3]
-                last_3 = df_f[df_f['dt'].dt.date.isin(unique_dates)].sort_values('dt', ascending=True)
+                df_f = df_f.dropna(subset=['dt']).sort_values('dt')
+                df_f = df_f.groupby(df_f['dt'].dt.date).tail(1).sort_values('dt')
+                if stock_col:
+                    df_f['股票變動'] = df_f[stock_col].apply(safe_float).diff().fillna(0)
+                else:
+                    df_f['股票變動'] = 0
+                if nav_col:
+                    df_f['NAV變動'] = df_f[nav_col].apply(safe_float).diff().fillna(0)
+                else:
+                    df_f['NAV變動'] = 0
+                last_3 = df_f.tail(3)
                 
-                prev_stock_val = None
-                prev_nav_val = None
                 for _, row in last_3.iterrows():
                     d = fmt_date(row[date_col])
                     stock_val = safe_float(row.get(stock_col, 0)) if stock_col else 0
                     nav_val = safe_float(row.get(nav_col, 0)) if nav_col else 0
-                    stock_change_val = 0 if prev_stock_val is None else stock_val - prev_stock_val
-                    nav_change_val = 0 if prev_nav_val is None else nav_val - prev_nav_val
+                    stock_change_val = safe_float(row.get('股票變動', 0))
+                    nav_change_val = safe_float(row.get('NAV變動', 0))
                     stock_change = fmt_int(stock_change_val)
                     nav_change = fmt_int(nav_change_val)
                     if stock_change_val > 0:
@@ -488,8 +509,6 @@ def generate_daily_report(df_A, df_C, df_D, df_E, df_F, df_Monitor, live_prices_
                     else: beta = f"E{beta_val:.2f}%"
                     
                     lines.append(f"{d} {stk_v} {stock_chg} {tot} {nav_chg} {cash} {nav} {beta}")
-                    prev_stock_val = stock_val
-                    prev_nav_val = nav_val
             else:
                 lines.append("表F無日期欄位")
         except: lines.append("表F解析錯誤")
