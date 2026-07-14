@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import yfinance as yf
 import gspread
 import time
 import re
@@ -204,6 +203,8 @@ def load_firepower_mode():
 
 @st.cache_data(ttl=60) 
 def fetch_current_prices(tickers):
+    import yfinance as yf
+
     if not tickers: return {}
     ticker_map = {}
     query_tickers = []
