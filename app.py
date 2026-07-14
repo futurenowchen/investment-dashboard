@@ -480,7 +480,68 @@ with c1:
             if c in df_show.columns: df_show[c] = df_show[c].apply(dm.fmt_money)
             
         height_val = (len(df_show) + 1) * 35 + 20
-        st.dataframe(df_show, use_container_width=True, height=height_val, hide_index=True)
+
+        df_show_html = df_show.copy()
+
+        for col in df_show_html.columns:
+            df_show_html[col] = df_show_html[col].map(
+                lambda value: "" if pd.isna(value) else str(value)
+            )
+
+        holdings_table_html = df_show_html.to_html(
+            index=False,
+            escape=True,
+            border=0,
+            classes="holdings-html-table",
+        )
+
+        st.markdown(
+            f"""
+            <style>
+            .holdings-table-wrapper {{
+                width: 100%;
+                max-height: {height_val}px;
+                overflow: auto;
+                border: 1px solid rgba(128, 128, 128, 0.25);
+                border-radius: 6px;
+            }}
+
+            .holdings-html-table {{
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 0.9rem;
+            }}
+
+            .holdings-html-table th,
+            .holdings-html-table td {{
+                padding: 8px 10px;
+                border-bottom: 1px solid rgba(128, 128, 128, 0.2);
+                text-align: right;
+                white-space: nowrap;
+            }}
+
+            .holdings-html-table th {{
+                position: sticky;
+                top: 0;
+                background: var(--background-color, white);
+                z-index: 1;
+                font-weight: 600;
+            }}
+
+            .holdings-html-table th:first-child,
+            .holdings-html-table td:first-child,
+            .holdings-html-table th:nth-child(2),
+            .holdings-html-table td:nth-child(2) {{
+                text-align: left;
+            }}
+            </style>
+
+            <div class="holdings-table-wrapper">
+                {holdings_table_html}
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
 with c2:
     st.markdown("<h3 style='text-align: center;'>🍰 資產配置</h3>", unsafe_allow_html=True) 
