@@ -325,14 +325,20 @@ def generate_daily_report(df_A, df_C, df_D, df_E, df_F, df_Monitor, live_prices_
     if not df_Monitor.empty:
         try:
             firepower_mode = load_firepower_mode()
-            # 提取上半部：變動與波動率
+            # 提取上半部：變動與波動率。預設保留即時監控面板既有欄位作為fallback。
             snc_val = safe_float(df_Monitor['股市淨變動'].iloc[0]) if '股市淨變動' in df_Monitor.columns else 0
             nnc_val = safe_float(df_Monitor['NAV淨變動'].iloc[0]) if 'NAV淨變動' in df_Monitor.columns else 0
+            sv_val = df_Monitor['股市波動率'].iloc[0] if '股市波動率' in df_Monitor.columns else '0%'
+            nv_val = df_Monitor['NAV波動率'].iloc[0] if 'NAV波動率' in df_Monitor.columns else '0%'
+            stock_vol_str = sv_val if isinstance(sv_val, str) and '%' in sv_val else fmt_pct(sv_val)
+            nav_vol_str = nv_val if isinstance(nv_val, str) and '%' in nv_val else fmt_pct(nv_val)
             net_change_source = "即時監控面板fallback"
 
-            # 淨變動需先比對表F最新日期與日報日期：表F尚未寫入當日時，改用表C當日對表F最新日。
-            if not df_F.empty:
-                try:
+            # 即時淨變動固定定義：即時監控面板目前值 vs 表F最新一筆快照。
+            try:
+                monitor_stock_col = '股票市值' if '股票市值' in df_Monitor.columns else None
+                monitor_nav_col = find_report_col(df_Monitor, ['實質NAV', 'NAV', '總資產', '總資產市值'])
+                if not df_F.empty and monitor_stock_col and monitor_nav_col:
                     df_f = df_F.copy()
                     date_col = find_report_col(df_f, ['日期', 'date', 'Date'])
                     stock_col = find_report_col(df_f, ['股票市值', '股市市值', '股票總市值', '市值'])
@@ -343,26 +349,22 @@ def generate_daily_report(df_A, df_C, df_D, df_E, df_F, df_Monitor, live_prices_
                         df_latest = df_latest.groupby(df_latest['dt'].dt.date).tail(1).sort_values('dt')
                         if not df_latest.empty:
                             latest_row = df_latest.iloc[-1]
-                            latest_f_date = latest_row['dt'].date()
-                            if latest_f_date == report_date and len(df_latest) >= 2:
-                                prev_row = df_latest.iloc[-2]
-                                snc_val = safe_float(latest_row.get(stock_col, 0)) - safe_float(prev_row.get(stock_col, 0))
-                                nnc_val = safe_float(latest_row.get(nav_col, 0)) - safe_float(prev_row.get(nav_col, 0))
-                                net_change_source = "表F當日與前一交易日"
-                            elif latest_f_date < report_date and current_stock is not None and current_nav is not None:
-                                snc_val = current_stock - safe_float(latest_row.get(stock_col, 0))
-                                nnc_val = current_nav - safe_float(latest_row.get(nav_col, 0))
-                                net_change_source = "表C當日 vs 表F前一交易日"
-                except Exception:
-                    net_change_source = "即時監控面板fallback"
+                            current_monitor_stock = safe_float(df_Monitor[monitor_stock_col].iloc[0])
+                            current_monitor_nav = safe_float(df_Monitor[monitor_nav_col].iloc[0])
+                            latest_stock = safe_float(latest_row.get(stock_col, 0))
+                            latest_nav = safe_float(latest_row.get(nav_col, 0))
+                            snc_val = current_monitor_stock - latest_stock
+                            nnc_val = current_monitor_nav - latest_nav
+                            stock_vol_rate = snc_val / latest_stock if latest_stock != 0 else 0
+                            nav_vol_rate = nnc_val / latest_nav if latest_nav != 0 else 0
+                            stock_vol_str = fmt_pct(stock_vol_rate)
+                            nav_vol_str = fmt_pct(nav_vol_rate)
+                            net_change_source = "即時監控面板 vs 表F最新一筆"
+            except Exception:
+                net_change_source = "即時監控面板fallback"
 
             stock_nc_str = f"+{fmt_int(snc_val)}" if snc_val > 0 else fmt_int(snc_val)
-            sv_val = df_Monitor['股市波動率'].iloc[0] if '股市波動率' in df_Monitor.columns else '0%'
-            stock_vol_str = sv_val if isinstance(sv_val, str) and '%' in sv_val else fmt_pct(sv_val)
-            
             nav_nc_str = f"+{fmt_int(nnc_val)}" if nnc_val > 0 else fmt_int(nnc_val)
-            nv_val = df_Monitor['NAV波動率'].iloc[0] if 'NAV波動率' in df_Monitor.columns else '0%'
-            nav_vol_str = nv_val if isinstance(nv_val, str) and '%' in nv_val else fmt_pct(nv_val)
 
             e_val = df_Monitor['曝險指標 E'].iloc[0] if '曝險指標 E' in df_Monitor.columns else '0%'
             lev_str = e_val if isinstance(e_val, str) and '%' in e_val else fmt_pct(e_val)
