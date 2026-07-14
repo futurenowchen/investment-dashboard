@@ -1,10 +1,41 @@
+import faulthandler
+
+faulthandler.enable(all_threads=True)
+
 import streamlit as st
 import pandas as pd
 import time
 import re
+import sys
+import platform
+from importlib.metadata import version, PackageNotFoundError
 from datetime import datetime
 import data_manager as dm
 import visuals as vis
+
+
+def get_package_version(package_name):
+    try:
+        return version(package_name)
+    except PackageNotFoundError:
+        return "not-installed"
+
+
+def diag(message):
+    print(f"[DIAG] {message}", flush=True)
+
+
+diag(
+    "startup "
+    f"python={sys.version.split()[0]} "
+    f"platform={platform.platform()} "
+    f"streamlit={get_package_version('streamlit')} "
+    f"pandas={get_package_version('pandas')} "
+    f"numpy={get_package_version('numpy')} "
+    f"pyarrow={get_package_version('pyarrow')} "
+    f"protobuf={get_package_version('protobuf')} "
+    f"plotly={get_package_version('plotly')}"
+)
 
 # 設置頁面配置
 st.set_page_config(layout="wide", page_title="投資組合儀表板")
@@ -18,6 +49,7 @@ if 'live_prices' not in st.session_state:
 # === 主程式 ===
 
 # 載入基礎資料 (供側邊欄與下方區塊使用)
+diag("01 base data loading start")
 df_A = dm.load_data('表A_持股總表')
 df_B = dm.load_data('表B_持股比例')
 df_C_base = dm.load_live_data('表C_總覽')
@@ -27,6 +59,7 @@ df_F = dm.load_data('表F_每日淨值')
 df_G = dm.load_data('表G_財富藍圖') 
 df_Monitor_base = dm.load_live_data('即時監控面板')
 df_Market_base = dm.load_live_data('Market')
+diag("02 base data loading complete")
 
 # 決定標題日期字串 (直接抓取系統今日時間)
 today = datetime.now()
@@ -52,11 +85,15 @@ if st.sidebar.button("🧹 強制清除快取並重跑"):
     st.rerun()
 
 # 戰術升級：局部無感跳動開關
-auto_refresh = st.sidebar.checkbox("⏱️ 啟動局部無感跳動", value=False)
-refresh_seconds = st.sidebar.selectbox("更新頻率", [15, 20, 30, 60], index=1, format_func=lambda x: f"{x} 秒")
-refresh_interval = refresh_seconds if auto_refresh else None
-if auto_refresh:
-    st.sidebar.info(f"🟢 戰術雷達：局部掃描啟動（每 {refresh_seconds} 秒）")
+# DIAGNOSTIC: temporarily disabled to isolate Streamlit rerun crash
+# auto_refresh = st.sidebar.checkbox("⏱️ 啟動局部無感跳動", value=False)
+# refresh_seconds = st.sidebar.selectbox("更新頻率", [15, 20, 30, 60], index=1, format_func=lambda x: f"{x} 秒")
+# refresh_interval = refresh_seconds if auto_refresh else None
+# if auto_refresh:
+#     st.sidebar.info(f"🟢 戰術雷達：局部掃描啟動（每 {refresh_seconds} 秒）")
+auto_refresh = False
+refresh_interval = None
+st.sidebar.caption("⏸️ 自動刷新暫停：執行穩定性診斷中")
 
 if st.sidebar.button("💾 更新股價至 Google Sheets", type="primary"):
     if not df_A.empty and '股票' in df_A.columns:
@@ -92,7 +129,6 @@ st.sidebar.markdown("---")
 # ==========================================
 # 🛡️ 戰略高頻監控區 (Fragment Protocol 局部重載)
 # ==========================================
-@st.fragment(run_every=refresh_interval)
 def render_live_monitoring_fragment():
     # 每次局部重載時，只讀取高頻監控資料
     df_Monitor = dm.load_live_data('即時監控面板')
@@ -409,8 +445,12 @@ def render_live_monitoring_fragment():
 
 
 # === 執行局部無感跳動區塊 ===
+diag("03 live monitoring render start")
 render_live_monitoring_fragment()
+diag("04 live monitoring render complete")
 
+
+diag("05 holdings render start")
 
 # ==========================================
 # 2. 持股分析 (靜態區，不隨Fragment重載閃爍)
@@ -449,9 +489,12 @@ with c2:
         st.plotly_chart(fig, use_container_width=True)
 
 
+diag("06 holdings render complete")
+
 # ==========================================
 # 3. 交易紀錄與淨值 (靜態區)
 # ==========================================
+diag("07 transactions and NAV render start")
 st.header('3. 交易紀錄與淨值')
 t1, t2, t3 = st.tabs(['現金流', '已實現損益', '每日淨值'])
 
@@ -517,6 +560,9 @@ with t3:
             if not df_calc.empty: st.caption(f"📅 紀錄: {df_calc['dt'].min().date()} ~ {df_calc['dt'].max().date()}")
 
 st.markdown('---')
+diag("08 transactions and NAV render complete")
+
+diag("09 wealth blueprint render start")
 
 # ==========================================
 # 4. 財富藍圖 (靜態區)
@@ -599,3 +645,5 @@ st.subheader("🗺️ NEGENTROPIC ATARAXIA 10.0 財富路徑導航圖")
 fig_traj = vis.plot_wealth_trajectory(df_F)
 if fig_traj:
     st.plotly_chart(fig_traj, use_container_width=True)
+diag("10 wealth trajectory render complete")
+diag("11 app render complete")
